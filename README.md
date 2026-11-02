@@ -1,0 +1,47 @@
+# Stability Data Hub 0.1.0
+
+本项目承接V5.6，本轮V5.7功能升级后独立整理为0.1.0，使用全新Git仓库。保留既有页面布局，新增人工工作副本兜底模式，并优化重复刷新。
+
+## 启动
+
+Windows / Python 3.12：首次安装双击setup.cmd；日常使用双击start.cmd，打开 http://127.0.0.1:8772/ 。当前目录已安装独立.venv，启动不依赖旧项目目录。
+
+默认业务目录是data/，首次启动没有项目或业务数据。旧V5.6目录及其业务库未迁移、未删除。要携带既有数据，先用scripts/backup.py建立独立副本并核对报告，再用start.cmd --home 副本目录启动；不要覆盖旧库。
+
+命令选项：--port 8772、--home 路径、--no-browser、--role technician/senior_technician/project_lead/admin。角色由可信本地启动器注入，前端不能自行授予权限。默认technician；只监听127.0.0.1。端口占用时直接退出，不打开已有服务。
+
+## 人工兜底编辑
+
+在Excel来源的检测台账中点击“人工兜底编辑”。
+
+1. 输入显示范围，如A1:L30；点击/Shift+点击选择矩形。直接改文字，粘贴制表符分隔的数据；可清空、不采用所选、合并、拆分和撤销本地操作。
+2. “将所选来源加入结果清单”会沿用已识别身份和上传时公共字段。无法识别的来源也可从原件非空格手动建立结果。
+3. 下方结果清单决定实际生成的草稿。可修改检项、时间点、结果、单位、方法及其他身份；“拆成另一结果”保持来源关系，新增结果和时间点必须分别填写。合并多源为一条结果时，在来源格列列出全部原格，保留一条明确结果，删除多余清单行。
+4. 写处理依据，先预览修改前后、排除数量、原格问题与各条结果，再勾选核对确认后保存。随后仍通过正常整表预检和入库；历史冲突仍走既有复核流程。
+
+工作副本保存为审计事件，不改冻结Excel文件。清空不移动原坐标；有活跃草稿时表示明确不采用。合并把所选文本集中到左上格；拆分保留左上文本，额外值须人工填写。副本的排版变化不会自动成为数值规则，最终以“拟入库结果”清单为准。
+
+已正式提交的工作表禁止兜底重建。其他上传者的人工重建需要高级复核能力。撤销保存只允许尚无后续保存且未入库的编辑，避免覆盖其他处理。尚未明确的中英文身份与缺失身份继续阻断，不会默认代选。
+
+## 文件与规则
+
+- docs/脚本职责.md：每个后端模块、前端文件、启动与维护脚本的职责。
+- docs/主要规则.md：原件、身份、人工编辑、权限、事务、入库、导出和缓存规则。
+- docs/验收记录.md：本次验证、性能口径及功能边界。
+- contracts/v1/：当前接口Schema、OpenAPI与合成示例；不是业务数据库。
+- tests/：必要业务回归；frontend/v3/test_*为隔离浏览器验收，不参与日常启动。
+
+没有带入旧Git历史、历史HTML、旧版本启动器、验收重置工具、真实业务库、原始业务Word/Excel、旧输出、密钥或旧依赖环境。frontend/v3中的v3/v4/v5命名是仍被当前页面调用的源码模块，不是待删除的历史副本；src中的兼容模块也仍参与Office输入、核对和导出。
+
+## 开发验证
+
+python -m pip install -e ".[dev]" playwright
+python frontend/v3/build.py
+python scripts/generate_contracts.py
+python frontend/v3/check.py
+python -m ruff check src/stability_hub/ tests/test_manual_sheet.py start.py
+python -m pytest -q
+python frontend/v3/test_manual_sheet_browser.py
+python frontend/v3/test_v5_intake_e2e.py
+
+浏览器验收需要先安装Chromium：python -m playwright install chromium。测试只使用临时目录或outputs中的隔离副本。data、outputs、.venv及缓存都不进入Git。

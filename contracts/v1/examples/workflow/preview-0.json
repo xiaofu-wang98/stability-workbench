@@ -1,0 +1,79 @@
+{
+  "contract_version": "1",
+  "contract_revision": "2",
+  "preview_id": "upload_d0d8fe54fde549f1b36937ed61de7276",
+  "project": "EXAMPLE",
+  "filename": "synthetic.xlsx",
+  "source_hash": "7d17733253d2302c7e7858224a25418bfb60aecd045df0b3decc3a7562672ec3",
+  "upload_sequence": 1,
+  "uploaded_by": "example-tech",
+  "uploaded_at": "2026-10-10 07:46:56",
+  "base_revision": 1,
+  "state": "preview_ready",
+  "candidates": [
+    {
+      "id": "candidate_942b836893ab480a819f04a09ce8d26e",
+      "location": {
+        "format": "xlsx",
+        "section": "Sheet",
+        "row": 2,
+        "column": 3
+      },
+      "raw_fields": {
+        "test_item": "Purity",
+        "time_point": "12M",
+        "result": "98",
+        "unit": "%",
+        "source_number": "EXAMPLE-R0"
+      },
+      "status": "new",
+      "record": {
+        "key": {
+          "project": "EXAMPLE",
+          "sample_type": "DP",
+          "batch": "EXAMPLE-B001",
+          "presentation": "1mg",
+          "study": "long_term",
+          "study_id": "EXAMPLE-STUDY",
+          "condition": "5C",
+          "month": 12,
+          "item": "purity",
+          "method": "SEC",
+          "method_version": "not_reported"
+        },
+        "result": {
+          "status": "numeric",
+          "raw_text": "98",
+          "value": "98",
+          "comparator": "eq",
+          "unit": "%"
+        }
+      },
+      "existing_record": null,
+      "issue_code": null,
+      "detail": "核对检测身份后，可确认首次非重复结果。",
+      "comment": "",
+      "candidate_revision": 1,
+      "lifecycle": "draft",
+      "detection_id": "detection_f34345c9cd434867b77d498ecbf5fa93",
+      "source_number": "EXAMPLE-R0",
+      "existing_detection_id": null,
+      "adopted_detection_id": null,
+      "test_date": null,
+      "corrections": {},
+      "allowed_actions": [
+        "edit",
+        "withdraw",
+        "confirm_initial"
+      ]
+    }
+  ],
+  "counts": {
+    "new": 1,
+    "same_value": 0,
+    "empty": 0,
+    "different_value": 0,
+    "needs_review": 0
+  },
+  "can_commit": true
+}

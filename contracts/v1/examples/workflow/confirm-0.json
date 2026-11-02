@@ -1,0 +1,15 @@
+{
+  "base_revision": 1,
+  "idempotency_key": "confirm-0",
+  "items": [
+    {
+      "candidate_id": "candidate_942b836893ab480a819f04a09ce8d26e",
+      "candidate_revision": 1,
+      "detection_id": "detection_f34345c9cd434867b77d498ecbf5fa93",
+      "identity_confirmed": true,
+      "intent": "initial",
+      "reason": "示例人工确认",
+      "references": []
+    }
+  ]
+}

@@ -1,0 +1,100 @@
+{
+  "contract_version": "1",
+  "contract_revision": "2",
+  "preview_id": "upload_5bbcafca27994bec978b4e0dbe74faf9",
+  "project": "EXAMPLE",
+  "filename": "synthetic.xlsx",
+  "source_hash": "a6d66e9d24bb3adb963d61eb18fc001a8369973e22b4da013606d934dbea7fc4",
+  "upload_sequence": 2,
+  "uploaded_by": "example-tech",
+  "uploaded_at": "2026-10-10 07:46:56",
+  "base_revision": 3,
+  "state": "preview_ready",
+  "candidates": [
+    {
+      "id": "candidate_f99cf223f73d4d2e8c89330abbdf4b40",
+      "location": {
+        "format": "xlsx",
+        "section": "Sheet",
+        "row": 2,
+        "column": 3
+      },
+      "raw_fields": {
+        "test_item": "Purity",
+        "time_point": "12M",
+        "result": "99",
+        "unit": "%",
+        "source_number": "EXAMPLE-R1"
+      },
+      "status": "different_value",
+      "record": {
+        "key": {
+          "project": "EXAMPLE",
+          "sample_type": "DP",
+          "batch": "EXAMPLE-B001",
+          "presentation": "1mg",
+          "study": "long_term",
+          "study_id": "EXAMPLE-STUDY",
+          "condition": "5C",
+          "month": 12,
+          "item": "purity",
+          "method": "SEC",
+          "method_version": "not_reported"
+        },
+        "result": {
+          "status": "numeric",
+          "raw_text": "99",
+          "value": "99",
+          "comparator": "eq",
+          "unit": "%"
+        }
+      },
+      "existing_record": {
+        "key": {
+          "project": "EXAMPLE",
+          "sample_type": "DP",
+          "batch": "EXAMPLE-B001",
+          "presentation": "1mg",
+          "study": "long_term",
+          "study_id": "EXAMPLE-STUDY",
+          "condition": "5C",
+          "month": 12,
+          "item": "purity",
+          "method": "SEC",
+          "method_version": "not_reported"
+        },
+        "result": {
+          "status": "numeric",
+          "raw_text": "98",
+          "value": "98",
+          "comparator": "eq",
+          "unit": "%"
+        }
+      },
+      "issue_code": null,
+      "detail": "重复槽位，必须高级确认；请核对样品和时间点是否识别正确。",
+      "comment": "",
+      "candidate_revision": 1,
+      "lifecycle": "draft",
+      "detection_id": "detection_c217888bec1b4763ae6616c4ce8f29dd",
+      "source_number": "EXAMPLE-R1",
+      "existing_detection_id": "detection_f34345c9cd434867b77d498ecbf5fa93",
+      "adopted_detection_id": "detection_f34345c9cd434867b77d498ecbf5fa93",
+      "test_date": null,
+      "corrections": {},
+      "allowed_actions": [
+        "edit",
+        "withdraw",
+        "submit_review"
+      ]
+    }
+  ],
+  "counts": {
+    "new": 0,
+    "same_value": 0,
+    "empty": 0,
+    "different_value": 1,
+    "needs_review": 0
+  },
+  "can_commit": true
+}

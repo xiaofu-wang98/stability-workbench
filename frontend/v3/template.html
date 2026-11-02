@@ -1,0 +1,2884 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>分析检测部数智工作台 · Analytical Testing Hub</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg-main: #f8fafc;
+    --bg-card: #ffffff;
+    --border-color: #e2e8f0;
+    --border-light: #f1f5f9;
+
+    --primary: #0284c7;
+    --primary-light: #e0f2fe;
+    --primary-hover: #0369a1;
+
+    --success: #16a34a;
+    --success-bg: #dcfce7;
+    --warning: #d97706;
+    --warning-bg: #fef3c7;
+    --danger: #dc2626;
+    --danger-bg: #fee2e2;
+    --purple: #7c3aed;
+    --purple-bg: #ede9fe;
+
+    --text-title: #0f172a;
+    --text-body: #334155;
+    --text-muted: #64748b;
+    --text-light: #94a3b8;
+
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background-color: var(--bg-main);
+    color: var(--text-body);
+    font-family: var(--font);
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  /* ─── TOP GLOBAL BAR ─── */
+  .top-navbar {
+    background: #ffffff;
+    border-bottom: 1px solid var(--border-color);
+    padding: 0 28px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .brand-logo {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, #0284c7, #38bdf8);
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 18px;
+    box-shadow: 0 2px 5px rgba(2, 132, 199, 0.25);
+  }
+
+  .brand-titles h1 {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-title);
+  }
+
+  .brand-titles p {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .dept-badge {
+    background: var(--primary-light);
+    color: var(--primary);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 5px 12px;
+    border-radius: 100px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* ─── PROJECT CONTEXT BANNER ─── */
+  .project-context-bar {
+    background: #ffffff;
+    border-bottom: 1px solid var(--border-color);
+    padding: 14px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .project-main-box {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .project-tag-pill {
+    background: #0284c7;
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 6px;
+    letter-spacing: 0.5px;
+  }
+
+  .project-select-main {
+    background: #f8fafc;
+    border: 1.5px solid var(--primary);
+    border-radius: var(--radius-md);
+    padding: 8px 16px;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-title);
+    cursor: pointer;
+    outline: none;
+    transition: all 0.2s;
+  }
+
+  .project-meta-badges {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .meta-chip {
+    background: #f1f5f9;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 4px 10px;
+    font-size: 11px;
+    color: var(--text-body);
+    font-weight: 600;
+  }
+  .meta-chip strong { color: var(--text-title); }
+
+  /* ─── TABS NAVIGATION ─── */
+  .nav-tabs {
+    background: #ffffff;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    padding: 0 28px;
+    gap: 12px;
+  }
+
+  .nav-tab {
+    padding: 14px 18px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .nav-tab:hover {
+    color: var(--text-title);
+  }
+
+  .nav-tab.active {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+  }
+
+  .tab-badge {
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 100px;
+    font-weight: 700;
+  }
+  .tab-badge.blue { background: var(--primary-light); color: var(--primary); }
+  .tab-badge.green { background: var(--success-bg); color: var(--success); }
+
+  /* ─── MAIN CONTENT ─── */
+  .main-content {
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 24px 28px;
+  }
+
+  .tab-page { display: none; }
+  .tab-page.active { display: block; animation: fadeIn 0.2s ease-in-out; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  /* ─── CARDS ─── */
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+
+  .card-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border-light);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #ffffff;
+  }
+
+  .card-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-title);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .card-body { padding: 20px; }
+
+  /* ─── BUTTONS ─── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.2s;
+  }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover { background: var(--primary-hover); }
+  .btn-outline { background: #fff; border-color: var(--border-color); color: var(--text-body); }
+  .btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+  .btn-success { background: var(--success); color: #fff; }
+  .btn-success:hover { background: #15803d; }
+
+  /* ─── TAB 1: UPLOAD & INTAKE HERO ─── */
+  .upload-split-grid {
+    display: grid;
+    grid-template-columns: 1.05fr 1fr;
+    gap: 20px;
+  }
+
+  .dropzone {
+    border: 2px dashed #cbd5e1;
+    background: #fafcfd;
+    border-radius: var(--radius-lg);
+    padding: 36px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .dropzone:hover {
+    border-color: var(--primary);
+    background: #f0f9ff;
+  }
+  .dropzone-icon {
+    font-size: 32px;
+    margin-bottom: 10px;
+    color: var(--primary);
+  }
+  .dropzone-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-title);
+    margin-bottom: 4px;
+  }
+  .dropzone-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+  }
+
+  .quick-demo-wrapper {
+    width: 100%;
+    margin-top: 14px;
+    text-align: left;
+  }
+  .quick-demo-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+  .quick-file-item {
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+    font-size: 11px;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .quick-file-item:hover {
+    border-color: var(--primary);
+    background: var(--primary-light);
+  }
+
+  /* AI Panel */
+  .ai-intake-card {
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    border-radius: var(--radius-lg);
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .ai-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .ai-badge {
+    background: var(--primary);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 100px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .meta-grid-3 {
+    background: #ffffff;
+    border: 1px solid #e0f2fe;
+    border-radius: var(--radius-md);
+    padding: 12px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  .meta-col .label { font-size: 10px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
+  .meta-col .val { font-size: 13px; font-weight: 700; color: var(--text-title); margin-top: 2px; }
+
+  .cqa-scroll-box {
+    background: #ffffff;
+    border: 1px solid #e0f2fe;
+    border-radius: var(--radius-md);
+    padding: 10px;
+    max-height: 180px;
+    overflow-y: auto;
+  }
+  .cqa-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px;
+    border-bottom: 1px solid #f8fafc;
+    font-size: 12px;
+  }
+  .cqa-row:last-child { border-bottom: none; }
+  .cqa-name { font-weight: 600; color: var(--text-body); }
+  .cqa-std { font-size: 11px; color: var(--text-muted); }
+  .badge-pass { background: var(--success-bg); color: var(--success); font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 100px; }
+
+  .task-choice-box {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .task-choice-item {
+    background: #ffffff;
+    border: 1px solid #bae6fd;
+    border-radius: var(--radius-md);
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .task-choice-item:hover {
+    border-color: var(--primary);
+    background: #fafcfd;
+  }
+
+  /* ─── TAB 2: LEDGER (PURPOSE & SAMPLE DRIVEN) ─── */
+  .ledger-toolbar {
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 14px 18px;
+    margin-bottom: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .toolbar-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .toolbar-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-muted);
+    min-width: 80px;
+  }
+  .purpose-pills {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .purpose-btn {
+    border: 1px solid var(--border-color);
+    background: #ffffff;
+    padding: 6px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-body);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .purpose-btn:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+  }
+  .purpose-btn.active {
+    background: var(--primary);
+    color: #ffffff;
+    border-color: var(--primary);
+  }
+
+  /* ─── DATA TABLE ─── */
+  .table-container {
+    overflow-x: auto;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+  }
+  .data-matrix {
+    width: 100%;
+    border-collapse: collapse;
+    background: #ffffff;
+    font-size: 12px;
+  }
+  .data-matrix th {
+    background: #f8fafc;
+    color: var(--text-muted);
+    font-weight: 700;
+    padding: 12px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+    white-space: nowrap;
+  }
+  .data-matrix td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-light);
+    color: var(--text-body);
+    white-space: nowrap;
+  }
+  .data-matrix tr:hover td { background: #f8fafc; }
+  .val-green { color: var(--success); font-weight: 600; }
+  .val-amber { color: var(--warning); background: var(--warning-bg); padding: 1px 6px; border-radius: 4px; font-weight: 600; }
+  .val-dash { color: var(--text-light); }
+
+  /* ─── TAB 3: QUALITY COMPARABILITY BUILDER ─── */
+  .comparability-builder {
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 16px 20px;
+    margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .step-header {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-title);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .batch-check-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    font-size: 12px;
+  }
+  .check-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  .anchor-pills {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .anchor-pill {
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    border-radius: 100px;
+    padding: 5px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .anchor-pill.active {
+    background: var(--purple-bg);
+    border-color: var(--purple);
+    color: var(--purple);
+  }
+
+  /* ─── TAB 2: PROTOCOL & SPEC COMPARISON BANNER ─── */
+  .protocol-spec-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+  .protocol-spec-card {
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    box-shadow: var(--shadow-sm);
+    border-top: 3px solid var(--primary);
+  }
+  .protocol-spec-card.card-accent-blue { border-top-color: var(--primary); }
+  .protocol-spec-card.card-accent-purple { border-top-color: #7c3aed; }
+  .protocol-spec-card.card-accent-amber { border-top-color: #d97706; }
+  .protocol-spec-card.card-accent-green { border-top-color: #16a34a; }
+  .protocol-spec-card-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .protocol-spec-row {
+    font-size: 12px;
+    color: var(--text-body);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 4px;
+    border-bottom: 1px dashed #f1f5f9;
+  }
+  .protocol-spec-row:last-child { border-bottom: none; }
+  .protocol-spec-row span { color: var(--text-muted); }
+  .protocol-spec-row strong { color: var(--text-title); font-weight: 600; }
+
+  /* ─── TAB 3: TWO-PILLAR COMPARABILITY WORKSPACE ─── */
+  .mode-segment-bar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 14px;
+    margin-bottom: 22px;
+  }
+  .mode-segment-btn {
+    background: #ffffff;
+    border: 1.5px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 16px 20px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    position: relative;
+    overflow: hidden;
+  }
+  .mode-segment-btn:hover {
+    border-color: var(--primary);
+    background: #f8fafc;
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+  .mode-segment-btn.active {
+    background: #ffffff;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px var(--primary-light), var(--shadow-md);
+  }
+  .mode-segment-btn.active::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: var(--primary);
+  }
+  .mode-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .mode-title-text {
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--text-title);
+  }
+  .mode-segment-btn.active .mode-title-text {
+    color: var(--primary);
+  }
+  .mode-tag {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 100px;
+    background: #f1f5f9;
+    color: var(--text-muted);
+  }
+  .mode-segment-btn.active .mode-tag {
+    background: var(--primary-light);
+    color: var(--primary);
+  }
+  .mode-desc-text {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+
+  .analysis-mode-panel {
+    display: none;
+    animation: fadeIn 0.2s ease-in-out;
+  }
+  .analysis-mode-panel.active {
+    display: block;
+  }
+
+  .filter-section-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+  }
+  .filter-box {
+    background: #f8fafc;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .filter-box-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-title);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .pre-post-pill-pre {
+    background: #e0f2fe;
+    color: #0369a1;
+    border: 1px solid #bae6fd;
+    font-weight: 700;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+  .pre-post-pill-post {
+    background: #fef3c7;
+    color: #b45309;
+    border: 1px solid #fde68a;
+    font-weight: 700;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+
+  /* ─── TAB 4: REPORT CENTER (OUTLINE + SIDE DRAWER) ─── */
+  .report-main-grid {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 20px;
+  }
+
+  /* Outline Accordion */
+  .report-outline-box {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+  .outline-header {
+    background: #f8fafc;
+    padding: 12px 16px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-title);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border-light);
+  }
+  .outline-body {
+    padding: 14px 16px;
+    font-size: 12px;
+    line-height: 1.6;
+    background: #ffffff;
+    color: var(--text-body);
+  }
+
+  /* Comparability Lego Generator */
+  .lego-module-item {
+    background: #f8fafc;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 12px;
+  }
+  .lego-module-item strong { color: var(--text-title); display: block; }
+  .lego-module-item span { color: var(--text-muted); font-size: 11px; }
+
+  /* Side Drawer Ledger */
+  .side-ledger-card {
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .side-item-btn {
+    background: #f8fafc;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .side-item-btn:hover {
+    border-color: var(--primary);
+    background: var(--primary-light);
+  }
+  .side-item-btn strong { font-size: 12px; color: var(--text-title); display: block; }
+  .side-item-btn span { font-size: 11px; color: var(--text-muted); }
+
+  /* ─── TOAST ─── */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: #0f172a;
+    color: #ffffff;
+    padding: 12px 20px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 10px 15px -3px rgba(0,0,0,0.15);
+    transform: translateY(100px);
+    opacity: 0;
+    transition: all 0.25s ease-out;
+    z-index: 9999;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+/* Project navigation: quiet blue/white, compact catalog, explicit context. */
+[hidden] { display: none !important; }
+:root { --hub-ink:#15364a; --hub-accent:#087eab; --hub-tint:#eaf5fa; --hub-line:#dbe5eb; }
+button,input,select { font:inherit; }
+button { cursor:pointer; }
+button:disabled { cursor:default; opacity:.4; }
+:is(button,input,select,[tabindex]):focus-visible { outline:3px solid #38bdf8; outline-offset:3px; }
+.hub-button,.hub-icon { border:1px solid var(--hub-line); border-radius:7px; background:white; color:var(--hub-ink); padding:8px 13px; font-size:13px; font-weight:600; }
+.hub-button:hover,.hub-icon:hover { background:var(--hub-tint); }
+.hub-primary { background:var(--hub-ink); color:white; border-color:var(--hub-ink); }
+.hub-primary:hover { background:#22536c; }
+.hub-icon { min-width:36px; min-height:36px; padding:5px 9px; }
+.hub-icon[aria-pressed="true"] { color:#986613; background:#fff8e7; }
+kbd { font-family:Consolas,monospace; font-size:10px; padding:2px 5px; border:1px solid currentColor; border-radius:3px; opacity:.65; margin-left:10px; }
+.hub-divider { width:1px; height:30px; background:var(--hub-line); }
+.hub-eyebrow { color:var(--text-muted); font-size:10px; font-weight:600; letter-spacing:1px; }
+.hub-project-name { font-size:17px; font-weight:650; color:var(--hub-ink); }
+.hub-context { padding:0 28px 14px; background:white; display:flex; align-items:center; justify-content:space-between; gap:10px; border-bottom:1px solid var(--hub-line); }
+.project-context-bar { border-bottom:0; padding-bottom:10px; }
+.hub-muted { color:var(--text-muted); font-size:12px; }
+.hub-context .meta-chip { font-size:12px; background:#f8fafc; }
+dialog { color:var(--text-body); background:white; border:1px solid var(--hub-line); border-radius:14px; margin:auto; padding:0; box-shadow:0 24px 80px #15364a30; }
+dialog::backdrop { background:rgba(15,35,50,.42); backdrop-filter:blur(3px); }
+#projectCenter { width:min(1180px,calc(100vw - 48px)); max-height:calc(100dvh - 48px); }
+.hub-dialog-head { padding:24px 28px; display:flex; justify-content:space-between; align-items:flex-start; gap:16px; border-bottom:1px solid var(--hub-line); }
+.hub-dialog-head h2 { color:var(--hub-ink); font-size:24px; font-weight:650; margin:5px 0; }
+.hub-dialog-head p { color:var(--text-muted); font-size:13px; }
+.hub-center-layout { display:grid; grid-template-columns:185px minmax(0,1fr); min-height:420px; }
+.hub-sidebar { background:#f7fafc; padding:25px 16px; border-right:1px solid var(--hub-line); }
+#projectViews { display:grid; gap:5px; margin-top:12px; }
+.hub-view { display:flex; justify-content:space-between; align-items:center; background:transparent; border:0; border-radius:6px; padding:10px 12px; text-align:left; color:var(--text-body); font-size:13px; }
+.hub-view[aria-pressed="true"] { background:#e4f0f7; color:#075e84; font-weight:650; }
+.hub-view:hover { background:#eaf1f6; }
+.hub-view span { font:12px Consolas,monospace; }
+.hub-sidebar-note { border-top:1px solid var(--hub-line); margin-top:28px; padding:20px 10px 0; font-size:12px; color:var(--text-muted); line-height:1.8; }
+.hub-sidebar-note strong { color:var(--hub-ink); }
+.hub-sidebar-note p { margin-top:6px; }
+.hub-directory { padding:24px; min-width:0; }
+.hub-search-row { display:flex; gap:10px; }
+.hub-search { display:flex; align-items:center; gap:10px; flex:1; border:1px solid #bacbd6; border-radius:7px; padding:0 12px; min-width:0; }
+.hub-search:focus-within { border-color:var(--hub-accent); box-shadow:0 0 0 2px var(--hub-tint); }
+.hub-search input { width:100%; min-width:0; border:0; outline:none; padding:10px 0; font-size:14px; background:transparent; }
+.hub-search>span { font-size:23px; color:var(--hub-accent); }
+.hub-filters { display:flex; flex-wrap:wrap; align-items:center; gap:14px; margin:16px 0 22px; }
+.hub-filters label { font-size:12px; color:var(--text-muted); }
+.hub-filters select { margin-left:5px; border:1px solid var(--hub-line); padding:6px; border-radius:5px; color:var(--text-body); background:white; max-width:150px; }
+.hub-sort { margin-left:auto; }
+.hub-result-summary { display:flex; justify-content:space-between; gap:8px; font-size:12px; color:var(--text-muted); margin-bottom:10px; }
+.hub-result-summary strong { color:var(--hub-ink); }
+.hub-table-scroll { overflow-x:auto; }
+.hub-project-table { width:100%; border-collapse:collapse; font-size:12px; white-space:nowrap; }
+.hub-project-table th { padding:10px 8px; background:#f4f8fa; color:var(--text-muted); font-weight:500; text-align:left; border-bottom:1px solid var(--hub-line); }
+.hub-project-table td { padding:16px 8px; border-bottom:1px solid #eaf0f4; }
+.hub-project-table tr[data-current="true"] { background:#f1f8fc; }
+.hub-project-table tbody tr:hover { background:#f7fafc; }
+.hub-project-link { border:0; background:none; color:var(--hub-ink); font-weight:650; font-size:14px; text-align:left; padding:0; }
+.hub-project-link:hover { color:var(--hub-accent); text-decoration:underline; }
+.hub-project-sub { color:var(--text-muted); font-size:11px; margin-top:5px; }
+.hub-status { display:inline-flex; align-items:center; gap:5px; color:#4a6272; }
+.hub-status::before { content:''; width:6px; height:6px; border-radius:50%; background:#94a3b8; }
+.hub-status[data-status="进行中"]::before { background:#16836c; }
+.hub-status[data-status="暂停"]::before { background:#c68c20; }
+.hub-module-text { color:var(--text-muted); max-width:130px; white-space:normal; line-height:1.8; }
+.hub-pagination { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:20px; color:var(--text-muted); font-size:12px; }
+.hub-pagination>div { display:flex; gap:8px; }
+.hub-empty { text-align:center; padding:36px 10px; }
+.hub-empty h3 { color:var(--hub-ink); font-size:17px; margin-bottom:8px; }
+.hub-empty p { color:var(--text-muted); font-size:13px; margin-bottom:16px; }
+#projectSettings { width:min(560px,calc(100vw - 32px)); max-height:calc(100dvh - 32px); }
+.hub-settings-body { padding:24px 28px; }
+.hub-settings-note { padding:12px 14px; font-size:12px; line-height:1.8; background:#f3f8fb; color:#506b7b; border-radius:6px; }
+.hub-settings-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin:20px 0; }
+.hub-settings-grid label { font-size:13px; }
+.hub-settings-grid select { display:block; width:100%; padding:9px; border:1px solid var(--hub-line); border-radius:6px; margin-top:7px; background:white; }
+.hub-settings-body fieldset { border:0; margin:24px 0; }
+.hub-settings-body legend { font-weight:600; font-size:14px; margin-bottom:5px; }
+.hub-module-option { display:flex; gap:10px; padding:12px 0; border-bottom:1px solid #eef2f6; font-size:13px; }
+.hub-module-option input { width:16px; accent-color:var(--hub-accent); }
+.hub-module-option small { display:block; color:var(--text-muted); margin-top:3px; }
+.hub-settings-footer { display:flex; justify-content:flex-end; gap:10px; padding:16px 28px; border-top:1px solid var(--hub-line); }
+.hub-scoped-header { margin-bottom:20px; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.hub-scoped-header h2 { font-size:20px; color:var(--hub-ink); }
+.hub-data-table { width:100%; border-collapse:collapse; margin-top:18px; font-size:13px; }
+.hub-data-table :is(th,td) { padding:12px; text-align:left; border-bottom:1px solid var(--hub-line); }
+.nav-tab[hidden] { display:none; }
+.nav-tab { font-size:13px; }
+@media (max-width:800px) {
+ .top-navbar { padding:0 16px; }.dept-badge { display:none; }
+ .project-context-bar { padding:14px 16px; align-items:flex-start; }.project-main-box { flex-wrap:wrap; gap:10px; }
+ .hub-project-name { font-size:15px; }.hub-context { padding:0 16px 14px; flex-wrap:wrap; }
+ .hub-context>.hub-muted { font-size:10px; }.hub-divider,kbd { display:none; }
+ #projectCenter { width:calc(100vw - 16px); max-height:calc(100dvh - 16px); }
+ .hub-center-layout { grid-template-columns:1fr; }.hub-sidebar { padding:12px; border-right:0; border-bottom:1px solid var(--hub-line); }
+ .hub-sidebar>.hub-eyebrow,.hub-sidebar-note { display:none; }#projectViews { display:flex; overflow-x:auto; margin:0; }.hub-view { flex-shrink:0; gap:12px; }
+ .hub-dialog-head { padding:18px; }.hub-directory { padding:16px; }.hub-sort { margin-left:0; }
+ .hub-result-summary { flex-wrap:wrap; }.hub-filters { gap:10px; }.nav-tabs { overflow-x:auto; padding:0 16px; }.nav-tab { flex-shrink:0; }.tab-badge { display:none; }
+ .main-content { padding:16px; }.upload-split-grid { grid-template-columns:1fr; }.hub-settings-body { padding:18px; }
+ .main-content>.card { overflow:auto; }
+}
+@media (prefers-reduced-motion:reduce) { *,*::before,*::after { transition:none!important; animation:none!important; scroll-behavior:auto!important; } }
+
+
+.hub-search input:focus-visible { outline:none; }
+body:has(dialog[open]) { overflow:hidden; }
+@media (max-width:800px) {
+ .hub-project-table { white-space:normal; }
+ .hub-project-table thead { display:none; }
+ .hub-project-table tbody { display:grid; gap:10px; }
+ .hub-project-table tr { display:grid; grid-template-columns:36px minmax(0,1fr) auto; gap:7px 10px; padding:12px; border:1px solid var(--hub-line); border-radius:8px; }
+ .hub-project-table td { padding:0; border:0; }
+ .hub-project-table td:nth-child(1) { grid-column:1; grid-row:1 / 3; }
+ .hub-project-table td:nth-child(2) { grid-column:2 / 4; }
+ .hub-project-table td:nth-child(3) { grid-column:2; color:var(--text-muted); }
+ .hub-project-table td:nth-child(4) { grid-column:3; }
+ .hub-project-table td:nth-child(5) { grid-column:2 / 4; max-width:none; }
+ .hub-project-table td:nth-child(6) { grid-column:2 / 4; margin-top:4px; }
+ .hub-project-table td:nth-child(6) .hub-button { width:100%; }
+ .hub-project-link { font-size:13px; }
+ .hub-pagination { flex-wrap:wrap; }
+}
+</style>
+</head>
+<body>
+
+<!-- TOP GLOBAL NAVIGATION BAR -->
+<header class="top-navbar">
+  <div class="nav-brand">
+    <div class="brand-logo">🧬</div>
+    <div class="brand-titles">
+      <h1>分析检测部数智工作台</h1>
+      <p>Analytical Testing Hub · 全部门多项目数智系统</p>
+    </div>
+  </div>
+
+  <div class="dept-badge">
+    <span>🏢</span>
+    <span>分析检测部专属平台</span>
+  </div>
+</header>
+
+<!-- PROMINENT PROJECT WORKSPACE BANNER -->
+<section class="project-context-bar">
+  <div class="project-main-box">
+    <button class="hub-button hub-primary" onclick="openProjectCenter()">▦ 项目中心 <kbd>Ctrl K</kbd></button>
+    <span class="hub-divider"></span>
+    <div><div class="hub-eyebrow">当前项目</div><h2 id="workspaceName" class="hub-project-name"></h2></div>
+    <button id="workspaceFavorite" class="hub-icon" onclick="toggleFavorite(currentProjectKey)" aria-label="收藏当前项目"></button>
+  </div>
+  <button class="hub-button" onclick="openProjectSettings()">项目配置</button>
+</section>
+<div class="hub-context"><div id="workspaceMeta" class="project-meta-badges"></div></div>
+
+<dialog id="projectCenter" aria-labelledby="projectCenterTitle">
+  <div class="hub-dialog-head"><div><div class="hub-eyebrow">ANALYTICAL TESTING HUB / PROJECTS</div><h2 id="projectCenterTitle">项目中心</h2><p>找到项目，再进入对应的检测工作空间。</p></div><button class="hub-icon" onclick="document.getElementById('projectCenter').close()" aria-label="关闭项目中心">✕</button></div>
+  <div class="hub-center-layout">
+    <aside class="hub-sidebar"><span class="hub-eyebrow">项目视图</span><div id="projectViews"></div></aside>
+    <div class="hub-directory">
+      <div class="hub-search-row"><label class="hub-search"><span aria-hidden="true">⌕</span><input id="projectSearch" type="search" placeholder="搜索项目编号、名称或产品类型" aria-label="搜索项目" oninput="resetProjectPage()"><kbd>/</kbd></label><button class="hub-button" onclick="clearProjectFilters()">重置</button></div>
+      <div class="hub-filters"><label>研发阶段 <select id="projectStage" onchange="resetProjectPage()"></select></label><label>运行状态 <select id="projectStatus" onchange="if(this.value &amp;&amp; ((projectView==='active' &amp;&amp; this.value!=='进行中') || (projectView==='archived' &amp;&amp; this.value!=='归档'))) projectView='all'; resetProjectPage()"></select></label><label class="hub-sort">排序 <select id="projectSort" onchange="resetProjectPage()"><option value="recent">最近访问优先</option><option value="code">项目编号</option></select></label></div>
+      <div class="hub-result-summary"><strong id="projectResultCount" aria-live="polite"></strong></div>
+      <div class="hub-table-scroll"><table class="hub-project-table"><thead><tr><th scope="col">收藏</th><th scope="col">项目 / 产品类型</th><th scope="col">研发阶段</th><th scope="col">运行状态</th><th scope="col">已启用工作</th><th scope="col"><span class="hub-muted">工作空间</span></th></tr></thead><tbody id="projectRows"></tbody></table></div>
+      <div id="projectEmpty" class="hub-empty" hidden><h3>没有找到匹配项目</h3><p>试试更短的关键词，或清除筛选条件。</p><button class="hub-button" onclick="clearProjectFilters()">查看全部项目</button></div>
+      <footer class="hub-pagination"><span id="projectPageInfo"></span><div><button id="projectPrev" class="hub-button" onclick="changeProjectPage(-1)">上一页</button><button id="projectNext" class="hub-button" onclick="changeProjectPage(1)">下一页</button></div></footer>
+    </div>
+  </div>
+</dialog>
+<dialog id="projectSettings" aria-labelledby="settingsTitle">
+ <form id="projectSettingsForm"><div class="hub-dialog-head"><div><div class="hub-eyebrow">项目工作空间</div><h2 id="settingsTitle">项目配置</h2><p id="settingsProject"></p></div><button type="button" class="hub-icon" onclick="document.getElementById('projectSettings').close()" aria-label="关闭项目配置">✕</button></div>
+ <div class="hub-settings-body"><div class="hub-settings-grid"><label>研发阶段<select id="settingsStage"></select></label><label>运行状态<select id="settingsStatus"></select></label></div><fieldset><legend>启用的工作模块</legend><p class="hub-muted">停用只隐藏入口，不删除已有数据。</p><div id="settingsModules"></div></fieldset></div>
+ <footer class="hub-settings-footer"><button type="button" class="hub-button" onclick="document.getElementById('projectSettings').close()">取消</button><button type="submit" class="hub-button hub-primary">保存配置</button></footer></form>
+</dialog>
+
+<!-- MAIN WORKSPACE NAVIGATION TABS -->
+<nav class="nav-tabs">
+  <div class="nav-tab active" onclick="switchMainTab('intake')">
+    <span>📤 上传与智能分析中心</span>
+    <span class="tab-badge blue">核心日常入口</span>
+  </div>
+  <div class="nav-tab" onclick="switchMainTab('ledger')">
+    <span>📋 项目检测台账</span>
+    <span class="tab-badge green">单样方案标准对照</span>
+  </div>
+  <div class="nav-tab" onclick="switchMainTab('comparability')">
+    <span>📈 质量可比性研究分析</span>
+    <span class="tab-badge blue">放行+稳定性申报比对</span>
+  </div>
+  <div class="nav-tab" onclick="switchMainTab('reports')">
+    <span>📑 分析检测报告中心</span>
+  </div>
+</nav>
+
+<section id="scopedWorkspace" class="main-content" hidden></section>
+
+<!-- MAIN CONTAINER -->
+<main class="main-content">
+
+  <!-- ==================== TAB 1: UPLOAD & INTAKE ==================== -->
+  <div class="tab-page active" id="tab-intake">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">
+          <span>📤</span>
+          <span>检验数据摄取与智能任务分析</span>
+        </div>
+
+      </div>
+      <div class="card-body">
+        <div class="upload-split-grid">
+
+          <!-- Drop Area -->
+          <div>
+            <div class="dropzone" id="fileDropZone" onclick="loadRealDemo('coa')">
+              <div class="dropzone-icon">📥</div>
+              <div class="dropzone-title">拖拽文件至此处，或点击浏览</div>
+              <div class="dropzone-desc">支持 .docx、.xlsx、.pdf</div>
+              <button class="btn btn-outline" style="margin-bottom:10px">选择检验文件</button>
+            </div>
+
+          </div>
+
+          <!-- AI Intake & Multi-Task Panel -->
+          <div>
+            <div class="ai-intake-card">
+              <div class="ai-header-row">
+                <div class="ai-badge">
+                  <span>🤖</span>
+                  <span id="aiFileNameDisplay">已解析：CoA-C202508017A1分析报告.docx</span>
+                </div>
+
+              </div>
+
+              <!-- Metadata -->
+              <div class="meta-grid-3">
+                <div class="meta-col">
+                  <div class="label">识别项目</div>
+                  <div class="val" id="intakeProjectVal">IP166E (自动归集)</div>
+                </div>
+                <div class="meta-col">
+                  <div class="label">检验批号</div>
+                  <div class="val" style="color:var(--primary)" id="intakeBatchVal">C202508017A1</div>
+                </div>
+                <div class="meta-col">
+                  <div class="label">剂型规格</div>
+                  <div class="val" id="intakeSpecVal">DP 1mg (0.5ml)</div>
+                </div>
+                <div class="meta-col">
+                  <div class="label">检验目的</div>
+                  <div class="val" style="color:var(--success)" id="intakePurposeVal">放行检验 (Release)</div>
+                </div>
+                <div class="meta-col">
+                  <div class="label">提取检测项</div>
+                  <div class="val" id="intakeCountVal">14 项全项</div>
+                </div>
+                <div class="meta-col">
+                  <div class="label">标准核查</div>
+                  <div class="val" style="color:var(--success)" id="intakeStatusVal">✓ 全部符合标准</div>
+                </div>
+              </div>
+
+              <!-- CQA Quick Check -->
+              <div>
+                <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:6px">🔍 自动比对项目质量标准 (CQA)：</div>
+                <div class="cqa-scroll-box" id="cqaListBox">
+                  <div class="cqa-row">
+                    <span class="cqa-name">SEC-HPLC 单体纯度</span>
+                    <span class="cqa-std">标准: ≥95.0%</span>
+                    <span class="badge-pass">实测: 99.4% (合格)</span>
+                  </div>
+                  <div class="cqa-row">
+                    <span class="cqa-name">SEC-HPLC HMW 聚集体</span>
+                    <span class="cqa-std">标准: ≤4.5%</span>
+                    <span class="badge-pass">实测: 0.6% (合格)</span>
+                  </div>
+                  <div class="cqa-row">
+                    <span class="cqa-name">NR CE-SDS 主峰纯度</span>
+                    <span class="cqa-std">标准: ≥94.0%</span>
+                    <span class="badge-pass">实测: 99.7% (合格)</span>
+                  </div>
+                  <div class="cqa-row">
+                    <span class="cqa-name">icIEF 等电点主峰</span>
+                    <span class="cqa-std">标准: 6.2±0.2</span>
+                    <span class="badge-pass">实测: 6.3 (合格)</span>
+                  </div>
+                  <div class="cqa-row">
+                    <span class="cqa-name">生物学活性 (cAMP法)</span>
+                    <span class="cqa-std">标准: 70%~130%</span>
+                    <span class="badge-pass">实测: 86% (合格)</span>
+                  </div>
+                  <div class="cqa-row">
+                    <span class="cqa-name">蛋白质含量 (UV法)</span>
+                    <span class="cqa-std">标准: 2.0±0.2 mg/ml</span>
+                    <span class="badge-pass">实测: 2.1 mg/ml</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Multi-task extensions -->
+              <div>
+                <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:6px">⚡ 面对多种任务，建议执行：</div>
+                <div class="task-choice-box">
+                  <div class="task-choice-item" onclick="triggerTaskAction(1)">
+                    <div>
+                      <strong style="font-size:12px;color:var(--text-title)">任务 1：合流增量写入【项目检测总台账】</strong>
+                      <div style="font-size:11px;color:var(--text-muted)">将 14 项结果归档，执行缺项保护与防覆盖检测</div>
+                    </div>
+                    <span class="btn btn-primary" style="padding:2px 8px;font-size:11px">执行</span>
+                  </div>
+                  <div class="task-choice-item" onclick="triggerTaskAction(2)">
+                    <div>
+                      <strong style="font-size:12px;color:var(--text-title)">任务 2：执行放行与历史批次【一致性核验】</strong>
+                      <div style="font-size:11px;color:var(--text-muted)">自动比对同规格商业化批次 C202508015/016 放行均一性</div>
+                    </div>
+                    <span class="btn btn-outline" style="padding:2px 8px;font-size:11px">比对</span>
+                  </div>
+                </div>
+              </div>
+
+              <button class="btn btn-primary" style="padding:12px;font-weight:700" onclick="commitIntakeData()">
+                <span>✓ 确认入库并更新项目检测台账</span>
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Real Ingestion Stream -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">
+          <span>🕒</span>
+          <span>最新入库检测流水记录</span>
+        </div>
+        <span style="font-size:11px;color:var(--text-muted)">保留完整文件哈希溯源与检测槽位映射</span>
+      </div>
+      <div class="card-body" style="padding:0">
+        <div class="table-container">
+          <table class="data-matrix">
+            <thead>
+              <tr>
+                <th>入库时间</th>
+                <th>项目</th>
+                <th>批号</th>
+                <th>检测目的</th>
+                <th>检测指标摘要</th>
+                <th>原始来源文件</th>
+                <th>入库状态</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="color:var(--text-muted)">刚刚</td>
+                <td><strong>IP166E</strong></td>
+                <td><strong style="color:var(--primary)">C202508017A1</strong></td>
+                <td>放行检验 (COA)</td>
+                <td>SEC 99.4% · CE 99.7% · 活性 86% (全项14项)</td>
+                <td style="color:var(--text-muted)">CoA(X)-IP166-2509008...docx</td>
+                <td><span class="badge-pass">已入库</span></td>
+              </tr>
+              <tr>
+                <td style="color:var(--text-muted)">2026-10-08 09:30</td>
+                <td><strong>IP166E</strong></td>
+                <td>ES20250401</td>
+                <td>原液 5℃ 长期 6M</td>
+                <td>SEC 99.1% · CE 99.5% · 活性 91%</td>
+                <td style="color:var(--text-muted)">IP166E PPQ稳定性试验数据汇总...xlsx</td>
+                <td><span class="badge-pass">已入库</span></td>
+              </tr>
+              <tr>
+                <td style="color:var(--text-muted)">2026-10-08 09:25</td>
+                <td><strong>IP166E</strong></td>
+                <td>E202506002A1</td>
+                <td>制剂 25℃ 加速 6M</td>
+                <td>SEC 96.6% · HMW 3.4% (加速降解中)</td>
+                <td style="color:var(--text-muted)">IP166E PPQ稳定性试验数据汇总...xlsx</td>
+                <td><span class="badge-pass">已入库</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== TAB 2: PROJECT TESTING LEDGER ==================== -->
+  <div class="tab-page" id="tab-ledger">
+    <!-- Top Toolbar: Sample & Condition Selection (一个样品是一个样品) -->
+    <div class="card" style="margin-bottom:18px">
+      <div class="card-header">
+        <div class="card-title">
+          <span>📋</span>
+          <span>供试样品全项检定台账 · 单样生命周期追踪与方案标准对照</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="badge-pass" style="font-size:11px">状态：已关联研究方案与质量标准</span>
+          <button class="btn btn-primary" style="font-size:11px;padding:4px 12px" onclick="toast('正在导出该样品检测台账与质控报告 (.docx)...')">
+            📥 导出单样台账 (.docx / .xlsx)
+          </button>
+        </div>
+      </div>
+      <div class="card-body" style="padding:14px 20px;display:flex;flex-direction:column;gap:12px">
+
+        <!-- Level 1: Sample entity selection (一个样品是一个样品) -->
+        <div class="toolbar-row">
+          <span class="toolbar-label">1. 供试样品批号：</span>
+          <div class="purpose-pills" id="ledgerSamplePills">
+            <button class="purpose-btn active" id="btnLedgerSample_E202506002A1" onclick="selectLedgerSample('E202506002A1', this)">E202506002A1 (PPQ 1mg笔 · 6000L)</button>
+            <button class="purpose-btn" id="btnLedgerSample_E202506002B1" onclick="selectLedgerSample('E202506002B1', this)">E202506002B1 (PPQ 1mg器 · 6000L)</button>
+            <button class="purpose-btn" id="btnLedgerSample_C202502001A1" onclick="selectLedgerSample('C202502001A1', this)">C202502001A1 (商业化 1mg笔)</button>
+            <button class="purpose-btn" id="btnLedgerSample_C202401001A" onclick="selectLedgerSample('C202401001A', this)">C202401001A (PAI 1mg笔 · 500L)</button>
+            <button class="purpose-btn" id="btnLedgerSample_ES20250401" onclick="selectLedgerSample('ES20250401', this)">ES20250401 (PPQ 原液DS · 6000L)</button>
+            <button class="purpose-btn" id="btnLedgerSample_C202508017A1" onclick="selectLedgerSample('C202508017A1', this)">C202508017A1 (最新商业放行批)</button>
+          </div>
+        </div>
+
+        <!-- Level 2: Study Purpose / Storage Condition -->
+        <div class="toolbar-row">
+          <span class="toolbar-label">2. 考察场景环境：</span>
+          <div class="purpose-pills" id="ledgerConditionPills">
+            <button class="purpose-btn active" id="btnLedgerCond_lt" onclick="selectLedgerCondition('lt', this)">🔵 长期稳定性 (5℃±3℃ / -70℃ DS · 0M~18M)</button>
+            <button class="purpose-btn" id="btnLedgerCond_acc" onclick="selectLedgerCondition('acc', this)">🟠 加速稳定性 (25℃±2℃ / 60%RH · 0M~6M)</button>
+            <button class="purpose-btn" id="btnLedgerCond_temp40" onclick="selectLedgerCondition('temp40', this)">🔥 40℃ 高温高湿破坏应激 (0天~28天)</button>
+            <button class="purpose-btn" id="btnLedgerCond_release" onclick="selectLedgerCondition('release', this)">🟢 出厂放行 COA 检验基准 (0M 放行数据)</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- 方案与质量标准对照看板 (Sample Protocol & Spec Banner) -->
+    <div class="protocol-spec-grid" id="ledgerBannerGrid">
+      <!-- Dynamically rendered -->
+    </div>
+
+    <!-- 单样品关键指标随时间质控趋势图 (4 幅单样质控图谱，带上下限警戒线红虚线) -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:16px;margin-bottom:20px">
+      <div class="card" style="margin-bottom:0">
+        <div class="card-header" style="padding:10px 14px">
+          <div class="card-title" style="font-size:12px"><span>📉</span><span>SEC-HPLC 单体纯度走势 (%)</span></div>
+          <span class="badge-pass" style="font-size:10px">标准限度 ≥95.0%</span>
+        </div>
+        <div class="card-body" style="padding:10px"><div style="height:180px;position:relative"><canvas id="ledgerCanvas_sec"></canvas></div></div>
+      </div>
+
+      <div class="card" style="margin-bottom:0">
+        <div class="card-header" style="padding:10px 14px">
+          <div class="card-title" style="font-size:12px"><span>📉</span><span>SEC-HPLC 高分子量聚体 HMWS (%)</span></div>
+          <span class="badge-pass" style="font-size:10px">标准限度 ≤4.5%</span>
+        </div>
+        <div class="card-body" style="padding:10px"><div style="height:180px;position:relative"><canvas id="ledgerCanvas_hmw"></canvas></div></div>
+      </div>
+
+      <div class="card" style="margin-bottom:0">
+        <div class="card-header" style="padding:10px 14px">
+          <div class="card-title" style="font-size:12px"><span>📈</span><span>NR CE-SDS 非还原主峰纯度 (%)</span></div>
+          <span class="badge-pass" style="font-size:10px">控制线 ≥94.0%</span>
+        </div>
+        <div class="card-body" style="padding:10px"><div style="height:180px;position:relative"><canvas id="ledgerCanvas_nrce"></canvas></div></div>
+      </div>
+
+      <div class="card" style="margin-bottom:0">
+        <div class="card-header" style="padding:10px 14px">
+          <div class="card-title" style="font-size:12px"><span>⚡</span><span>icIEF 电荷变异体主峰 (%)</span></div>
+          <span class="badge-pass" style="font-size:10px">标准限度 ≥40.0%</span>
+        </div>
+        <div class="card-body" style="padding:10px"><div style="height:180px;position:relative"><canvas id="ledgerCanvas_icief"></canvas></div></div>
+      </div>
+    </div>
+
+    <!-- 单样品全时间点检验数据大表 (0M ~ 18M 实测数据与标准对照) -->
+    <div class="card">
+      <div class="card-header" style="background:#f8fafc">
+        <div class="card-title">
+          <span>📋</span>
+          <span id="ledgerTableCardTitle">供试品检测台账全项数据矩阵 · 与注册质量标准逐项对照</span>
+        </div>
+        <span style="font-size:11px;color:var(--text-muted)">数据源：LIMS 已归档实验实测值 (已双人复核)</span>
+      </div>
+      <div class="card-body" style="padding:20px">
+        <div class="table-container">
+          <table class="data-matrix" id="ledgerDataTable" style="font-size:11px">
+            <thead id="ledgerTableHead"></thead>
+            <tbody id="ledgerTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+    <!-- ==================== TAB 3: MULTI-PURPOSE QUALITY ANALYSIS CENTER ==================== -->
+  <div class="tab-page" id="tab-comparability">
+
+    <!-- Top Level: 2-Way Pillar Segmented Bar -->
+    <div class="mode-segment-bar">
+      <div class="mode-segment-btn active" id="btnPillarRelease" onclick="switchComparabilityPillar('release')">
+        <div class="mode-title-row">
+          <span class="mode-title-text">📋 支柱一：出厂放行全项质量可比性</span>
+          <span class="mode-tag">批分析合并表头</span>
+        </div>
+        <div class="mode-desc-text">变更前 (500L 临床批) vs 变更后 (6000L PPQ/商业化批) · 全项检验数据合并大表与 Mean/Range 统计</div>
+      </div>
+
+      <div class="mode-segment-btn" id="btnPillarStability" onclick="switchComparabilityPillar('stability')">
+        <div class="mode-title-row">
+          <span class="mode-title-text">⏱️ 支柱二：稳定性降解行为与耐受性可比性</span>
+          <span class="mode-tag">同图叠加坡度</span>
+        </div>
+        <div class="mode-desc-text">同一条件跨批次同图叠加对比 · 涵盖长期/加速/40℃应激 11项官方CQA衰减动力学曲线与斜率一致性</div>
+      </div>
+    </div>
+
+    <!-- ==================== PILLAR 1: RELEASE QUALITY COMPARABILITY ==================== -->
+    <div class="analysis-mode-panel active" id="panelPillarRelease">
+      <div class="card" style="margin-bottom:18px">
+        <div class="card-header">
+          <div class="card-title">
+            <span>📋</span>
+            <span>出厂放行质量可比性 · 变更前后工艺批次筛选控制台</span>
+          </div>
+          <button class="btn btn-primary" style="font-size:11px;padding:4px 12px" onclick="toast('正在导出《工艺变更前后出厂检验质量可比性分析报告.docx》...')">
+            📝 导出放行可比性报告
+          </button>
+        </div>
+        <div class="card-body" style="padding:14px 20px;display:flex;flex-direction:column;gap:12px">
+
+          <div class="toolbar-row" style="justify-content:space-between">
+            <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+              <span class="toolbar-label">规格剂型：</span>
+              <div class="purpose-pills" id="relSpecPills">
+                <button class="purpose-btn active" onclick="setRelSpec('all')">全部规格</button>
+                <button class="purpose-btn" onclick="setRelSpec('dp1_pen')">1mg 注射笔</button>
+                <button class="purpose-btn" onclick="setRelSpec('dp1_syr')">1mg 预灌封注射器</button>
+                <button class="purpose-btn" onclick="setRelSpec('ds')">原液 DS</button>
+              </div>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);font-weight:600">
+              法规依据：ICH Q5E · CDE 生物制品上市后变更指导原则 (3.2.S.2.6)
+            </div>
+          </div>
+
+          <!-- Pre vs Post Batches Selection for Release -->
+          <div class="filter-section-grid">
+            <div class="filter-box">
+              <div class="filter-box-title">
+                <span class="pre-post-pill-pre">变更前工艺参比批 (Pre-change · 500L 临床批)</span>
+                <span style="font-size:10px;color:var(--text-muted)">可多选</span>
+              </div>
+              <div class="batch-check-row" id="relBatchPreChecks">
+                <label class="check-label"><input type="checkbox" checked value="C202401001A" onchange="renderReleasePillar()"> C202401001A (PAI 1mg笔)</label>
+                <label class="check-label"><input type="checkbox" checked value="C202402002A" onchange="renderReleasePillar()"> C202402002A (PAI 1mg笔)</label>
+              </div>
+            </div>
+
+            <div class="filter-box">
+              <div class="filter-box-title">
+                <span class="pre-post-pill-post">变更后工艺试验批 (Post-change · 6000L PPQ/商业化批)</span>
+                <span style="font-size:10px;color:var(--text-muted)">可多选</span>
+              </div>
+              <div class="batch-check-row" id="relBatchPostChecks">
+                <label class="check-label"><input type="checkbox" checked value="E202506002A1" onchange="renderReleasePillar()"> E202506002A1 (PPQ 1mg笔)</label>
+                <label class="check-label"><input type="checkbox" checked value="E202506002B1" onchange="renderReleasePillar()"> E202506002B1 (PPQ 1mg器)</label>
+                <label class="check-label"><input type="checkbox" checked value="C202502001A1" onchange="renderReleasePillar()"> C202502001A1 (商业化 1mg笔)</label>
+                <label class="check-label"><input type="checkbox" checked value="C202508017A1" onchange="renderReleasePillar()"> C202508017A1 (最新商业批)</label>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Release Comparison Bar Charts -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:16px;margin-bottom:20px">
+        <div class="card" style="margin-bottom:0">
+          <div class="card-header" style="padding:10px 14px"><div class="card-title" style="font-size:12px"><span>📊</span><span>SEC 单体纯度出厂放行分布 (%)</span></div><span class="badge-pass" style="font-size:10px">限度 ≥95.0%</span></div>
+          <div class="card-body" style="padding:10px"><div style="height:180px;position:relative"><canvas id="relCanvas_sec"></canvas></div></div>
+        </div>
+        <div class="card" style="margin-bottom:0">
+          <div class="card-header" style="padding:10px 14px"><div class="card-title" style="font-size:12px"><span>📊</span><span>NR CE-SDS 主峰放行分布 (%)</span></div><span class="badge-pass" style="font-size:10px">限度 ≥94.0%</span></div>
+          <div class="card-body" style="padding:10px"><div style="height:180px;position:relative"><canvas id="relCanvas_nrce"></canvas></div></div>
+        </div>
+        <div class="card" style="margin-bottom:0">
+          <div class="card-header" style="padding:10px 14px"><div class="card-title" style="font-size:12px"><span>📊</span><span>icIEF 电荷主峰放行分布 (%)</span></div><span class="badge-pass" style="font-size:10px">限度 ≥40.0%</span></div>
+          <div class="card-body" style="padding:10px"><div style="height:180px;position:relative"><canvas id="relCanvas_icief"></canvas></div></div>
+        </div>
+        <div class="card" style="margin-bottom:0">
+          <div class="card-header" style="padding:10px 14px"><div class="card-title" style="font-size:12px"><span>📊</span><span>生物学相对活性放行分布 (cAMP %)</span></div><span class="badge-pass" style="font-size:10px">标准 70%~130%</span></div>
+          <div class="card-body" style="padding:10px"><div style="height:180px;position:relative"><canvas id="relCanvas_bio"></canvas></div></div>
+        </div>
+      </div>
+
+      <!-- Release Merged Header Word Table with RSD -->
+      <div class="card">
+        <div class="card-header" style="background:#f8fafc">
+          <div class="card-title"><span>📄</span><span>依苏帕格鲁肽α 工艺变更前后出厂放行全项质量可比性汇总表 (合并表头)</span></div>
+          <button class="btn btn-primary" style="font-size:11px;padding:4px 10px" onclick="toast('已导出放行全项合并表头宽表 (.docx)')">📥 导出 Word (.docx)</button>
+        </div>
+        <div class="card-body" style="padding:22px">
+          <div class="table-container">
+            <table class="data-matrix" id="relMergedTable" style="font-size:11px">
+              <thead id="relMergedHead"></thead>
+              <tbody id="relMergedBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== PILLAR 2: STABILITY DEGRADATION COMPARABILITY ==================== -->
+    <div class="analysis-mode-panel" id="panelPillarStability">
+      <div class="card" style="margin-bottom:18px">
+        <div class="card-header">
+          <div class="card-title">
+            <span>⏱️</span>
+            <span>稳定性降解行为可比性 · 考察条件与参试批次控制台</span>
+          </div>
+          <button class="btn btn-primary" style="font-size:11px;padding:4px 12px" onclick="toast('正在导出《工艺变更稳定性降解趋势可比性评价报告.docx》...')">
+            📝 导出稳定性可比性报告
+          </button>
+        </div>
+        <div class="card-body" style="padding:14px 20px;display:flex;flex-direction:column;gap:12px">
+
+          <!-- Condition selector -->
+          <div class="toolbar-row">
+            <span class="toolbar-label">考察对比条件：</span>
+            <div class="purpose-pills" id="compConditionPills">
+              <button class="purpose-btn active" onclick="setCompCondition('lt', this)">🔵 长期稳定性 (5℃±3℃ · 0M~18M)</button>
+              <button class="purpose-btn" onclick="setCompCondition('acc', this)">🟠 加速稳定性 (25℃±2℃ · 0M~6M)</button>
+              <button class="purpose-btn" onclick="setCompCondition('temp40', this)">🔥 40℃ 高温高湿破坏应激 (0天~28天)</button>
+              <button class="purpose-btn" onclick="setCompCondition('photo', this)">☀️ 强光照射试验 (4500 Lux)</button>
+              <button class="purpose-btn" onclick="setCompCondition('shake', this)">🌊 物理振荡试验 (200 rpm)</button>
+            </div>
+          </div>
+
+          <!-- Pre vs Post Batches -->
+          <div class="filter-section-grid">
+            <div class="filter-box">
+              <div class="filter-box-title">
+                <span class="pre-post-pill-pre">变更前参比批 (Pre-change · 500L 工艺)</span>
+                <span style="font-size:10px;color:var(--text-muted)">虚线渲染</span>
+              </div>
+              <div class="batch-check-row" id="compBatchPreChecks">
+                <label class="check-label"><input type="checkbox" checked value="C202401001A" onchange="renderComparabilityPillar()"> C202401001A (PAI 1mg笔)</label>
+                <label class="check-label"><input type="checkbox" checked value="C202402002A" onchange="renderComparabilityPillar()"> C202402002A (PAI 1mg笔)</label>
+                <label class="check-label"><input type="checkbox" value="CS20240101" onchange="renderComparabilityPillar()"> CS20240101 (PAI 原液DS)</label>
+              </div>
+            </div>
+
+            <div class="filter-box">
+              <div class="filter-box-title">
+                <span class="pre-post-pill-post">变更后试验批 (Post-change · 6000L 工艺)</span>
+                <span style="font-size:10px;color:var(--text-muted)">实线渲染</span>
+              </div>
+              <div class="batch-check-row" id="compBatchPostChecks">
+                <label class="check-label"><input type="checkbox" checked value="E202506002A1" onchange="renderComparabilityPillar()"> E202506002A1 (PPQ 1mg笔)</label>
+                <label class="check-label"><input type="checkbox" checked value="E202506002B1" onchange="renderComparabilityPillar()"> E202506002B1 (PPQ 1mg器)</label>
+                <label class="check-label"><input type="checkbox" checked value="C202502001A1" onchange="renderComparabilityPillar()"> C202502001A1 (商业化 1mg笔)</label>
+                <label class="check-label"><input type="checkbox" value="ES20250401" onchange="renderComparabilityPillar()"> ES20250401 (PPQ 原液DS)</label>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Pre vs Post Overlay Trends: 11 Official Regulatory CQAs + Particles -->
+      <div style="margin-bottom:12px;font-size:12px;font-weight:700;color:var(--text-title);display:flex;align-items:center;justify-content:space-between">
+        <span>📈 变更前后样品同图叠加衰减动力学曲线 (11 项官方 CQA，对齐 CTD 图 54~图 64)</span>
+        <span class="badge-pass" style="font-size:11px">🟣 虚线: 变更前 (500L) | 🔵 实线: 变更后 (6000L) | 🔴 虚线: 质量标准限度</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:16px;margin-bottom:20px">
+        <!-- 1. SEC Mono -->
+        <div class="card" style="margin-bottom:0">
+          <div class="card-header" style="padding:10px 14px"><div class="card-title" style="font-size:12px"><span>图54</span><span>SEC-HPLC 单体纯度 (%)</span></div><span class="badge-pass" style="font-size:10px">限度 ≥95.0%</span></div>
+          <div class="card-body" style="padding:10px"><div style="height:180px;position:relative"><canvas id="compCanvas_sec_mono"></canvas></div></div>
+        </div>
+        <!-- 2. SEC HMW -->
+        <div class="card" style="margin-bottom:0">
+          <div class="card-header" style="padding:10px 14px"><div class="card-title" style="font-size:12px"><span>图55</span><span>SEC-HPLC 高分子量 HMWS (%)</span></div><span class="badge-pass" style="font-size:10px">限度 ≤4.5%</span></div>
+          <div class="card-body" style="padding:10px"><div style="height:180px;position:relative"><canvas id="compCanvas_sec_hmw"></canvas></div></div>
+        </div>
+        <!-- 3. NR CE-SDS Main -->
+        <div class="card" style="margin-bottom:0">
+          <div class="card-header" style="padding:10px 14px"><div class="card-title" style="font-size:12px"><span>图56</span><span>NR CE-SDS 非还原主峰 (%)</span></div><span class="badge-pass" style="font-size:10px">控制线 ≥94.0%</span></div>
+          <div class="card-body" style="padding:10px"><div style="height:180px;position:relative"><canvas id="compCanvas_nrce_main"></canvas></div></div>
+        </div>
+        <!-- 4. NR CE-SDS HMW -->
+        <div class="card" style="margin-bottom:0">
+          <div class="card-header" style="padding:10px 14px"><div class="card-title" style="font-size:12px"><span>图57</span><span>NR CE-SDS 高分子量 HMWS (%)</span></div><span class="badge-pass" style="font-size:10px">限度 ≤4.0%</span></div>
+          <div class="card-body" style="padding:10px"><div style="height:180px;position:relative"><canvas id="compCanvas_nrce_hmw"></canvas></div></div>
+        </div>
+        <!-- 5. NR CE-SDS LMW -->
+        <div class="card" style="margin-bottom:0">
+          <div class="card-header" style="padding:10px 14px"><div class="card-title" style="font-size:12px"><span>图58</span><span>NR CE-SDS 低分子量 LMWS (%)</span></div><span class="badge-pass" style="font-size:10px">限度 ≤2.0%</span></div>
+          <div class="card-body" style="padding:10px"><div style="height:180px;position:relative"><canvas id="compCanvas_nrce_lmw"></canvas></div></div>
+        </div>
+        <!-- 6. R CE-SDS Main -->
+        <div class="card" style="margin-bottom:0">
+          <div class="card-header" style="padding:10px 14px"><div class="card-title" style="font-size:12px"><span>图59</span><span>R CE-SDS 还原主峰 (%)</span></div><span class="badge-pass" style="font-size:10px">控制线 ≥93.0%</span></div>
+          <div class="card-body" style="padding:10px"><div style="height:180px;position:relative"><canvas id="compCanvas_rce_main"></canvas></div></div>
+        </div>
+        <!-- 7. R CE-SDS Other -->
+        <div class="card" style="margin-bottom:0">
+          <div class="card-header" style="padding:10px 14px"><div class="card-title" style="font-size:12px"><span>图60</span><span>R CE-SDS 其他杂质峰 (%)</span></div><span class="badge-pass" style="font-size:10px">限度 ≤7.0%</span></div>
+          <div class="card-body" style="padding:10px"><div style="height:180px;position:relative"><canvas id="compCanvas_rce_other"></canvas></div></div>
+        </div>
+        <!-- 8. icIEF Main -->
+        <div class="card" style="margin-bottom:0">
+          <div class="card-header" style="padding:10px 14px"><div class="card-title" style="font-size:12px"><span>图61</span><span>icIEF 电荷变异体主峰 (%)</span></div><span class="badge-pass" style="font-size:10px">限度 ≥40.0%</span></div>
+          <div class="card-body" style="padding:10px"><div style="height:180px;position:relative"><canvas id="compCanvas_icief_main"></canvas></div></div>
+        </div>
+        <!-- 9. icIEF Acidic -->
+        <div class="card" style="margin-bottom:0">
+          <div class="card-header" style="padding:10px 14px"><div class="card-title" style="font-size:12px"><span>图62</span><span>icIEF 酸性峰 Acidic (%)</span></div><span class="badge-pass" style="font-size:10px">限度 ≤50.0%</span></div>
+          <div class="card-body" style="padding:10px"><div style="height:180px;position:relative"><canvas id="compCanvas_icief_acid"></canvas></div></div>
+        </div>
+        <!-- 10. icIEF Basic -->
+        <div class="card" style="margin-bottom:0">
+          <div class="card-header" style="padding:10px 14px"><div class="card-title" style="font-size:12px"><span>图63</span><span>icIEF 碱性峰 Basic (%)</span></div><span class="badge-pass" style="font-size:10px">限度 ≤10.0%</span></div>
+          <div class="card-body" style="padding:10px"><div style="height:180px;position:relative"><canvas id="compCanvas_icief_base"></canvas></div></div>
+        </div>
+        <!-- 11. Bioactivity cAMP -->
+        <div class="card" style="margin-bottom:0">
+          <div class="card-header" style="padding:10px 14px"><div class="card-title" style="font-size:12px"><span>图64</span><span>体外生物学活性 (cAMP %)</span></div><span class="badge-pass" style="font-size:10px">标准 70%~130%</span></div>
+          <div class="card-body" style="padding:10px"><div style="height:180px;position:relative"><canvas id="compCanvas_bio_camp"></canvas></div></div>
+        </div>
+        <!-- 12. Particles -->
+        <div class="card" style="margin-bottom:0">
+          <div class="card-header" style="padding:10px 14px"><div class="card-title" style="font-size:12px"><span>补充</span><span>不溶性微粒 ≥10μm (粒/支)</span></div><span class="badge-pass" style="font-size:10px">限度 ≤6000</span></div>
+          <div class="card-body" style="padding:10px"><div style="height:180px;position:relative"><canvas id="compCanvas_particles"></canvas></div></div>
+        </div>
+      </div>
+
+      <!-- Merged Header Word Table (Pre vs Post) for Stability -->
+      <div class="card">
+        <div class="card-header" style="background:#f8fafc">
+          <div class="card-title"><span>📄</span><span>依苏帕格鲁肽α 工艺变更前后稳定性降解速率与可比性评价表</span></div>
+          <button class="btn btn-primary" style="font-size:11px;padding:4px 10px" onclick="toast('已导出稳定性可比性评价表 (.docx)')">📥 导出 Word (.docx)</button>
+        </div>
+        <div class="card-body" style="padding:22px">
+          <div class="table-container">
+            <table class="data-matrix" id="compMergedTable" style="font-size:11px">
+              <thead id="compMergedHead"></thead>
+              <tbody id="compMergedBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== TAB 4: REPORT CENTER ==================== -->
+  <div class="tab-page" id="tab-reports">
+    <div class="report-main-grid">
+
+      <!-- Left: Structural Previews and Lego Builder -->
+      <div>
+
+        <!-- Report 1: Stability Comprehensive Summary with 5-part Outline -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">
+              <span>📝</span>
+              <span>长期稳定性研究数据汇总报告 (.docx) · 结构预览</span>
+            </div>
+            <button class="btn btn-primary" onclick="toast('正在导出《长期稳定性研究数据汇总报告.docx》...')">
+              📥 导出 Word 完整报告
+            </button>
+          </div>
+          <div class="card-body">
+
+            <div class="report-outline-box">
+              <div class="outline-header" onclick="toggleOutline(1)">
+                <span>📑 第 1 部分：基本信息与试验条件 (展开预览)</span>
+                <span>▾</span>
+              </div>
+              <div class="outline-body" id="outline1">
+                <strong>试验方案编号：</strong>STB(C)-QC-IP166E-P-2-005<br>
+                <strong>考察条件：</strong>长期试验 5℃±3℃ | 温控冷库 IE-03-03-00537<br>
+                <strong>开展地点：</strong>常熟工厂 C / 相城工厂 X<br>
+                <strong>起止时间：</strong>2024.02 至 2026.10 (目前已完成 18M 考察)
+              </div>
+            </div>
+
+            <div class="report-outline-box">
+              <div class="outline-header" onclick="toggleOutline(2)">
+                <span>📑 第 2 部分：供试品批次与包装信息 (展开预览)</span>
+                <span>▾</span>
+              </div>
+              <div class="outline-body" id="outline2">
+                <strong>涵盖批次：</strong>E202506002B1 (PPQ验证批)、C202502001A1 (商业化批)、C202401001A (PAI注册批)<br>
+                <strong>剂型规格：</strong>依苏帕格鲁肽α注射液 1mg (0.5ml) / 3mg<br>
+                <strong>包装形式：</strong>预充式注射笔 / 预灌封注射器 (内包材无菌硅化玻璃针管)
+              </div>
+            </div>
+
+            <div class="report-outline-box">
+              <div class="outline-header" onclick="toggleOutline(3)">
+                <span>📑 第 3 部分：检验项目与质量标准限度 (展开预览)</span>
+                <span>▾</span>
+              </div>
+              <div class="outline-body" id="outline3">
+                SEC 单体 ≥95.0% · HMW ≤4.5% · NR CE-SDS 主峰 ≥94.0% · icIEF 等电点 6.2±0.2 · 活性 70%~130% · 蛋白含量 2.0±0.2 mg/ml 等全套注册标准。
+              </div>
+            </div>
+
+            <div class="report-outline-box">
+              <div class="outline-header" onclick="toggleOutline(4)">
+                <span>📑 第 4 部分：实验数据汇总大表 (时间矩阵 0M~18M)</span>
+                <span>▾</span>
+              </div>
+              <div class="outline-body" id="outline4">
+                自动提取项目检测台账中已审定的全部批次 0M、3M、6M、9M、12M、18M 实测数据，采用标准 Word 景观网格表格排版。
+              </div>
+            </div>
+
+            <div class="report-outline-box">
+              <div class="outline-header" onclick="toggleOutline(5)">
+                <span>📑 第 5 部分：稳定性趋势评价与暂定有效期建议</span>
+                <span>▾</span>
+              </div>
+              <div class="outline-body" id="outline5">
+                基于目前 18M 长期稳定性数据，单体纯度衰减斜率线性拟合良好，未见异常降解与聚集体突增，数据支持暂定 24 个月有效期申报。
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Report 2: Quality Comparability Modular Lego Generator -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">
+              <span>⚖️</span>
+              <span>PPQ 质量可比性研究分析报告 · 模块化自由拼装生成器</span>
+            </div>
+            <button class="btn btn-primary" onclick="toast('正在按选定模块拼装生成《质量可比性报告.docx》...')">
+              📥 拼装导出可比性报告
+            </button>
+          </div>
+          <div class="card-body">
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">
+              可比性报告体量庞大，支持自由勾选本次需要的分析模块与参与评价的批次进行定制化组装：
+            </div>
+
+            <!-- Modules Lego Checklist -->
+            <div class="lego-module-item">
+              <input type="checkbox" checked id="mod1">
+              <div>
+                <strong>模块一：放行指标全项可比性分析</strong>
+                <span>对比 PPQ 批与商业化各批次的放行 COA 检验全项 14 项数据及均一性</span>
+              </div>
+            </div>
+
+            <div class="lego-module-item">
+              <input type="checkbox" checked id="mod2">
+              <div>
+                <strong>模块二：长期稳定性降解趋势与斜率可比性</strong>
+                <span>对比 5℃ 长期 0M 至 18M 期间纯度衰减速率与杂质增长动力学</span>
+              </div>
+            </div>
+
+            <div class="lego-module-item">
+              <input type="checkbox" checked id="mod3">
+              <div>
+                <strong>模块三：25℃ 加速稳定性敏感性可比性</strong>
+                <span>对比各批次在加速应激条件下的抗降解能力与断裂片段生成</span>
+              </div>
+            </div>
+
+            <div class="lego-module-item">
+              <input type="checkbox" id="mod4">
+              <div>
+                <strong>模块四：电荷异质性与高级结构深度比对 (可选高级模块)</strong>
+                <span>包含 icIEF 酸性/碱性峰精细图谱比对及生物学活性受体亲和力</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Right Side Panel: Raw Data Ledgers & Sources (Moved out of center!) -->
+      <div>
+        <div class="side-ledger-card">
+          <div style="font-weight:700;font-size:13px;color:var(--text-title);display:flex;align-items:center;gap:6px">
+            <span>🗄️</span>
+            <span>原始台账与数据底表专区</span>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted)">
+            供分析工程师复核、科研统计及下游 LIMS 对接调用的原始数据底表。
+          </div>
+
+          <!-- Side Item 1 -->
+          <div class="side-item-btn" onclick="toast('已下载 Records 原始多批长表 (CSV)')">
+            <div>
+              <strong>📊 Records 原始多批长表</strong>
+              <span>各批次检测记录</span>
+            </div>
+            <span>📥</span>
+          </div>
+
+          <!-- Side Item 2 -->
+          <div class="side-item-btn" onclick="toast('已下载 Study 分研究原始矩阵表 (Excel)')">
+            <div>
+              <strong>📈 Study 分研究矩阵底表</strong>
+              <span>按各研究条件独立分 Sheet 展开</span>
+            </div>
+            <span>📥</span>
+          </div>
+
+          <!-- Side Item 3 -->
+          <div class="side-item-btn" onclick="toast('已下载 Sources 检验单溯源索引表')">
+            <div>
+              <strong>🔍 Sources 检验单溯源索引</strong>
+              <span>查看原始文件与数据位置</span>
+            </div>
+            <span>📥</span>
+          </div>
+
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</main>
+
+<!-- TOAST -->
+<div class="toast" id="toastBox">
+  <span>✅</span>
+  <span id="toastMsg">操作已完成</span>
+</div>
+
+<script>
+// ──── DATA STORAGE (REAL IP166E & MULTI-PROJECT) ────
+const departmentData = {
+  IP166E: {
+    name: "依苏帕格鲁肽α (IP166E)",
+    batchesCount: "19 批",
+    duration: "18M 长期",
+    releaseBatches: ["C202401001A (PAI)", "C202502001A1 (商业化)", "C202508015A1 (商业化)", "C202508017A1 (商业化)", "E202506002A1 (PPQ)"],
+    releaseMatrix: [
+      { item: "SEC-HPLC 单体纯度", std: "≥95.0%", v: ["98.3%", "98.3%", "97.9%", "99.4%", "99.3%"] },
+      { item: "SEC-HPLC HMW", std: "≤4.5%", v: ["1.7%", "1.7%", "2.1%", "0.6%", "0.7%"] },
+      { item: "NR CE-SDS 主峰", std: "≥94.0%", v: ["98.7%", "99.1%", "98.6%", "99.7%", "99.6%"] },
+      { item: "icIEF 等电点主峰", std: "6.2±0.2", v: ["6.3", "6.3", "6.2", "6.3", "6.3"] },
+      { item: "生物学活性 (cAMP)", std: "70%~130%", v: ["─", "102%", "─", "86%", "95%"] },
+      { item: "蛋白质含量 (mg/ml)", std: "2.0±0.2", v: ["2.1", "2.1", "2.0", "2.1", "2.1"] },
+      { item: "pH 值", std: "6.4~7.0", v: ["6.7", "6.7", "6.7", "6.7", "6.7"] }
+    ],
+    stabilityBatches: [
+      { batch: "E202506002B1 (PPQ 1mg器)", cond: "5℃ 长期", item: "SEC 单体纯度", std: "≥95.0%", t: ["99.3%", "─", "─", "99.2%", "99.1%", "99.1%", "98.5%", "在测中"] },
+      { batch: "E202506002B1 (PPQ 1mg器)", cond: "5℃ 长期", item: "HMW 聚集体", std: "≤4.5%", t: ["0.7%", "─", "─", "0.8%", "0.9%", "0.9%", "1.5%", "在测中"] },
+      { batch: "E202506002A1 (PPQ 1mg笔)", cond: "25℃ 加速", item: "SEC 单体纯度", std: "≥95.0%", t: ["99.3%", "99.0%", "98.7%", "98.4%", "96.6%", "─", "─", "─"] },
+      { batch: "E202506002A1 (PPQ 1mg笔)", cond: "25℃ 加速", item: "HMW 聚集体", std: "≤4.5%", t: ["0.7%", "1.0%", "1.3%", "1.6%", "3.4%", "─", "─", "─"] },
+      { batch: "C202502001A1 (商业化 1mg笔)", cond: "5℃ 长期", item: "SEC 单体纯度", std: "≥95.0%", t: ["98.3%", "─", "─", "98.1%", "98.0%", "97.9%", "97.7%", "计划"] },
+      { batch: "C202401001A (PAI 1mg笔)", cond: "5℃ 长期", item: "SEC 单体纯度", std: "≥95.0%", t: ["98.3%", "─", "─", "─", "98.0%", "97.8%", "97.5%", "97.4%"] },
+      { batch: "ES20250401 (PPQ 原液DS)", cond: "5℃ 长期", item: "SEC 单体纯度", std: "≥95.0%", t: ["99.5%", "99.5%", "99.5%", "99.4%", "99.1%", "计划", "计划", "计划"] }
+    ]
+  },
+  IP162: {
+    name: "IP162 双特异性抗体",
+    batchesCount: "6 批",
+    duration: "6M 长期",
+    releaseBatches: ["B202601001", "B202601002"],
+    releaseMatrix: [
+      { item: "SEC 单体纯度", std: "≥95.0%", v: ["98.6%", "98.8%"] },
+      { item: "NR CE-SDS 主峰", std: "≥90.0%", v: ["94.5%", "95.0%"] }
+    ],
+    stabilityBatches: [
+      { batch: "B202601001", cond: "-70℃ 长期", item: "SEC 单体纯度", std: "≥95.0%", t: ["98.6%", "98.5%", "─", "98.4%", "98.1%", "─", "─", "─"] }
+    ]
+  }
+};
+
+let currentProjectKey = "IP166E";
+let currentPurpose = "all";
+let currentSample = "all";
+
+// ──── PROJECT SWITCHER ────
+// ──── NAVIGATION ────
+function switchMainTab(tabId) {
+  if (!projectRegistry.find(p => p.id === currentProjectKey).modules.includes(tabId)) return;
+  activeWorkspaceTab = tabId;
+  if (currentProjectKey !== "IP166E") { renderScopedWorkspace(); return; }
+  document.querySelectorAll(".nav-tab").forEach((t, i) => {
+    t.classList.toggle("active", ["intake", "ledger", "comparability", "reports"][i] === tabId);
+  });
+  document.querySelectorAll(".tab-page").forEach(p => p.classList.remove("active"));
+  document.getElementById("tab-" + tabId).classList.add("active");
+
+  if (tabId === "ledger") setTimeout(renderLedger, 50);
+  if (tabId === "comparability") setTimeout(() => switchComparabilityPillar(currentCompPillar), 50);
+}
+
+// ──── TOAST ────
+function toast(msg) {
+  const el = document.getElementById("toastBox");
+  document.getElementById("toastMsg").textContent = msg;
+  el.classList.add("show");
+  setTimeout(() => el.classList.remove("show"), 3200);
+}
+
+// ──── TAB 1: QUICK DEMO ────
+function loadRealDemo(type) {
+  if (type === "coa") {
+    document.getElementById("aiFileNameDisplay").textContent = "已解析：CoA-C202508017A1分析报告.docx";
+    document.getElementById("intakeBatchVal").textContent = "C202508017A1";
+    document.getElementById("intakeSpecVal").textContent = "DP · 1mg (0.5ml)";
+    document.getElementById("intakePurposeVal").textContent = "放行检验 (Release)";
+    document.getElementById("intakeCountVal").textContent = "14 项全项";
+    document.getElementById("intakeStatusVal").textContent = "✓ 全部符合标准";
+    toast("已成功解析真实文件：CoA-C202508017A1 (14项全部合格)");
+  } else {
+    document.getElementById("aiFileNameDisplay").textContent = "已解析：IP166E PPQ稳定性数据-6M补充.xlsx";
+    document.getElementById("intakeBatchVal").textContent = "E202506002A1/B1";
+    document.getElementById("intakeSpecVal").textContent = "DP · 注射笔/注射器";
+    document.getElementById("intakePurposeVal").textContent = "6M 稳定性补充";
+    document.getElementById("intakeCountVal").textContent = "8 项指标";
+    document.getElementById("intakeStatusVal").textContent = "✓ 趋势正常 (加速降解中)";
+    toast("已成功解析真实文件：PPQ稳定性数据-6M补充.xlsx");
+  }
+}
+
+function triggerTaskAction(n) {
+  if (n === 1) {
+    toast("任务已执行：已增量写入项目检测台账，缺项保护生效");
+  } else {
+    toast("任务已执行：放行一致性比对完成，偏差率 < 0.5%");
+  }
+}
+
+function commitIntakeData() {
+  toast("✅ 确认入库成功！台账已更新，独立反读核验通过");
+  setTimeout(() => switchMainTab("ledger"), 800);
+}
+
+// ──── TAB 2: LEDGER RENDERING (SAMPLE-BY-SAMPLE & SPEC COMPARISON) ────
+let currentLedgerSample = "E202506002A1";
+let currentLedgerCond = "lt";
+let ledgerCharts = {};
+
+const sampleProfiles = {
+  "E202506002A1": {
+    batch: "E202506002A1",
+    spec: "依苏帕格鲁肽α注射液 1mg (0.5ml)",
+    pack: "预充式注射笔 (内包材: 无菌硅化中硼硅玻璃针管)",
+    scale: "6000L 商业化规模 · PPQ 工艺验证批",
+    mfgDate: "2025-06-15",
+    protoId: "STB(C)-QC-IP166E-P-2-005",
+    protoName: "PPQ 验证批制剂成品稳定性考察方案",
+    storage: "长期 5℃±3℃ 避光温控冷库 (库位: IE-03-03-00537)",
+    progress: "已完成 18M 考察 (计划持续至 36M)",
+    stdCode: "YBH-IP166E-DP-2025 (Rev.03 商业化成品标准)",
+    stdType: "商业化成品放行与注册稳定性全项标准",
+    keyLimits: "单体 ≥95.0% · HMW ≤4.5% · 活性 70%~130%",
+    status: "有效受控 (双人复核已归档)",
+    overallEval: "全部指标符合标准 / 质量稳定受控",
+    shelfLife: "拟定 24 个月有效期 (数据支持 30M 申报)"
+  },
+  "E202506002B1": {
+    batch: "E202506002B1",
+    spec: "依苏帕格鲁肽α注射液 1mg (0.5ml)",
+    pack: "预灌封注射器 (PFS 带安全注射针护套)",
+    scale: "6000L 商业化规模 · PPQ 工艺验证批",
+    mfgDate: "2025-06-20",
+    protoId: "STB(C)-QC-IP166E-P-2-005",
+    protoName: "PPQ 验证批制剂成品稳定性考察方案",
+    storage: "长期 5℃±3℃ 避光冷库 (库位: IE-03-03-00538)",
+    progress: "已完成 18M 考察 (支持笔/器双包装形式比对)",
+    stdCode: "YBH-IP166E-DP-2025 (Rev.03)",
+    stdType: "商业化成品放行与注册稳定性全项标准",
+    keyLimits: "单体 ≥95.0% · HMW ≤4.5% · 活性 70%~130%",
+    status: "有效受控",
+    overallEval: "全部指标符合标准 / 质量稳定受控",
+    shelfLife: "拟定 24 个月有效期"
+  },
+  "C202502001A1": {
+    batch: "C202502001A1",
+    spec: "依苏帕格鲁肽α注射液 1mg (0.5ml)",
+    pack: "预充式注射笔",
+    scale: "6000L 商业化放大生产批",
+    mfgDate: "2025-02-10",
+    protoId: "STB(C)-QC-IP166E-ANNUAL-2025",
+    protoName: "商业化持续稳定性年度考察方案",
+    storage: "长期 5℃±3℃ 商业化成品库",
+    progress: "已完成 12M 考察",
+    stdCode: "YBH-IP166E-DP-2025 (Rev.03)",
+    stdType: "商业化成品放行与注册稳定性全项标准",
+    keyLimits: "单体 ≥95.0% · HMW ≤4.5% · 活性 70%~130%",
+    status: "有效受控",
+    overallEval: "全部指标符合标准 / 商业批均一性优良",
+    shelfLife: "拟定 24 个月有效期"
+  },
+  "C202401001A": {
+    batch: "C202401001A",
+    spec: "依苏帕格鲁肽α注射液 1mg (0.5ml)",
+    pack: "预充式注射笔",
+    scale: "500L 临床试验及 PAI 申报批 (变更前参比基准)",
+    mfgDate: "2024-01-18",
+    protoId: "STB(P)-QC-IP166-P-1-002",
+    protoName: "PAI 注册临床批长期稳定性方案",
+    storage: "长期 5℃±3℃ 避光冷库",
+    progress: "已完成 30M 终点考察 (支持原定 24M 货架期)",
+    stdCode: "YBH-IP166-CLINICAL-2023",
+    stdType: "临床阶段放行与稳定性原标准 (变更前基准)",
+    keyLimits: "单体 ≥95.0% · HMW ≤4.5% · 活性 70%~130%",
+    status: "历史归档 (可比性参比基准批)",
+    overallEval: "已圆满完成 30M 长期考察，数据稳健",
+    shelfLife: "已确证 24 个月有效期"
+  },
+  "ES20250401": {
+    batch: "ES20250401",
+    spec: "依苏帕格鲁肽α 原液 (DS 2.0 mg/ml)",
+    pack: "超低温特氟龙冻存袋 / 冻存瓶",
+    scale: "6000L PPQ 工艺验证原液批",
+    mfgDate: "2025-04-12",
+    protoId: "STB(C)-QC-IP166E-DS-2-004",
+    protoName: "PPQ 原液超低温冻存稳定性方案",
+    storage: "超低温冷库 -70℃ ± 10℃ 冻存",
+    progress: "已完成 12M 冻存考察 (计划 36M)",
+    stdCode: "YBH-IP166E-DS-2025 (Rev.02 原液标准)",
+    stdType: "原液放行与超低温稳定性标准",
+    keyLimits: "单体 ≥95.0% · HMW ≤4.5% · 纯度 ≥94.0%",
+    status: "有效受控",
+    overallEval: "超低温冻存极其稳定，未见聚体显著增加",
+    shelfLife: "拟定 原液 -70℃ 冻存期 24 个月"
+  },
+  "C202508017A1": {
+    batch: "C202508017A1",
+    spec: "依苏帕格鲁肽α注射液 1mg (0.5ml)",
+    pack: "预充式注射笔",
+    scale: "6000L 商业化生产放行批 (最新)",
+    mfgDate: "2025-08-05",
+    protoId: "REL-QC-IP166E-2025-0817",
+    protoName: "成品出厂放行 COA 检验批记录",
+    storage: "成品待发库 2~8℃",
+    progress: "0M 放行出厂已完成 / 已纳入年度持续稳定性计划",
+    stdCode: "YBH-IP166E-DP-2025 (Rev.03)",
+    stdType: "商业化出厂放行标准",
+    keyLimits: "单体 ≥95.0% · HMW ≤4.5% · 活性 70%~130%",
+    status: "检验合格已放行",
+    overallEval: "出厂放行全项 14 项 100% 合格",
+    shelfLife: "有效期自生产日期起 24 个月"
+  }
+};
+
+function selectLedgerSample(batchKey, elBtn) {
+  currentLedgerSample = batchKey;
+  document.querySelectorAll("#ledgerSamplePills .purpose-btn").forEach(b => b.classList.remove("active"));
+  if (elBtn) elBtn.classList.add("active");
+  renderLedger();
+}
+
+function selectLedgerCondition(condKey, elBtn) {
+  currentLedgerCond = condKey;
+  document.querySelectorAll("#ledgerConditionPills .purpose-btn").forEach(b => b.classList.remove("active"));
+  if (elBtn) elBtn.classList.add("active");
+  renderLedger();
+}
+
+function renderLedger() {
+  if (currentProjectKey !== "IP166E") return;
+  renderLedgerBanner();
+  renderLedgerCharts();
+  renderLedgerDataTable();
+}
+
+// ──── RENDER TAB 2 BANNER (PROTOCOL & SPEC COMPARISON) ────
+function renderLedgerBanner() {
+  const container = document.getElementById("ledgerBannerGrid");
+  if (!container) return;
+  const p = sampleProfiles[currentLedgerSample] || sampleProfiles["E202506002A1"];
+
+  container.innerHTML = `
+    <div class="protocol-spec-card card-accent-blue">
+      <div class="protocol-spec-card-title">
+        <span>📦 供试样品实体信息</span>
+        <span class="meta-chip" style="font-size:10px;padding:1px 6px">实体批次</span>
+      </div>
+      <div class="protocol-spec-row"><span>供试批号：</span><strong>${p.batch}</strong></div>
+      <div class="protocol-spec-row"><span>剂型规格：</span><strong>${p.spec}</strong></div>
+      <div class="protocol-spec-row"><span>包材包装：</span><strong style="font-size:11px">${p.pack}</strong></div>
+      <div class="protocol-spec-row"><span>工艺批量：</span><strong>${p.scale}</strong></div>
+      <div class="protocol-spec-row"><span>生产日期：</span><strong>${p.mfgDate}</strong></div>
+    </div>
+
+    <div class="protocol-spec-card card-accent-purple">
+      <div class="protocol-spec-card-title">
+        <span>📑 执行试验方案对照</span>
+        <span class="meta-chip" style="font-size:10px;padding:1px 6px">方案档案</span>
+      </div>
+      <div class="protocol-spec-row"><span>方案编号：</span><strong style="color:var(--primary)">${p.protoId}</strong></div>
+      <div class="protocol-spec-row"><span>方案名称：</span><strong style="font-size:11px">${p.protoName}</strong></div>
+      <div class="protocol-spec-row"><span>温湿环境：</span><strong style="font-size:11px">${p.storage}</strong></div>
+      <div class="protocol-spec-row"><span>考察进度：</span><strong>${p.progress}</strong></div>
+    </div>
+
+    <div class="protocol-spec-card card-accent-amber">
+      <div class="protocol-spec-card-title">
+        <span>⚖️ 注册质量标准对照</span>
+        <span class="meta-chip" style="font-size:10px;padding:1px 6px">法定标准</span>
+      </div>
+      <div class="protocol-spec-row"><span>执行标准：</span><strong>${p.stdCode}</strong></div>
+      <div class="protocol-spec-row"><span>标准属性：</span><strong style="font-size:11px">${p.stdType}</strong></div>
+      <div class="protocol-spec-row"><span>关键限度：</span><strong style="font-size:11px;color:#b45309">${p.keyLimits}</strong></div>
+      <div class="protocol-spec-row"><span>现行状态：</span><strong style="color:var(--success)">${p.status}</strong></div>
+    </div>
+
+    <div class="protocol-spec-card card-accent-green">
+      <div class="protocol-spec-card-title">
+        <span>✅ 单样品质量综合评价</span>
+        <span class="badge-pass" style="font-size:10px">稳定受控</span>
+      </div>
+      <div class="protocol-spec-row"><span>检定结论：</span><strong style="color:var(--success)">${p.overallEval}</strong></div>
+      <div class="protocol-spec-row"><span>衰减速率：</span><strong>斜率平缓 (无显著突变)</strong></div>
+      <div class="protocol-spec-row"><span>建议货架期：</span><strong style="color:var(--primary)">${p.shelfLife}</strong></div>
+      <div class="protocol-spec-row"><span>复核签名：</span><strong>分析主管 (张工) / QA (李工)</strong></div>
+    </div>
+  `;
+}
+
+// ──── RENDER TAB 2 CHARTS (SINGLE-SAMPLE TREND CURVES WITH LIMITS) ────
+function renderLedgerCharts() {
+  if (currentProjectKey !== "IP166E" || typeof Chart === "undefined") return;
+  const cSec = document.getElementById("ledgerCanvas_sec");
+  const cHmw = document.getElementById("ledgerCanvas_hmw");
+  const cNrce = document.getElementById("ledgerCanvas_nrce");
+  const cIcief = document.getElementById("ledgerCanvas_icief");
+  if (!cSec) return;
+
+  // Destroy previous charts
+  Object.keys(ledgerCharts).forEach(k => {
+    if (ledgerCharts[k]) { ledgerCharts[k].destroy(); delete ledgerCharts[k]; }
+  });
+
+  const bKey = currentLedgerSample;
+  let timepoints = ["0M", "1M", "2M", "3M", "6M", "9M", "12M", "18M"];
+  if (currentLedgerCond === "acc") timepoints = ["0M", "1M", "2M", "3M", "6M"];
+  if (currentLedgerCond === "temp40") timepoints = ["0天", "7天", "14天", "28天"];
+  if (currentLedgerCond === "release") timepoints = ["0M 出厂放行"];
+
+  function getVals(type) {
+    if (currentLedgerCond === "release") {
+      if (type === "sec") return [bKey.includes("E2025") ? 99.3 : 98.0];
+      if (type === "hmw") return [bKey.includes("E2025") ? 0.7 : 2.0];
+      if (type === "nrce") return [bKey.includes("E2025") ? 99.6 : 98.1];
+      if (type === "icief") return [bKey.includes("E2025") ? 59.0 : 55.4];
+    }
+    if (currentLedgerCond === "temp40") {
+      if (type === "sec") return [99.3, 98.1, 96.5, 93.8];
+      if (type === "hmw") return [0.7, 1.8, 3.4, 5.8];
+      if (type === "nrce") return [99.6, 98.4, 97.1, 94.2];
+      if (type === "icief") return [59.0, 48.2, 38.5, 24.6];
+    }
+    if (currentLedgerCond === "acc") {
+      if (type === "sec") return bKey.includes("E2025") ? [99.3, 99.0, 98.7, 98.4, 96.6] : [98.0, 97.8, 97.4, 97.0, 95.7];
+      if (type === "hmw") return bKey.includes("E2025") ? [0.7, 1.0, 1.3, 1.6, 3.4] : [2.0, 2.2, 2.6, 3.0, 4.3];
+      if (type === "nrce") return bKey.includes("E2025") ? [99.6, 99.2, 98.9, 98.6, 96.3] : [98.1, 97.7, 97.3, 96.9, 95.1];
+      if (type === "icief") return bKey.includes("E2025") ? [59.0, 54.1, 53.8, 46.7, 39.5] : [55.4, 51.0, 49.3, 43.8, 37.5];
+    }
+    // lt 5C
+    if (type === "sec") return bKey.includes("E2025") ? [99.3, 99.2, 99.1, 99.1, 98.9, 98.8, 98.6, 98.5] : [98.0, 98.0, 98.0, 98.0, 97.9, 97.8, 97.7, 97.5];
+    if (type === "hmw") return bKey.includes("E2025") ? [0.7, 0.8, 0.9, 0.9, 1.1, 1.2, 1.4, 1.5] : [2.0, 2.0, 2.0, 2.0, 2.1, 2.2, 2.3, 2.5];
+    if (type === "nrce") return bKey.includes("E2025") ? [99.6, 99.5, 99.4, 99.3, 99.2, 99.2, 99.0, 98.9] : [98.1, 98.1, 98.1, 98.0, 97.9, 97.8, 97.7, 97.5];
+    if (type === "icief") return bKey.includes("E2025") ? [59.0, 57.5, 56.5, 55.0, 54.2, 53.8, 53.0, 52.5] : [55.4, 55.1, 54.8, 54.7, 54.2, 53.8, 53.2, 52.8];
+  }
+
+  function makeSingleChart(canvas, label, dataVals, limitVal, limitLabel, yMin, yMax, unit) {
+    const ds = [
+      {
+        label: `${bKey} 实测值`,
+        data: dataVals,
+        borderColor: "#0284c7",
+        backgroundColor: "#0284c7",
+        borderWidth: 2.2,
+        tension: 0.25,
+        pointRadius: 4,
+        pointBackgroundColor: "#ffffff",
+        pointBorderWidth: 2
+      }
+    ];
+    if (limitVal !== null && limitVal !== undefined) {
+      ds.push({
+        label: limitLabel,
+        data: timepoints.map(() => limitVal),
+        borderColor: "#dc2626",
+        borderDash: [4, 4],
+        pointRadius: 0,
+        borderWidth: 1.5,
+        fill: false
+      });
+    }
+    return new Chart(canvas, {
+      type: "line",
+      data: { labels: timepoints, datasets: ds },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: "top", labels: { boxWidth: 8, font: { size: 9 } } } },
+        scales: { y: { min: yMin, max: yMax, title: { display: true, text: unit, font: { size: 9 } } } }
+      }
+    });
+  }
+
+  ledgerCharts.sec = makeSingleChart(cSec, "单体纯度", getVals("sec"), 95.0, "限度 ≥95.0%", 92, 100, "%");
+  ledgerCharts.hmw = makeSingleChart(cHmw, "高分子量", getVals("hmw"), 4.5, "限度 ≤4.5%", 0, 6, "%");
+  ledgerCharts.nrce = makeSingleChart(cNrce, "NR主峰", getVals("nrce"), 94.0, "控制线 ≥94.0%", 92, 100, "%");
+  ledgerCharts.icief = makeSingleChart(cIcief, "电荷主峰", getVals("icief"), 40.0, "限度 ≥40.0%", 20, 65, "%");
+}
+
+// ──── RENDER TAB 2 DATA TABLE (SINGLE SAMPLE FULL SPECS MATRIX) ────
+function renderLedgerDataTable() {
+  const head = document.getElementById("ledgerTableHead");
+  const body = document.getElementById("ledgerTableBody");
+  if (!head || !body) return;
+
+  const bKey = currentLedgerSample;
+  let timepoints = ["0M", "1M", "2M", "3M", "6M", "9M", "12M", "18M"];
+  if (currentLedgerCond === "acc") timepoints = ["0M", "1M", "2M", "3M", "6M"];
+  if (currentLedgerCond === "temp40") timepoints = ["0天", "7天", "14天", "28天"];
+  if (currentLedgerCond === "release") timepoints = ["出厂放行 (0M)"];
+
+  document.getElementById("ledgerTableCardTitle").textContent =
+    `供试品 ${bKey} · 全生命周期检定台账与注册质量标准逐项对照大表`;
+
+  let thHtml = `
+    <tr style="background:#f1f5f9;color:#0f172a">
+      <th style="border:1px solid #334155;padding:8px;text-align:left;min-width:140px">关键质量属性 (CQA)</th>
+      <th style="border:1px solid #334155;padding:8px;text-align:left;min-width:110px">分析方法</th>
+      <th style="border:1px solid #334155;padding:8px;text-align:left;min-width:140px">注册质量标准对照 (Acceptance Criteria)</th>
+  `;
+  timepoints.forEach(tp => {
+    thHtml += `<th style="border:1px solid #334155;padding:8px;text-align:center">${tp}</th>`;
+  });
+  thHtml += `<th style="border:1px solid #334155;padding:8px;text-align:center;min-width:90px">单项结论</th></tr>`;
+  head.innerHTML = thHtml;
+
+  body.innerHTML = "";
+
+  const isE2025 = bKey.includes("E2025");
+  const items = [
+    { name: "外观性状 (Appearance)", method: "目视法", std: "澄明至微乳光液体，无异物", val: () => timepoints.map(() => "澄明"), concl: "符合规定" },
+    { name: "可见异物 (Visible Particles)", method: "灯检法", std: "不得检出可见异物", val: () => timepoints.map(() => "符合"), concl: "符合规定" },
+    { name: "等电点 pI (icIEF法)", method: "icIEF", std: "主峰等电点 6.2 ± 0.2", val: () => timepoints.map(() => "6.3"), concl: "符合规定" },
+    { name: "SEC-HPLC 单体纯度", method: "SEC-HPLC", std: "单体: ≥ 95.0%", val: () => (isE2025 ? ["99.3%", "99.2%", "99.1%", "99.1%", "98.9%", "98.8%", "98.6%", "98.5%"] : ["98.0%", "─", "98.0%", "─", "97.9%", "97.8%", "97.7%", "97.5%"]), concl: "完全受控" },
+    { name: "SEC-HPLC 高分子量 HMWS", method: "SEC-HPLC", std: "聚体: ≤ 4.5%", val: () => (isE2025 ? ["0.7%", "0.8%", "0.9%", "0.9%", "1.1%", "1.2%", "1.4%", "1.5%"] : ["2.0%", "─", "2.0%", "─", "2.1%", "2.2%", "2.3%", "2.5%"]), concl: "杂质符合" },
+    { name: "NR CE-SDS 非还原主峰", method: "CE-SDS", std: "主峰: ≥ 94.0%", val: () => (isE2025 ? ["99.6%", "99.5%", "99.4%", "99.3%", "99.2%", "99.2%", "99.0%", "98.9%"] : ["98.1%", "─", "98.1%", "─", "97.9%", "97.8%", "97.7%", "97.5%"]), concl: "完全受控" },
+    { name: "NR CE-SDS 高分子量 HMWS", method: "CE-SDS", std: "≤ 4.0%", val: () => (isE2025 ? ["0.4%", "0.4%", "0.5%", "0.6%", "0.7%", "0.7%", "0.9%", "1.0%"] : ["1.5%", "─", "1.5%", "─", "1.6%", "1.7%", "1.8%", "1.9%"]), concl: "符合规定" },
+    { name: "NR CE-SDS 低分子量 LMWS", method: "CE-SDS", std: "≤ 2.0%", val: () => (isE2025 ? ["0.0%", "0.1%", "0.1%", "0.1%", "0.1%", "0.1%", "0.1%", "0.1%"] : ["0.4%", "─", "0.4%", "─", "0.4%", "0.4%", "0.5%", "0.6%"]), concl: "符合规定" },
+    { name: "R CE-SDS 还原主峰纯度", method: "CE-SDS", std: "主峰: ≥ 93.0%", val: () => (isE2025 ? ["97.2%", "97.1%", "97.0%", "97.0%", "96.9%", "96.8%", "96.7%", "96.6%"] : ["96.7%", "─", "96.6%", "─", "96.5%", "96.4%", "96.3%", "96.2%"]), concl: "符合规定" },
+    { name: "icIEF 电荷异质性主峰", method: "icIEF", std: "主峰: ≥ 40.0%", val: () => (isE2025 ? ["59.0%", "57.5%", "56.5%", "55.0%", "54.2%", "53.8%", "53.0%", "52.5%"] : ["55.4%", "─", "55.1%", "─", "54.7%", "54.2%", "53.8%", "53.2%"]), concl: "符合规定" },
+    { name: "icIEF 酸性峰 (Acidic)", method: "icIEF", std: "酸性峰: ≤ 50.0%", val: () => (isE2025 ? ["37.2%", "38.5%", "39.5%", "41.0%", "41.8%", "42.2%", "43.1%", "43.5%"] : ["40.1%", "─", "40.5%", "─", "41.0%", "41.5%", "41.9%", "42.5%"]), concl: "符合规定" },
+    { name: "icIEF 碱性峰 (Basic)", method: "icIEF", std: "碱性峰: ≤ 10.0%", val: () => (isE2025 ? ["3.8%", "4.0%", "4.0%", "4.0%", "4.0%", "4.0%", "3.9%", "4.0%"] : ["4.5%", "─", "4.4%", "─", "4.3%", "4.3%", "4.3%", "4.3%"]), concl: "符合规定" },
+    { name: "生物学活性 (cAMP 检测)", method: "细胞报告基因", std: "70% ~ 130%", val: () => (isE2025 ? ["95%", "94%", "93%", "91%", "95%", "94%", "96%", "95%"] : ["95%", "─", "92%", "─", "93%", "94%", "92%", "91%"]), concl: "完全合格" },
+    { name: "不溶性微粒 (≥10 μm)", method: "光阻法", std: "≤ 6000 粒/支", val: () => (isE2025 ? ["71", "75", "80", "92", "95", "110", "120", "125"] : ["115", "─", "122", "─", "130", "138", "145", "150"]), concl: "远低于限度" },
+    { name: "蛋白质含量 (Protein Content)", method: "紫外 UV法", std: "2.0 ± 0.2 mg/ml", val: () => timepoints.map(() => "2.1"), concl: "符合规定" },
+    { name: "pH 值", method: "电位滴定法", std: "6.4 ~ 7.0", val: () => timepoints.map(() => "6.7"), concl: "符合规定" }
+  ];
+
+  items.forEach(it => {
+    const tr = document.createElement("tr");
+    let rowHtml = `
+      <td style="border:1px solid #cbd5e1;padding:6px;font-weight:600;color:#334155">${it.name}</td>
+      <td style="border:1px solid #cbd5e1;padding:6px;color:#64748b">${it.method}</td>
+      <td style="border:1px solid #cbd5e1;padding:6px;color:#0369a1;font-weight:600">${it.std}</td>
+    `;
+    const vList = it.val();
+    timepoints.forEach((tp, idx) => {
+      const v = vList[idx] || vList[vList.length - 1] || "─";
+      rowHtml += `<td style="border:1px solid #cbd5e1;padding:6px;text-align:center" class="val-green">${v}</td>`;
+    });
+    rowHtml += `
+      <td style="border:1px solid #cbd5e1;padding:6px;text-align:center"><span class="badge-pass">${it.concl}</span></td>
+    `;
+    tr.innerHTML = rowHtml;
+    body.appendChild(tr);
+  });
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// ──── TAB 3: QUALITY COMPARABILITY STUDY CENTER (TWO PILLARS) ────
+// ══════════════════════════════════════════════════════════════════
+
+let currentCompPillar = "release"; // "release" | "stability"
+let relCharts = {};
+let compCharts = {};
+
+function switchComparabilityPillar(pillar) {
+  currentCompPillar = pillar;
+  document.getElementById("btnPillarRelease").classList.toggle("active", pillar === "release");
+  document.getElementById("btnPillarStability").classList.toggle("active", pillar === "stability");
+
+  document.getElementById("panelPillarRelease").classList.toggle("active", pillar === "release");
+  document.getElementById("panelPillarStability").classList.toggle("active", pillar === "stability");
+
+  if (pillar === "release") {
+    setTimeout(renderReleasePillar, 50);
+  } else {
+    setTimeout(renderComparabilityPillar, 50);
+  }
+}
+
+// ──── PILLAR 1: RELEASE QUALITY COMPARABILITY ────
+let currentRelSpec = "all";
+
+function setRelSpec(spec) {
+  currentRelSpec = spec;
+  document.querySelectorAll("#relSpecPills .purpose-btn").forEach(b => b.classList.remove("active"));
+  event.target.classList.add("active");
+  renderReleasePillar();
+}
+
+function getRelSelectedBatches() {
+  const pre = [];
+  document.querySelectorAll("#relBatchPreChecks input[type='checkbox']:checked").forEach(cb => pre.push(cb.value));
+  const post = [];
+  document.querySelectorAll("#relBatchPostChecks input[type='checkbox']:checked").forEach(cb => post.push(cb.value));
+  return { pre, post };
+}
+
+function renderReleasePillar() {
+  if (currentProjectKey !== "IP166E" || typeof Chart === "undefined") return;
+  const { pre, post } = getRelSelectedBatches();
+  const allBatches = [...pre, ...post];
+
+  // Destroy previous release charts
+  Object.keys(relCharts).forEach(k => {
+    if (relCharts[k]) { relCharts[k].destroy(); delete relCharts[k]; }
+  });
+
+  const cSec = document.getElementById("relCanvas_sec");
+  const cNrce = document.getElementById("relCanvas_nrce");
+  const cIcief = document.getElementById("relCanvas_icief");
+  const cBio = document.getElementById("relCanvas_bio");
+  if (!cSec) return;
+
+  function makeRelBarData(valMap, limitVal, limitLabel) {
+    const dataVals = allBatches.map(b => valMap[b] || 98.0);
+    const bgColors = allBatches.map(b => pre.includes(b) ? "#7c3aed" : "#0284c7");
+    const ds = [{ label: "出厂检定值", data: dataVals, backgroundColor: bgColors, borderRadius: 4 }];
+    if (limitVal) {
+      ds.push({
+        type: "line",
+        label: limitLabel,
+        data: allBatches.map(() => limitVal),
+        borderColor: "#dc2626",
+        borderDash: [4, 4],
+        pointRadius: 0,
+        borderWidth: 1.5,
+        fill: false
+      });
+    }
+    return ds;
+  }
+
+  // 1. SEC Bar
+  relCharts.sec = new Chart(cSec, {
+    type: "bar",
+    data: {
+      labels: allBatches,
+      datasets: makeRelBarData(
+        { "C202401001A": 98.0, "C202402002A": 98.1, "E202506002A1": 99.1, "E202506002B1": 99.1, "C202502001A1": 98.0, "C202508017A1": 99.4 },
+        95.0, "限度 ≥95.0%"
+      )
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "top", labels: { boxWidth: 8, font: { size: 9 } } } }, scales: { y: { min: 94, max: 100 } } }
+  });
+
+  // 2. NR CE Bar
+  relCharts.nrce = new Chart(cNrce, {
+    type: "bar",
+    data: {
+      labels: allBatches,
+      datasets: makeRelBarData(
+        { "C202401001A": 98.1, "C202402002A": 98.2, "E202506002A1": 99.4, "E202506002B1": 99.3, "C202502001A1": 98.6, "C202508017A1": 99.7 },
+        94.0, "限度 ≥94.0%"
+      )
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "top", labels: { boxWidth: 8, font: { size: 9 } } } }, scales: { y: { min: 93, max: 100 } } }
+  });
+
+  // 3. icIEF Bar
+  relCharts.icief = new Chart(cIcief, {
+    type: "bar",
+    data: {
+      labels: allBatches,
+      datasets: makeRelBarData(
+        { "C202401001A": 55.4, "C202402002A": 55.2, "E202506002A1": 55.0, "E202506002B1": 55.0, "C202502001A1": 55.9, "C202508017A1": 57.2 },
+        40.0, "限度 ≥40.0%"
+      )
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "top", labels: { boxWidth: 8, font: { size: 9 } } } }, scales: { y: { min: 40, max: 65 } } }
+  });
+
+  // 4. Bioactivity Bar
+  relCharts.bio = new Chart(cBio, {
+    type: "bar",
+    data: {
+      labels: allBatches,
+      datasets: makeRelBarData(
+        { "C202401001A": 95, "C202402002A": 92, "E202506002A1": 91, "E202506002B1": 91, "C202502001A1": 88, "C202508017A1": 86 },
+        null, ""
+      )
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "top", labels: { boxWidth: 8, font: { size: 9 } } } }, scales: { y: { min: 60, max: 130 } } }
+  });
+
+  // Render Release Merged Header Word Table
+  renderReleaseMergedTable(pre, post);
+}
+
+function renderReleaseMergedTable(preBatches, postBatches) {
+  const head = document.getElementById("relMergedHead");
+  const body = document.getElementById("relMergedBody");
+  if (!head || !body) return;
+
+  const preCount = Math.max(preBatches.length, 1);
+  const postCount = Math.max(postBatches.length, 1);
+
+  head.innerHTML = `
+    <tr style="background:#f1f5f9;color:#0f172a">
+      <th rowspan="2" style="border:1px solid #334155;padding:8px;text-align:left;min-width:140px">出厂放行检测项</th>
+      <th rowspan="2" style="border:1px solid #334155;padding:8px;text-align:left;min-width:140px">放行标准 (Specification)</th>
+      <th colspan="${preCount}" style="border:1px solid #334155;padding:6px;text-align:center;background:#e0f2fe;color:#0369a1;font-weight:800">
+        变更前工艺放行基准 (Pre-change · 500L 临床批)
+      </th>
+      <th colspan="${postCount}" style="border:1px solid #334155;padding:6px;text-align:center;background:#fef3c7;color:#b45309;font-weight:800">
+        变更后工艺放行验证批 (Post-change · 6000L PPQ/商业批)
+      </th>
+      <th colspan="2" style="border:1px solid #334155;padding:6px;text-align:center;background:#f1f5f9;color:#334155;font-weight:800">
+        全批次统计
+      </th>
+      <th rowspan="2" style="border:1px solid #334155;padding:8px;text-align:center;min-width:90px">判定结论</th>
+    </tr>
+    <tr style="background:#f8fafc;color:#334155">
+      ${preBatches.map(b => `<th style="border:1px solid #334155;padding:6px;text-align:center">${b}</th>`).join("")}
+      ${postBatches.map(b => `<th style="border:1px solid #334155;padding:6px;text-align:center">${b}</th>`).join("")}
+      <th style="border:1px solid #334155;padding:6px;text-align:center">均值 Mean</th>
+      <th style="border:1px solid #334155;padding:6px;text-align:center">极差 Range</th>
+    </tr>
+  `;
+
+  body.innerHTML = "";
+
+  const releaseItems = [
+    { name: "外观 (目视法)", std: "澄明至微乳光液体", vals: { C202401001A: "澄明", C202402002A: "澄明", E202506002A1: "澄明", E202506002B1: "澄明", C202502001A1: "澄明", C202508017A1: "澄明" }, mean: "符合", range: "--", concl: "符合规定" },
+    { name: "可见异物 (灯检法)", std: "符合规定", vals: { C202401001A: "符合", C202402002A: "符合", E202506002A1: "符合", E202506002B1: "符合", C202502001A1: "符合", C202508017A1: "符合" }, mean: "符合", range: "--", concl: "符合规定" },
+    { name: "SEC-HPLC 单体纯度", std: "≥ 95.0%", vals: { C202401001A: "98.0%", C202402002A: "98.1%", E202506002A1: "99.1%", E202506002B1: "99.1%", C202502001A1: "98.0%", C202508017A1: "99.4%" }, mean: "98.6%", range: "1.4%", concl: "完全可比" },
+    { name: "SEC-HPLC HMWS 聚体", std: "≤ 4.5%", vals: { C202401001A: "2.0%", C202402002A: "1.9%", E202506002A1: "0.9%", E202506002B1: "0.9%", C202502001A1: "2.0%", C202508017A1: "0.6%" }, mean: "1.4%", range: "1.4%", concl: "杂质降低" },
+    { name: "NR CE-SDS 非还原主峰", std: "≥ 94.0%", vals: { C202401001A: "98.1%", C202402002A: "98.2%", E202506002A1: "99.4%", E202506002B1: "99.3%", C202502001A1: "98.6%", C202508017A1: "99.7%" }, mean: "98.9%", range: "1.6%", concl: "完全可比" },
+    { name: "R CE-SDS 还原主峰", std: "≥ 93.0%", vals: { C202401001A: "96.7%", C202402002A: "96.6%", E202506002A1: "97.1%", E202506002B1: "97.2%", C202502001A1: "97.2%", C202508017A1: "97.4%" }, mean: "97.0%", range: "0.8%", concl: "高度一致" },
+    { name: "icIEF 电荷主峰", std: "≥ 40.0%", vals: { C202401001A: "55.4%", C202402002A: "55.2%", E202506002A1: "55.0%", E202506002B1: "55.0%", C202502001A1: "55.9%", C202508017A1: "57.2%" }, mean: "55.6%", range: "2.2%", concl: "均一性好" },
+    { name: "icIEF 电荷酸性峰", std: "≤ 50.0%", vals: { C202401001A: "40.1%", C202402002A: "40.4%", E202506002A1: "41.2%", E202506002B1: "41.2%", C202502001A1: "39.7%", C202508017A1: "38.5%" }, mean: "40.2%", range: "2.7%", concl: "符合规定" },
+    { name: "生物学活性 (cAMP)", std: "70% ~ 130%", vals: { C202401001A: "95%", C202402002A: "92%", E202506002A1: "91%", E202506002B1: "91%", C202502001A1: "88%", C202508017A1: "86%" }, mean: "90.5%", range: "9%", concl: "等效性良好" },
+    { name: "不溶性微粒 (≥10 μm)", std: "≤ 6000 粒/支", vals: { C202401001A: "115", C202402002A: "128", E202506002A1: "147", E202506002B1: "132", C202502001A1: "89", C202508017A1: "62" }, mean: "112 粒", range: "85 粒", concl: "远低于限度" },
+    { name: "不溶性微粒 (≥25 μm)", std: "≤ 600 粒/支", vals: { C202401001A: "2", C202402002A: "3", E202506002A1: "2", E202506002B1: "1", C202502001A1: "1", C202508017A1: "1" }, mean: "1.7 粒", range: "2 粒", concl: "符合规定" },
+    { name: "蛋白质含量 (UV法)", std: "2.0 ± 0.2 mg/ml", vals: { C202401001A: "2.1", C202402002A: "2.1", E202506002A1: "2.1", E202506002B1: "2.1", C202502001A1: "2.1", C202508017A1: "2.1" }, mean: "2.10", range: "0.0", concl: "高度一致" },
+    { name: "pH 值 (电位法)", std: "6.4 ~ 7.0", vals: { C202401001A: "6.7", C202402002A: "6.7", E202506002A1: "6.7", E202506002B1: "6.7", C202502001A1: "6.6", C202508017A1: "6.6" }, mean: "6.67", range: "0.1", concl: "符合规定" },
+    { name: "无菌检查 (薄膜过滤法)", std: "应无菌生长", vals: { C202401001A: "符合", C202402002A: "符合", E202506002A1: "符合", E202506002B1: "符合", C202502001A1: "符合", C202508017A1: "符合" }, mean: "符合", range: "--", concl: "符合规定" }
+  ];
+
+  releaseItems.forEach(it => {
+    const tr = document.createElement("tr");
+    let rowHtml = `
+      <td style="border:1px solid #cbd5e1;padding:6px;font-weight:600;color:#334155">${it.name}</td>
+      <td style="border:1px solid #cbd5e1;padding:6px;color:#64748b">${it.std}</td>
+    `;
+    preBatches.forEach(b => {
+      const v = it.vals[b] || "符合";
+      rowHtml += `<td style="border:1px solid #cbd5e1;padding:6px;text-align:center" class="val-green">${v}</td>`;
+    });
+    postBatches.forEach(b => {
+      const v = it.vals[b] || "符合";
+      rowHtml += `<td style="border:1px solid #cbd5e1;padding:6px;text-align:center" class="val-green">${v}</td>`;
+    });
+    rowHtml += `
+      <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;font-weight:700;color:#0f172a">${it.mean}</td>
+      <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;font-weight:600;color:var(--primary)">${it.range}</td>
+      <td style="border:1px solid #cbd5e1;padding:6px;text-align:center"><span class="badge-pass">${it.concl}</span></td>
+    `;
+    tr.innerHTML = rowHtml;
+    body.appendChild(tr);
+  });
+}
+
+
+// ──── PILLAR 2: STABILITY DEGRADATION COMPARABILITY ────
+let currentCompCond = "lt";
+
+function setCompCondition(cond, elBtn) {
+  currentCompCond = cond;
+  document.querySelectorAll("#compConditionPills .purpose-btn").forEach(b => b.classList.remove("active"));
+  if (elBtn) elBtn.classList.add("active");
+  renderComparabilityPillar();
+}
+
+function getCompSelectedBatches() {
+  const pre = [];
+  document.querySelectorAll("#compBatchPreChecks input[type='checkbox']:checked").forEach(cb => pre.push(cb.value));
+  const post = [];
+  document.querySelectorAll("#compBatchPostChecks input[type='checkbox']:checked").forEach(cb => post.push(cb.value));
+  return { pre, post };
+}
+
+function renderComparabilityPillar() {
+  if (currentProjectKey !== "IP166E" || typeof Chart === "undefined") return;
+  const { pre, post } = getCompSelectedBatches();
+
+  // Destroy previous comparability charts
+  Object.keys(compCharts).forEach(k => {
+    if (compCharts[k]) { compCharts[k].destroy(); delete compCharts[k]; }
+  });
+
+  let timepoints = ["0M", "1M", "2M", "3M", "6M", "12M"];
+  if (currentCompCond === "acc") timepoints = ["0M", "1M", "2M", "3M", "6M"];
+  if (currentCompCond === "temp40") timepoints = ["0天", "7天", "14天", "28天"];
+  if (currentCompCond === "photo") timepoints = ["0天", "5天", "10天"];
+  if (currentCompCond === "shake") timepoints = ["0h", "24h", "48h", "72h"];
+
+  // Base Data Model for all 11 CQAs based on document Figures 54~64
+  const cqaGenerators = {
+    sec_mono: {
+      canvas: "compCanvas_sec_mono",
+      yTitle: "单体纯度 (%)", min: 90, max: 100, limit: 95.0, limitLabel: "限度 ≥95.0%",
+      getVals: (b) => {
+        if (currentCompCond === "temp40") return b.includes("C2024") ? [98.0, 96.5, 94.8, 91.5] : [99.3, 98.1, 96.5, 93.8];
+        if (currentCompCond === "photo") return b.includes("C2024") ? [98.0, 97.4, 96.8] : [99.3, 98.9, 98.2];
+        if (currentCompCond === "shake") return b.includes("C2024") ? [98.0, 97.8, 97.5, 97.1] : [99.3, 99.1, 98.8, 98.5];
+        if (currentCompCond === "acc") return b.includes("C2024") ? [98.0, 97.8, 97.4, 97.0, 95.7] : [99.3, 99.0, 98.7, 98.4, 96.6];
+        return b.includes("C2024") ? [98.0, 98.0, 98.0, 98.0, 97.9, 97.7] : [99.3, 99.2, 99.1, 99.1, 98.9, 98.6];
+      }
+    },
+    sec_hmw: {
+      canvas: "compCanvas_sec_hmw",
+      yTitle: "高分子量 HMWS (%)", min: 0, max: 6.0, limit: 4.5, limitLabel: "限度 ≤4.5%",
+      getVals: (b) => {
+        if (currentCompCond === "temp40") return b.includes("C2024") ? [2.0, 3.2, 4.8, 7.2] : [0.7, 1.8, 3.4, 5.8];
+        if (currentCompCond === "acc") return b.includes("C2024") ? [2.0, 2.2, 2.6, 3.0, 4.3] : [0.7, 1.0, 1.3, 1.6, 3.4];
+        return b.includes("C2024") ? [2.0, 2.0, 2.0, 2.0, 2.1, 2.3] : [0.7, 0.8, 0.9, 0.9, 1.1, 1.4];
+      }
+    },
+    nrce_main: {
+      canvas: "compCanvas_nrce_main",
+      yTitle: "NR CE-SDS 主峰 (%)", min: 90, max: 100, limit: 94.0, limitLabel: "控制线 ≥94.0%",
+      getVals: (b) => {
+        if (currentCompCond === "temp40") return b.includes("C2024") ? [98.1, 97.0, 95.5, 92.8] : [99.6, 98.4, 97.1, 94.2];
+        if (currentCompCond === "acc") return b.includes("C2024") ? [98.1, 97.7, 97.3, 96.9, 95.1] : [99.6, 99.2, 98.9, 98.6, 96.3];
+        return b.includes("C2024") ? [98.1, 98.1, 98.1, 98.0, 97.9, 97.7] : [99.6, 99.5, 99.4, 99.3, 99.2, 99.0];
+      }
+    },
+    nrce_hmw: {
+      canvas: "compCanvas_nrce_hmw",
+      yTitle: "NR CE HMWS (%)", min: 0, max: 5.0, limit: 4.0, limitLabel: "限度 ≤4.0%",
+      getVals: (b) => {
+        if (currentCompCond === "temp40") return b.includes("C2024") ? [1.5, 2.4, 3.8, 5.2] : [0.4, 1.2, 2.3, 3.8];
+        if (currentCompCond === "acc") return b.includes("C2024") ? [1.5, 1.7, 2.0, 2.3, 3.5] : [0.4, 0.6, 0.8, 1.0, 2.4];
+        return b.includes("C2024") ? [1.5, 1.5, 1.5, 1.6, 1.7, 1.8] : [0.4, 0.4, 0.5, 0.6, 0.7, 0.9];
+      }
+    },
+    nrce_lmw: {
+      canvas: "compCanvas_nrce_lmw",
+      yTitle: "NR CE LMWS (%)", min: 0, max: 3.0, limit: 2.0, limitLabel: "限度 ≤2.0%",
+      getVals: (b) => {
+        if (currentCompCond === "temp40") return b.includes("C2024") ? [0.4, 0.6, 0.9, 2.0] : [0.1, 0.4, 0.6, 1.5];
+        return b.includes("C2024") ? [0.4, 0.4, 0.4, 0.4, 0.4, 0.5] : [0.0, 0.1, 0.1, 0.1, 0.1, 0.1];
+      }
+    },
+    rce_main: {
+      canvas: "compCanvas_rce_main",
+      yTitle: "R CE-SDS 主峰 (%)", min: 90, max: 100, limit: 93.0, limitLabel: "控制线 ≥93.0%",
+      getVals: (b) => {
+        if (currentCompCond === "temp40") return b.includes("C2024") ? [96.7, 95.5, 94.2, 92.5] : [97.2, 96.2, 95.1, 93.2];
+        return b.includes("C2024") ? [96.7, 96.7, 96.6, 96.5, 96.4, 96.3] : [97.2, 97.1, 97.0, 97.0, 96.9, 96.7];
+      }
+    },
+    rce_other: {
+      canvas: "compCanvas_rce_other",
+      yTitle: "R CE 其他峰 (%)", min: 0, max: 8.0, limit: 7.0, limitLabel: "限度 ≤7.0%",
+      getVals: (b) => {
+        if (currentCompCond === "temp40") return b.includes("C2024") ? [3.3, 4.5, 5.8, 7.5] : [2.8, 3.8, 4.9, 6.8];
+        return b.includes("C2024") ? [3.3, 3.3, 3.4, 3.5, 3.6, 3.7] : [2.8, 2.9, 3.0, 3.0, 3.1, 3.3];
+      }
+    },
+    icief_main: {
+      canvas: "compCanvas_icief_main",
+      yTitle: "icIEF 电荷主峰 (%)", min: 20, max: 65, limit: 40.0, limitLabel: "限度 ≥40.0%",
+      getVals: (b) => {
+        if (currentCompCond === "temp40") return b.includes("C2024") ? [55.4, 45.0, 35.2, 21.0] : [59.0, 48.2, 38.5, 24.6];
+        if (currentCompCond === "acc") return b.includes("C2024") ? [55.4, 51.0, 49.3, 43.8, 37.5] : [59.0, 54.1, 53.8, 46.7, 39.5];
+        return b.includes("C2024") ? [55.4, 55.1, 54.8, 54.7, 54.2, 53.8] : [59.0, 57.5, 56.5, 55.0, 54.2, 53.0];
+      }
+    },
+    icief_acid: {
+      canvas: "compCanvas_icief_acid",
+      yTitle: "icIEF 酸性峰 (%)", min: 30, max: 75, limit: 50.0, limitLabel: "限度 ≤50.0%",
+      getVals: (b) => {
+        if (currentCompCond === "temp40") return b.includes("C2024") ? [40.1, 50.5, 60.1, 74.8] : [37.2, 47.5, 56.8, 71.5];
+        return b.includes("C2024") ? [40.1, 40.5, 41.0, 41.0, 41.5, 41.9] : [37.2, 38.5, 39.5, 41.0, 41.8, 43.1];
+      }
+    },
+    icief_base: {
+      canvas: "compCanvas_icief_base",
+      yTitle: "icIEF 碱性峰 (%)", min: 0, max: 12.0, limit: 10.0, limitLabel: "限度 ≤10.0%",
+      getVals: (b) => {
+        return b.includes("C2024") ? [4.5, 4.4, 4.3, 4.3, 4.3, 4.3] : [3.8, 4.0, 4.0, 4.0, 4.0, 3.9];
+      }
+    },
+    bio_camp: {
+      canvas: "compCanvas_bio_camp",
+      yTitle: "生物活性 cAMP (%)", min: 50, max: 140, limit: null,
+      getVals: (b) => {
+        if (currentCompCond === "temp40") return b.includes("C2024") ? [95, 85, 78, 68] : [95, 88, 81, 72];
+        return b.includes("C2024") ? [95, 93, 92, 93, 94, 92] : [95, 94, 93, 91, 95, 96];
+      }
+    },
+    particles: {
+      canvas: "compCanvas_particles",
+      yTitle: "微粒 ≥10μm (粒/支)", min: 0, max: 650, limit: 600, limitLabel: "警示线 600 粒/支",
+      getVals: (b) => {
+        if (currentCompCond === "temp40") return b.includes("C2024") ? [115, 180, 320, 550] : [71, 140, 260, 480];
+        return b.includes("C2024") ? [115, 120, 122, 125, 130, 145] : [71, 75, 80, 92, 95, 120];
+      }
+    }
+  };
+
+  Object.keys(cqaGenerators).forEach(key => {
+    const item = cqaGenerators[key];
+    const canvas = document.getElementById(item.canvas);
+    if (!canvas) return;
+
+    const datasets = [];
+
+    // Pre-change: purple dashed lines
+    pre.forEach((bKey, idx) => {
+      datasets.push({
+        label: `[变更前 500L] ${bKey}`,
+        data: item.getVals(bKey),
+        borderColor: (idx === 0) ? "#7c3aed" : "#9333ea",
+        backgroundColor: (idx === 0) ? "#7c3aed" : "#9333ea",
+        borderDash: [5, 4],
+        pointRadius: 4,
+        pointStyle: "circle",
+        borderWidth: 2,
+        tension: 0.2
+      });
+    });
+
+    // Post-change: blue solid lines
+    post.forEach((bKey, idx) => {
+      const col = (idx === 0) ? "#0284c7" : ((idx === 1) ? "#0ea5e9" : "#16a34a");
+      datasets.push({
+        label: `[变更后 6000L] ${bKey}`,
+        data: item.getVals(bKey),
+        borderColor: col,
+        backgroundColor: col,
+        borderDash: [],
+        pointRadius: 4,
+        pointStyle: "rectRot",
+        borderWidth: 2.2,
+        tension: 0.2
+      });
+    });
+
+    // Limit line
+    if (item.limit !== null && item.limit !== undefined) {
+      datasets.push({
+        label: item.limitLabel,
+        data: timepoints.map(() => item.limit),
+        borderColor: "#dc2626",
+        borderDash: [4, 4],
+        pointRadius: 0,
+        borderWidth: 1.5,
+        fill: false
+      });
+    }
+
+    if (key === "bio_camp") {
+      datasets.push({ label: "上限 (130%)", data: timepoints.map(() => 130), borderColor: "#dc2626", borderDash: [4, 4], pointRadius: 0, borderWidth: 1.5 });
+      datasets.push({ label: "下限 (70%)", data: timepoints.map(() => 70), borderColor: "#dc2626", borderDash: [4, 4], pointRadius: 0, borderWidth: 1.5 });
+    }
+
+    compCharts[key] = new Chart(canvas, {
+      type: "line",
+      data: { labels: timepoints, datasets: datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: "top", labels: { boxWidth: 8, font: { size: 9 } } } },
+        scales: { y: { min: item.min, max: item.max, title: { display: true, text: item.yTitle, font: { size: 9 } } } }
+      }
+    });
+  });
+
+  // Render Stability Degradation Comparison Table
+  renderStabilityComparabilityTable(pre, post);
+}
+
+function renderStabilityComparabilityTable(preBatches, postBatches) {
+  const head = document.getElementById("compMergedHead");
+  const body = document.getElementById("compMergedBody");
+  if (!head || !body) return;
+
+  const preCount = Math.max(preBatches.length, 1);
+  const postCount = Math.max(postBatches.length, 1);
+
+  head.innerHTML = `
+    <tr style="background:#f1f5f9;color:#0f172a">
+      <th rowspan="2" style="border:1px solid #334155;padding:8px;text-align:left;min-width:140px">稳定性评价指标 (CQA)</th>
+      <th rowspan="2" style="border:1px solid #334155;padding:8px;text-align:left;min-width:140px">考察条件及终点</th>
+      <th colspan="${preCount}" style="border:1px solid #334155;padding:6px;text-align:center;background:#e0f2fe;color:#0369a1;font-weight:800">
+        变更前工艺 (Pre-change · 500L 临床批)
+      </th>
+      <th colspan="${postCount}" style="border:1px solid #334155;padding:6px;text-align:center;background:#fef3c7;color:#b45309;font-weight:800">
+        变更后工艺 (Post-change · 6000L PPQ/商业化批)
+      </th>
+      <th rowspan="2" style="border:1px solid #334155;padding:8px;text-align:center;min-width:110px">降解斜率等效性</th>
+      <th rowspan="2" style="border:1px solid #334155;padding:8px;text-align:center;min-width:110px">可比性监管评价</th>
+    </tr>
+    <tr style="background:#f8fafc;color:#334155">
+      ${preBatches.map(b => `<th style="border:1px solid #334155;padding:6px;text-align:center">${b}</th>`).join("")}
+      ${postBatches.map(b => `<th style="border:1px solid #334155;padding:6px;text-align:center">${b}</th>`).join("")}
+    </tr>
+  `;
+
+  body.innerHTML = "";
+
+  const compDataItems = [
+    { name: "SEC-HPLC 单体纯度", cond: "长期 5℃ (12M)", preVal: "97.7%", postVal: "98.6%", slope: "Δ降解速率 -0.05%/月 (无差异)", concl: "降解动力学一致" },
+    { name: "SEC-HPLC HMWS 聚体", cond: "长期 5℃ (12M)", preVal: "2.3%", postVal: "1.4%", slope: "增幅速率相仿，绝对值更优", concl: "质量提升，可比" },
+    { name: "NR CE-SDS 非还原主峰", cond: "长期 5℃ (12M)", preVal: "97.7%", postVal: "99.0%", slope: "衰减速率无统计学差异", concl: "完全可比" },
+    { name: "R CE-SDS 还原主峰纯度", cond: "长期 5℃ (12M)", preVal: "96.3%", postVal: "96.7%", slope: "裂解生成率极其平缓", concl: "高度一致" },
+    { name: "icIEF 电荷主峰纯度", cond: "长期 5℃ (12M)", preVal: "53.8%", postVal: "53.0%", slope: "脱酰胺速率完全相当", concl: "完全可比" },
+    { name: "icIEF 酸性变异体 (Acidic)", cond: "长期 5℃ (12M)", preVal: "41.9%", postVal: "43.1%", slope: "增幅均在 0.5%/月以内", concl: "符合预期" },
+    { name: "生物学相对活性 (cAMP)", cond: "长期 5℃ (12M)", preVal: "92%", postVal: "96%", slope: "受体亲和力未见漂移", concl: "等效性良好" },
+    { name: "不溶性微粒 (≥10 μm)", cond: "长期 5℃ (12M)", preVal: "145", postVal: "120", slope: "微粒增长动力学平缓", concl: "远低于限度" },
+    { name: "40℃ 高温高湿破坏耐受性", cond: "应激 40℃ (28天)", preVal: "单体 91.5%", postVal: "单体 93.8%", slope: "变更后样品抗热聚集性能更优", concl: "耐受性良好" },
+    { name: "强光照射光敏感性 (Photo)", cond: "光照 4500Lux (10天)", preVal: "单体 96.8%", postVal: "单体 98.2%", slope: "光照氧化分解倾向一致", concl: "符合规定" }
+  ];
+
+  compDataItems.forEach(it => {
+    const tr = document.createElement("tr");
+    let rowHtml = `
+      <td style="border:1px solid #cbd5e1;padding:6px;font-weight:600;color:#334155">${it.name}</td>
+      <td style="border:1px solid #cbd5e1;padding:6px;color:#64748b">${it.cond}</td>
+    `;
+    preBatches.forEach(() => {
+      rowHtml += `<td style="border:1px solid #cbd5e1;padding:6px;text-align:center" class="val-green">${it.preVal}</td>`;
+    });
+    postBatches.forEach(() => {
+      rowHtml += `<td style="border:1px solid #cbd5e1;padding:6px;text-align:center" class="val-green">${it.postVal}</td>`;
+    });
+    rowHtml += `
+      <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;font-weight:600;color:var(--primary)">${it.slope}</td>
+      <td style="border:1px solid #cbd5e1;padding:6px;text-align:center"><span class="badge-pass">${it.concl}</span></td>
+    `;
+    tr.innerHTML = rowHtml;
+    body.appendChild(tr);
+  });
+}
+
+// ──── TAB 4: OUTLINE ACCORDION ────
+function toggleOutline(id) {
+  const el = document.getElementById("outline" + id);
+  el.style.display = (el.style.display === "none") ? "block" : "none";
+}
+
+// Init
+document.addEventListener("DOMContentLoaded", () => {
+  initializeProjectHub();
+  if (typeof Chart === "undefined") toast("图表组件未加载；请检查网络后刷新，项目导航仍可使用。");
+});
+</script>
+<script>
+// Demo registry: stage, operational status, and capabilities are independent.
+const hubStages = ['早期研究','临床开发','工艺验证 / PPQ','注册申报 / BLA','商业化','不适用','待确认'];
+const hubStatuses = ['进行中','暂停','终止','归档'];
+const hubModules = {intake:['数据接收','接收检测数据与文件'],ledger:['检测台账','批次、质量标准与稳定性数据'],comparability:['可比性研究','按研究目的比较批次与工艺'],reports:['报告中心','组织检测结果与研究报告']};
+const hubRealMode = (()=>{const mode=new URLSearchParams(location.search).get('mode')||window.__V4_MODE__;return mode==='real'||(mode!=='mock'&&location.protocol.startsWith('http'));})();
+let projectRegistry = hubRealMode ? [] : [
+ {id:'IP166E',name:'依苏帕格鲁肽α',type:'DS 原液 · DP 预灌封注射笔 / 器',stage:'商业化',status:'进行中',modules:['intake','ledger','comparability','reports']},
+ {id:'IP162',name:'双特异性抗体',type:'双特异性抗体',stage:'早期研究',status:'进行中',modules:['intake','ledger','reports']},
+ {id:'IP175',name:'重组融合蛋白',type:'重组融合蛋白',stage:'待确认',status:'进行中',modules:['intake','ledger','reports']},
+ {id:'IP188',name:'单克隆抗体',type:'单克隆抗体',stage:'工艺验证 / PPQ',status:'进行中',modules:['intake','ledger','comparability','reports']}
+];
+const hubStorageKey = hubRealMode ? 'stability-hub-real-projects-v1' : 'stability-hub-projects-v1';
+let hubPreferences = hubRealMode ? {favorites:[],recent:[],configs:{},current:''} : {favorites:['IP166E'],recent:['IP166E'],configs:{},current:'IP166E'};
+if(hubRealMode)currentProjectKey='';
+try {
+ const saved = JSON.parse(localStorage.getItem(hubStorageKey));
+ if (saved && typeof saved === 'object') {
+  const ids = projectRegistry.map(p=>p.id);
+  for (const key of ['favorites','recent']) if(Array.isArray(saved[key])) hubPreferences[key]=[...new Set(saved[key].filter(id=>typeof id==='string'&&(hubRealMode||ids.includes(id))))];
+  if(ids.includes(saved.current)) hubPreferences.current=saved.current;
+  if(saved.configs && typeof saved.configs==='object') for(const p of projectRegistry) {
+   const c=saved.configs[p.id];
+   if(c && hubStages.includes(c.stage) && hubStatuses.includes(c.status) && Array.isArray(c.modules)) {
+    const modules=[...new Set(c.modules.filter(m=>Object.hasOwn(hubModules,m)))];
+    hubPreferences.configs[p.id]={stage:c.stage,status:c.status,modules};
+    Object.assign(p,hubPreferences.configs[p.id]);
+   }
+  }
+ }
+} catch (_) { /* Navigation remains usable when local storage is unavailable. */ }
+let projectView='active',projectPage=1,activeWorkspaceTab='intake';
+const projectPageSize=12;
+const hubEscape=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function saveHubPreferences() {
+ try { localStorage.setItem(hubStorageKey,JSON.stringify(hubPreferences)); }
+ catch (_) { toast('浏览器不允许本地保存；本次会话内的配置仍然有效。'); }
+}
+function fillHubSelect(id,values,allLabel) {
+ document.getElementById(id).innerHTML=(allLabel?`<option value="">${allLabel}</option>`:'')+values.map(v=>`<option>${hubEscape(v)}</option>`).join('');
+}
+function openProjectCenter() {
+ renderProjectDirectory();
+ document.getElementById('projectCenter').showModal();
+ document.getElementById('projectSearch').focus();
+}
+function toggleFavorite(id) {
+ const i=hubPreferences.favorites.indexOf(id);
+ if(i<0) hubPreferences.favorites.push(id); else hubPreferences.favorites.splice(i,1);
+ saveHubPreferences();
+ updateWorkspaceFavorite();
+ renderProjectDirectory();
+ // Restore focus after replacing the list's controls.
+ if(document.getElementById('projectCenter').open) document.querySelector(`[data-favorite="${id}"]`)?.focus();
+}
+function updateWorkspaceFavorite() {
+ const favorite=hubPreferences.favorites.includes(currentProjectKey),button=document.getElementById('workspaceFavorite');
+ button.textContent=favorite?'★':'☆'; button.setAttribute('aria-pressed',String(favorite)); button.setAttribute('aria-label',favorite?'取消收藏当前项目':'收藏当前项目');
+}
+function setProjectView(view) { projectView=view; projectPage=1; document.getElementById('projectStatus').value=''; renderProjectDirectory(); }
+function resetProjectPage() { projectPage=1; renderProjectDirectory(); }
+function clearProjectFilters() {
+ for(const id of ['projectSearch','projectStage','projectStatus']) document.getElementById(id).value='';
+ projectView='all'; projectPage=1; renderProjectDirectory();
+}
+function changeProjectPage(delta) { projectPage+=delta; renderProjectDirectory(); }
+function inProjectView(p,view) {
+ if(view==='active') return p.status==='进行中';
+ if(view==='favorites') return hubPreferences.favorites.includes(p.id);
+ if(view==='recent') return hubPreferences.recent.includes(p.id);
+ if(view==='archived') return p.status==='归档';
+ return true;
+}
+function renderProjectDirectory() {
+ const views=[['active','进行中'],['favorites','我的收藏'],['recent','最近访问'],['all','全部项目'],['archived','已归档']];
+ document.getElementById('projectViews').innerHTML=views.map(([key,label])=>`<button class="hub-view" data-view="${key}" aria-pressed="${projectView===key}">${label}<span>${projectRegistry.filter(p=>inProjectView(p,key)).length}</span></button>`).join('');
+ const terms=document.getElementById('projectSearch').value.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+ const stage=document.getElementById('projectStage').value,status=document.getElementById('projectStatus').value;
+ let list=projectRegistry.filter(p=>inProjectView(p,projectView)&&(!stage||p.stage===stage)&&(!status||p.status===status)&&terms.every(q=>`${p.id} ${p.name} ${p.type}`.toLocaleLowerCase().includes(q)));
+ const rank=id=>{const i=hubPreferences.recent.indexOf(id);return i<0?Infinity:i;};
+ list.sort((a,b)=>(document.getElementById('projectSort').value==='recent'?rank(a.id)-rank(b.id):0)||a.id.localeCompare(b.id,undefined,{numeric:true}));
+ const pages=Math.max(1,Math.ceil(list.length/projectPageSize)); projectPage=Math.max(1,Math.min(projectPage,pages));
+ const offset=(projectPage-1)*projectPageSize;
+ document.getElementById('projectResultCount').textContent=`${list.length} 个项目`;
+ document.getElementById('projectRows').innerHTML=list.slice(offset,offset+projectPageSize).map(p=>{
+  const favorite=hubPreferences.favorites.includes(p.id),current=p.id===currentProjectKey;
+  return `<tr data-current="${current}"><td><button class="hub-icon" data-favorite="${hubEscape(p.id)}" aria-pressed="${favorite}" aria-label="${favorite?'取消收藏':'收藏'} ${hubEscape(p.id)}">${favorite?'★':'☆'}</button></td><td><button class="hub-project-link" data-open-project="${hubEscape(p.id)}">${hubEscape(p.id)} · ${hubEscape(p.name)}</button><div class="hub-project-sub">${hubEscape(p.type)}</div></td><td>${hubEscape(p.stage)}</td><td><span class="hub-status" data-status="${hubEscape(p.status)}">${hubEscape(p.status)}</span></td><td class="hub-module-text">${p.modules.map(m=>hubModules[m][0]).join(' · ')||'未启用模块'}</td><td><button class="hub-button" data-open-project="${hubEscape(p.id)}">${current?'当前项目':'进入项目'} <span aria-hidden="true">↗</span></button></td></tr>`;
+ }).join('');
+ document.getElementById('projectEmpty').hidden=list.length>0;
+ if(hubRealMode)document.getElementById('projectEmpty').innerHTML=projectRegistry.length
+  ? '<h3>没有找到匹配项目</h3><p>试试更短的关键词，或清除筛选条件。</p><button class="hub-button" onclick="clearProjectFilters()">查看全部项目</button>'
+  : '<h3>还没有项目</h3><p>先上传 Excel 或 Word，识别项目后创建分区；已有项目将从数据库显示。</p><button class="hub-button" onclick="document.getElementById(\'projectCenter\').close();v4Intake.goUploadHome()">上传文件</button>';
+ document.querySelector('.hub-table-scroll').hidden=list.length===0;
+ document.getElementById('projectPageInfo').textContent=list.length?`${offset+1}–${Math.min(offset+projectPageSize,list.length)} / ${list.length} 个项目 · 第 ${projectPage} / ${pages} 页`:'0 个项目';
+ document.getElementById('projectPrev').disabled=projectPage<=1;
+ document.getElementById('projectNext').disabled=projectPage>=pages;
+}
+function selectProject(id,announce=true) {
+ const p=projectRegistry.find(p=>p.id===id); if(!p) return;
+ currentProjectKey=id; hubPreferences.current=id;
+ hubPreferences.recent=[id,...hubPreferences.recent.filter(x=>x!==id)].slice(0,20);
+ saveHubPreferences();
+ // Reset the navigation context; never reuse another project's selected batch.
+ activeWorkspaceTab=p.modules[0]||null;
+ document.getElementById('workspaceName').textContent=`${p.id} · ${p.name}`;
+ updateWorkspaceFavorite();
+ const data=departmentData[id];
+ document.getElementById('workspaceMeta').innerHTML=`<span class="meta-chip">研发阶段：<strong>${hubEscape(p.stage)}</strong></span><span class="meta-chip">状态：<strong>${hubEscape(p.status)}</strong></span><span class="meta-chip">产品：<strong>${hubEscape(p.type)}</strong></span><span class="meta-chip">纳管批次：<strong>${data?hubEscape(data.batchesCount):'尚未接入'}</strong></span><span class="meta-chip">最长考察：<strong>${data?hubEscape(data.duration):'暂无数据'}</strong></span>`;
+ const tabs=document.querySelectorAll('.nav-tab');
+ Object.keys(hubModules).forEach((key,i)=>{tabs[i].hidden=!p.modules.includes(key);tabs[i].classList.toggle('active',key===activeWorkspaceTab);});
+ const original=document.querySelector('main.main-content');
+ original.hidden=id!=='IP166E'||!activeWorkspaceTab;
+ document.getElementById('scopedWorkspace').hidden=id==='IP166E'&&!!activeWorkspaceTab;
+ if(id==='IP166E'&&activeWorkspaceTab) {
+
+  document.getElementById('intakeProjectVal').textContent=departmentData.IP166E.name;
+  switchMainTab(activeWorkspaceTab);
+ } else renderScopedWorkspace();
+ document.getElementById('projectCenter').close();
+ if(announce) toast(`已进入 ${p.id} · ${p.name}`);
+}
+function renderScopedWorkspace() {
+ const p=projectRegistry.find(p=>p.id===currentProjectKey),data=departmentData[p.id],target=document.getElementById('scopedWorkspace');
+ document.querySelectorAll('.nav-tab').forEach((tab,i)=>tab.classList.toggle('active',Object.keys(hubModules)[i]===activeWorkspaceTab));
+ let content='';
+ if(activeWorkspaceTab==='ledger'&&data) {
+  content=`<p class="hub-muted">${hubEscape(data.batchesCount)} · ${hubEscape(data.duration)}</p><div class="hub-table-scroll"><table class="hub-data-table"><caption style="text-align:left;margin-top:20px;font-weight:600">放行检测</caption><thead><tr><th>检测项目</th><th>标准</th>${data.releaseBatches.map(b=>`<th>${hubEscape(b)}</th>`).join('')}</tr></thead><tbody>${data.releaseMatrix.map(r=>`<tr><td>${hubEscape(r.item)}</td><td>${hubEscape(r.std)}</td>${r.v.map(v=>`<td>${hubEscape(v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div><div class="hub-table-scroll"><table class="hub-data-table"><caption style="text-align:left;margin-top:24px;font-weight:600">稳定性记录</caption><thead><tr><th>批号</th><th>条件</th><th>指标 / 标准</th>${['0M','1M','2M','3M','6M','9M','12M','18M'].map(t=>`<th>${t}</th>`).join('')}</tr></thead><tbody>${data.stabilityBatches.map(r=>`<tr><td>${hubEscape(r.batch)}</td><td>${hubEscape(r.cond)}</td><td>${hubEscape(r.item)} / ${hubEscape(r.std)}</td>${r.t.map(v=>`<td>${hubEscape(v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+ } else {
+  const title=!activeWorkspaceTab?'尚未启用工作模块':activeWorkspaceTab==='intake'?'尚未接入此项目的数据接收流程':activeWorkspaceTab==='ledger'?'此项目还没有检测记录':activeWorkspaceTab==='comparability'?'尚未配置可比性研究':'尚未配置项目报告';
+  content=`<div class="hub-empty"><h3>${title}</h3><p>${!activeWorkspaceTab?'在项目配置中选择需要开展的工作。':'此项目尚未接入对应数据。'}</p>${data&&activeWorkspaceTab!=='ledger'&&p.modules.includes('ledger')?'<button class="hub-button hub-primary" onclick="switchMainTab(\'ledger\')">查看已有检测记录</button>':'<button class="hub-button" onclick="openProjectSettings()">配置项目模块</button>'}</div>`;
+ }
+ target.innerHTML=`<div class="hub-scoped-header"><div><div class="hub-eyebrow">${hubEscape(p.id)} / 当前工作空间</div><h2>${activeWorkspaceTab?hubModules[activeWorkspaceTab][0]:'项目工作空间'}</h2></div><span class="hub-status" data-status="${hubEscape(p.status)}">${hubEscape(p.status)}</span></div><div class="card"><div class="card-body">${content}</div></div>`;
+}
+function openProjectSettings() {
+ const p=projectRegistry.find(p=>p.id===currentProjectKey);
+ if(!p)return toast('请先上传文件新建项目，或选择已有项目。');
+ document.getElementById('settingsProject').textContent=`${p.id} · ${p.name}`;
+ document.getElementById('settingsStage').value=p.stage;document.getElementById('settingsStatus').value=p.status;
+ document.getElementById('settingsModules').innerHTML=Object.entries(hubModules).map(([key,[name,desc]])=>`<label class="hub-module-option"><input type="checkbox" name="module" value="${key}" ${p.modules.includes(key)?'checked':''}><span>${name}<small>${desc}</small></span></label>`).join('');
+ document.getElementById('projectSettings').showModal();
+}
+function initializeProjectHub() {
+ fillHubSelect('projectStage',hubStages,'全部阶段');fillHubSelect('projectStatus',hubStatuses,'全部状态');
+ fillHubSelect('settingsStage',hubStages);fillHubSelect('settingsStatus',hubStatuses);
+ // The legacy detail screens are specific to IP166E. Keep them scoped to it.
+ document.querySelectorAll('.nav-tab').forEach((tab,i)=>{
+  const key=Object.keys(hubModules)[i];tab.setAttribute('role','button');tab.setAttribute('tabindex','0');
+  tab.querySelector('span').textContent=hubModules[key][0];
+  const badge=tab.querySelector('.tab-badge');if(badge) badge.remove();
+  tab.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();switchMainTab(key);}});
+ });
+ document.getElementById('projectRows').addEventListener('click',event=>{
+  const star=event.target.closest('[data-favorite]'),open=event.target.closest('[data-open-project]');
+  if(star) toggleFavorite(star.dataset.favorite);else if(open) selectProject(open.dataset.openProject);
+ });
+ document.getElementById('projectViews').addEventListener('click',event=>{
+  const button=event.target.closest('[data-view]');if(button){setProjectView(button.dataset.view);document.querySelector(`[data-view="${projectView}"]`).focus();}
+ });
+ document.getElementById('projectSettingsForm').addEventListener('submit',event=>{
+  event.preventDefault();
+  const p=projectRegistry.find(p=>p.id===currentProjectKey);
+  const config={stage:document.getElementById('settingsStage').value,status:document.getElementById('settingsStatus').value,modules:Array.from(document.querySelectorAll('#settingsModules input:checked'),el=>el.value)};
+  Object.assign(p,config);hubPreferences.configs[p.id]=config;
+  document.getElementById('projectSettings').close();selectProject(p.id,false);toast('项目配置已应用于当前浏览器');
+ });
+ document.addEventListener('keydown',event=>{
+  if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){
+   event.preventDefault();if(!document.querySelector('dialog[open]'))openProjectCenter();
+  }
+  if(event.key==='/'&&document.getElementById('projectCenter').open&&!['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)){event.preventDefault();document.getElementById('projectSearch').focus();}
+ });
+ if(hubRealMode){
+  document.getElementById('workspaceName').textContent='上传文件 · 新建或选择项目';
+  document.getElementById('workspaceFavorite').hidden=true;
+  document.querySelector('main.main-content').hidden=true;
+  renderProjectDirectory();
+ }else selectProject(hubPreferences.current,false);
+}
+
+</script>
+</body>
+</html>

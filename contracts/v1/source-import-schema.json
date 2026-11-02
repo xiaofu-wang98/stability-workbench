@@ -1,0 +1,330 @@
+{
+  "$defs": {
+    "Location": {
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "enum": [
+            "xlsx",
+            "docx"
+          ],
+          "title": "Format",
+          "type": "string"
+        },
+        "section": {
+          "minLength": 1,
+          "title": "Section",
+          "type": "string"
+        },
+        "row": {
+          "minimum": 1,
+          "title": "Row",
+          "type": "integer"
+        },
+        "column": {
+          "minimum": 1,
+          "title": "Column",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "format",
+        "section",
+        "row",
+        "column"
+      ],
+      "title": "Location",
+      "type": "object"
+    },
+    "SourceCell": {
+      "additionalProperties": false,
+      "properties": {
+        "coord": {
+          "title": "Coord",
+          "type": "string"
+        },
+        "row": {
+          "minimum": 1,
+          "title": "Row",
+          "type": "integer"
+        },
+        "column": {
+          "minimum": 1,
+          "title": "Column",
+          "type": "integer"
+        },
+        "grid_column": {
+          "minimum": 1,
+          "title": "Grid Column",
+          "type": "integer"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "colspan": {
+          "minimum": 1,
+          "title": "Colspan",
+          "type": "integer"
+        },
+        "rowspan": {
+          "minimum": 1,
+          "title": "Rowspan",
+          "type": "integer"
+        },
+        "continuation": {
+          "title": "Continuation",
+          "type": "boolean"
+        },
+        "anchor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Anchor"
+        },
+        "xml_sha256": {
+          "title": "Xml Sha256",
+          "type": "string"
+        },
+        "references": {
+          "items": {
+            "$ref": "#/$defs/SourceReference"
+          },
+          "title": "References",
+          "type": "array"
+        },
+        "formula": {
+          "title": "Formula",
+          "type": "string"
+        },
+        "has_image": {
+          "title": "Has Image",
+          "type": "boolean"
+        },
+        "is_blank": {
+          "title": "Is Blank",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "coord",
+        "row",
+        "column",
+        "grid_column",
+        "text",
+        "colspan",
+        "rowspan",
+        "continuation",
+        "anchor",
+        "xml_sha256",
+        "references",
+        "formula",
+        "has_image",
+        "is_blank"
+      ],
+      "title": "SourceCell",
+      "type": "object"
+    },
+    "SourceProjection": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Location"
+          },
+          "title": "Evidence",
+          "type": "object"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence",
+        "reason"
+      ],
+      "title": "SourceProjection",
+      "type": "object"
+    },
+    "SourceReference": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "target": {
+          "title": "Target",
+          "type": "string"
+        },
+        "external": {
+          "title": "External",
+          "type": "boolean"
+        },
+        "part": {
+          "title": "Part",
+          "type": "string"
+        },
+        "sha256": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Sha256"
+        }
+      },
+      "required": [
+        "id",
+        "target",
+        "external",
+        "part",
+        "sha256"
+      ],
+      "title": "SourceReference",
+      "type": "object"
+    },
+    "SourceTable": {
+      "additionalProperties": false,
+      "properties": {
+        "table_id": {
+          "title": "Table Id",
+          "type": "string"
+        },
+        "table_index": {
+          "title": "Table Index",
+          "type": "integer"
+        },
+        "part": {
+          "title": "Part",
+          "type": "string"
+        },
+        "section": {
+          "title": "Section",
+          "type": "string"
+        },
+        "parent_table_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Parent Table Id"
+        },
+        "caption": {
+          "title": "Caption",
+          "type": "string"
+        },
+        "rows": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/SourceCell"
+            },
+            "type": "array"
+          },
+          "title": "Rows",
+          "type": "array"
+        },
+        "headers": {
+          "items": {},
+          "maxItems": 0,
+          "title": "Headers",
+          "type": "array"
+        },
+        "footnotes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Footnotes",
+          "type": "array"
+        },
+        "xml_sha256": {
+          "title": "Xml Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "table_id",
+        "table_index",
+        "part",
+        "section",
+        "parent_table_id",
+        "caption",
+        "rows",
+        "headers",
+        "footnotes",
+        "xml_sha256"
+      ],
+      "title": "SourceTable",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "format_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Format Version",
+      "type": "integer"
+    },
+    "source_hash": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Source Hash",
+      "type": "string"
+    },
+    "extractor_version": {
+      "minLength": 1,
+      "title": "Extractor Version",
+      "type": "string"
+    },
+    "tables": {
+      "items": {
+        "$ref": "#/$defs/SourceTable"
+      },
+      "title": "Tables",
+      "type": "array"
+    },
+    "categories": {
+      "additionalProperties": {
+        "enum": [
+          "results",
+          "standards",
+          "statistics",
+          "notes",
+          "mixed",
+          "unclassified"
+        ],
+        "type": "string"
+      },
+      "title": "Categories",
+      "type": "object"
+    },
+    "projections": {
+      "items": {
+        "$ref": "#/$defs/SourceProjection"
+      },
+      "title": "Projections",
+      "type": "array"
+    }
+  },
+  "required": [
+    "source_hash",
+    "extractor_version",
+    "tables"
+  ],
+  "title": "SourcePackage",
+  "type": "object"
+}

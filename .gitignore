@@ -1,0 +1,16 @@
+/data/
+/outputs/
+/.venv/
+/raw data/
+__pycache__/
+*.py[cod]
+*.sqlite*
+*.xlsx
+*.docx
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+/build/
+/dist/
+.env
+.env.*
