@@ -25,9 +25,29 @@ def decisions(conn,upload_id):
 def previous(conn,project,candidate,action):
     if not candidate.record:
         return None
-    from .identity_associations import adopted, latest
-    lookup = adopted if action in {'correction','keep_old'} else latest
-    return lookup(conn,project,candidate.record.key.slot_id)
+    from .identity_associations import versions, adoption_choices, current
+    if not conn.in_transaction:
+        from .identity_associations import adopted, latest
+        lookup = adopted if action in {'correction','keep_old'} else latest
+        return lookup(conn, project, candidate.record.key.slot_id)
+    # All worksheet preflights in this transaction share the same history.
+    # Invalidate after ANY write, including an uncommitted adoption/association.
+    key = (project, conn.total_changes)
+    cached = getattr(conn, 'previous_history', None)
+    if cached is None or cached[0] != key:
+        rows = versions(conn, project)
+        by_slot, by_id = {}, {}
+        for row in rows:
+            by_slot.setdefault(row['slot_id'], []).append(row)
+            by_id[row['id']] = row
+        cached = (key, by_slot, by_id, adoption_choices(conn, project))
+        conn.previous_history = cached
+    _, by_slot, by_id, choices = cached
+    slot = candidate.record.key.slot_id
+    if action in {'correction','keep_old'}:
+        row = by_id.get(choices.get(slot))
+        return row if row and row['slot_id'] == slot and row['state'] in {'confirmed','legacy'} else None
+    return current(by_slot.get(slot, []))
 
 
 def decision_basis(conn,upload,candidate,decision):

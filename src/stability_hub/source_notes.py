@@ -41,6 +41,37 @@ def result_lines(text):
     return lines
 
 
+def can_retain_bilingual_text(text):
+    """Allow explicit retention of a qualitative bilingual paragraph, not translation approval.
+
+    Numeric results, labelled subresults and known contradictory statements still
+    need a specific interpretation. Other source issues remain independently open.
+    """
+    lines = [line.strip() for line in str(text or '').splitlines() if line.strip()]
+    if len(lines) != 2:
+        return False
+    chinese = [s for s in lines if re.search(r'[\u3400-\u9fff]', s)]
+    english = [s for s in lines if re.search(r'[A-Za-z]', s) and not re.search(r'[\u3400-\u9fff]', s)]
+    if len(chinese) != 1 or len(english) != 1:
+        return False
+    cn, en = chinese[0], english[0]
+    # A paragraph must not masquerade as multiple named measurements or a list.
+    if any(re.search(r'[:：;；=<>≤≥%]|^\s*[-•①②③]|^\s*\d+[.)、]', s) for s in lines):
+        return False
+    if re.findall(r'\d+(?:\.\d+)?', cn) != re.findall(r'\d+(?:\.\d+)?', en):
+        return False
+    if any(re.search(r'(?:含量|纯度|浓度|活性|content|purity|concentration|potency)', s, re.I) for s in lines):
+        return False
+    cn_negative = bool(re.search(r'不符合|不一致|未检出|不合格|阴性', cn))
+    en_negative = bool(re.search(r'\b(?:not|no|negative|fails?|inconsistent|noncompliant)\b', en, re.I))
+    if cn_negative != en_negative:
+        return False
+    from .matrix_fields import purity_conflict, method_conflict
+    if purity_conflict({'criterion': text, 'test_item': '文字结果'}) or method_conflict(text):
+        return False
+    return True
+
+
 def comment_parts(raw):
     """Separate explicitly addressed notes; unknown scope remains one source question."""
     from openpyxl.utils.cell import coordinate_from_string, column_index_from_string

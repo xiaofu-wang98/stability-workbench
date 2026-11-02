@@ -16,7 +16,7 @@ def test_empty_dictionary_can_be_configured_without_fake_items_and_survives_rest
     actor = actor_for_role('tech', '实验员', Role.TECHNICIAN)
     app = create_app(store, [config], actor)
     with TestClient(app) as client:
-        assert client.get('/health').json()['version'] == '0.1.0'
+        assert client.get('/health').json()['version'] == '0.1.1'
         assert client.get('/health').json()['delivery_state'] == 'release'
         assert client.get('/api/v1/runtime').json()['data_home'] == str(tmp_path.resolve())
         assert client.get('/api/v1/projects/IP166E/configuration').json()['config']['items'] == []

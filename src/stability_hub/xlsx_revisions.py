@@ -62,9 +62,13 @@ def revision_proposal(raw, field, revision):
         else:
             proposal.update(eligible=False,reason='项目/规格等基础信息已划线，需人工核对填写真实信息')
     elif field=='result':
-        from .source_notes import result_lines
+        from .source_notes import result_lines, can_retain_bilingual_text
         lines=result_lines(active)
         from .standards import enabled, segments
         if len(lines)!=1 and not (enabled(raw) and len(segments(active,version=raw.source_value.get('standards_rule_version')))>=2):
-            proposal.update(eligible=False,reason='原格包含多行结果或说明，需人工核对确认采纳哪一个数值')
+            if not raw.hazards and can_retain_bilingual_text(active):
+                proposal.update(retain_complete_text=True,
+                    reason='完整保留未划线的中英文内容作为一条文字结果；请核对全部保留文字，不代表系统判定翻译等价。其他含义、身份或批注争议仍须单独处理。')
+            else:
+                proposal.update(eligible=False,reason='原格包含多行结果、含义冲突或结构疑点，需人工核对确认具体结果')
     return proposal

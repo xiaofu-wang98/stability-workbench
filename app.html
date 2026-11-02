@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Stability Data Hub 0.1.0 · 来源核对与人工兜底</title>
+<title>Stability Data Hub 0.1.1 · 来源核对与人工兜底</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
   :root {
@@ -2134,7 +2134,7 @@ body[data-review-scene=source] #v52SheetPane{padding-bottom:90px}
 .v55-action-diff-table { width: 100%; font-size: 12px; border-collapse: collapse; }
 .v55-action-diff-table th, .v55-action-diff-table td { padding: 4px 8px; border: 1px solid #dadce0; }
 .v55-action-diff-table th { background: #f8f9fa; }
-.v55-diff-after { color: #137333; font-weight: 600; }
+.v55-diff-after { color: #137333; font-weight: 600; white-space: pre-wrap; overflow-wrap: anywhere; }
 .v55-action-exceptions { margin-top: 6px; font-size: 11px; color: #b06000; background: #fef7e0; padding: 4px 8px; border-radius: 4px; }
 .v55-action-preview-footer { display: flex; gap: 8px; justify-content: flex-end; padding: 8px 12px; background: #f8f9fa; border-top: 1px solid #dadce0; }
 .v55-collapsed-row th, .v55-collapsed-row td { background: #f8f9fa !important; }
@@ -8982,7 +8982,7 @@ Object.assign(ui,{
   return ({
     row_exclusion: t.proposal.rows ? '原表已整项划线，建议确认排除' : ('第 ' + t.proposal.row + ' 行原表已划线，建议确认排除'),
     identity: '核对 ' + (t.fields?.length ? t.fields.map(f => this.names[f] || f).join(' / ') : '基础信息'),
-    source_revision: t.proposal.kind === 'whole' ? '原表已整格划线作废，确认排除' : '原表有删改痕迹，采纳有效值',
+    source_revision: t.proposal.retain_complete_text ? '完整保留未划线内容（中英文全文）' : t.proposal.kind === 'whole' ? '原表已整格划线作废，确认排除' : '原表有删改痕迹，采纳有效值',
     identity_ambiguity: '核对 ' + (t.fields?.length ? t.fields.map(f => this.names[f] || f).join(' / ') : '检测项/方法'),
     source_comment: '核对原表备注说明',
     numeric_format: '核对数值格式',
@@ -9059,7 +9059,7 @@ Object.assign(ui,{
   }
   const operation={keep_active:'采纳有效值',manual:'人工明确解释',exclude:'排除不入库',classify:'区域分类',keep_body:'保留当前正文及数值',keep_single:'核对排版，沿用每处现有一条结果'};
   const revision=(c)=>Object.entries(c.source_revisions||{}).map(([field,r])=>`<p>${esc(this.names[field]||field)}原表：${(r.segments||[]).map(s=>s.struck?'<del>'+esc(s.text)+'</del>':esc(s.text)).join('')}<br>已划掉：${esc((r.segments||[]).filter(s=>s.struck).map(s=>s.text).join(''))}；保留：${esc(r.active_text||'（空）')}</p>`).join('');
-  return `<div class="v52-preview-table"><table class="v55-action-diff-table"><thead><tr><th>来源位置 / 动作</th><th>原表证据 / 当前值</th><th>本次拟保存</th></tr></thead><tbody>${info.changes.map(c=>`<tr><td>${c.evidence.map(e=>esc(e.section)+'!'+this.colName(e.column)+e.row).join('、')}<br>${operation[c.operation]}</td><td>${revision(c)}${c.retained_results?.length?`<ul>${c.retained_results.map(r=>`<li>${this.colName(r.location.column)}${r.location.row} · ${esc(r.fields.time_point)} · 沿用值 ${esc(r.display_result||r.fields.result)} ${esc(r.display_unit||r.fields.unit)} · ${esc(r.fields.test_item)}</li>`).join('')}</ul>`:''}${Object.entries(c.fields).map(([k,v])=>'<strong>'+esc(this.names[k]||k)+'</strong>：'+esc(v.before??'（空）')).join('<br>')||esc(c.explanation)}</td><td>${Object.entries(c.fields).map(([k,v])=>'<strong>'+esc(this.names[k]||k)+'</strong>：<span class="v55-diff-after">'+esc(v.after??'（空）')+'</span>').join('<br>')||operation[c.operation]}</td></tr>`).join('')}</tbody></table></div>${info.exceptions.map(e=>`<p role="alert">例外保留：${esc(e.section)} ${esc((e.evidence||[]).map(l=>this.colName(l.column)+l.row).join('、'))} · ${esc(e.reason)}</p>`).join('')}<p>涉及 ${info.summary.tasks} 处来源决定，影响 ${info.summary.results} 个关联结果。</p>`;
+  return `<div class="v52-preview-table"><table class="v55-action-diff-table"><thead><tr><th>来源位置 / 动作</th><th>原表证据 / 当前值</th><th>本次拟保存</th></tr></thead><tbody>${info.changes.map(c=>`<tr><td>${c.evidence.map(e=>esc(e.section)+'!'+this.colName(e.column)+e.row).join('、')}<br>${operation[c.operation]}</td><td>${revision(c)}${c.retained_results?.length?`<ul>${c.retained_results.map(r=>`<li>${this.colName(r.location.column)}${r.location.row} · ${esc(r.fields.time_point)} · 沿用值 ${esc(r.display_result||r.fields.result)} ${esc(r.display_unit||r.fields.unit)} · ${esc(r.fields.test_item)}</li>`).join('')}</ul>`:''}${Object.entries(c.fields).map(([k,v])=>'<strong>'+esc(this.names[k]||k)+'</strong>：'+esc(v.before??'（空）')).join('<br>')||esc(c.explanation)}</td><td>${Object.entries(c.fields).map(([k,v])=>'<strong>'+esc(this.names[k]||k)+'</strong>：<span class="v55-diff-after">'+esc(v.after??'（空）')+'</span>').join('<br>')||operation[c.operation]}${c.explanation?'<p>'+esc(c.explanation)+'</p>':''}</td></tr>`).join('')}</tbody></table></div>${info.exceptions.map(e=>`<p role="alert">例外保留：${esc(e.section)} ${esc((e.evidence||[]).map(l=>this.colName(l.column)+l.row).join('、'))} · ${esc(e.reason)}</p>`).join('')}<p>涉及 ${info.summary.tasks} 处来源决定，影响 ${info.summary.results} 个关联结果。</p>`;
  },
  notesMarkup(){const notes=(this.matrix.worksheet_review.notes||[]).filter(n=>n.section===this.sheet);if(!notes.length)return '';return `<details class="v53-notes"><summary>本表重要备注${notes.length>4?'，还有 '+(notes.length-4)+' 条':''} · 展开完整原文与范围</summary>${notes.map(n=>`<p>${esc(n.text)}<button type="button" data-v5="locateNote" data-id="${esc(n.id)}">${n.pending?'定位待处理来源':'定位原文'}</button><small>${esc(n.evidence.map(e=>this.colName(e.column)+e.row).join('、'))} · ${esc(n.scope)}</small></p>`).join('')}</details><div class="v53-note-lines">${notes.slice(0,4).map(n=>`<div title="${esc(n.text)}">${esc(n.evidence.map(e=>this.colName(e.column)+e.row).join('、'))} · ${esc(n.text.replace(/\s+/g,' '))}</div>`).join('')}</div>`;},
  locateNote(id){const n=this.matrix.worksheet_review.notes.find(n=>n.id===id);if(n)this.locateTask({evidence:n.evidence});},

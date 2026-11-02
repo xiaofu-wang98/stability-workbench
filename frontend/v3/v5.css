@@ -97,7 +97,7 @@ body[data-review-scene=source] #v52SheetPane{padding-bottom:90px}
 .v55-action-diff-table { width: 100%; font-size: 12px; border-collapse: collapse; }
 .v55-action-diff-table th, .v55-action-diff-table td { padding: 4px 8px; border: 1px solid #dadce0; }
 .v55-action-diff-table th { background: #f8f9fa; }
-.v55-diff-after { color: #137333; font-weight: 600; }
+.v55-diff-after { color: #137333; font-weight: 600; white-space: pre-wrap; overflow-wrap: anywhere; }
 .v55-action-exceptions { margin-top: 6px; font-size: 11px; color: #b06000; background: #fef7e0; padding: 4px 8px; border-radius: 4px; }
 .v55-action-preview-footer { display: flex; gap: 8px; justify-content: flex-end; padding: 8px 12px; background: #f8f9fa; border-top: 1px solid #dadce0; }
 .v55-collapsed-row th, .v55-collapsed-row td { background: #f8f9fa !important; }

@@ -321,18 +321,22 @@ def saved_changes(conn, upload, preview):
             (upload["project"],),
         )
     }
+    # Index physical item origins once. Comparing Location models inside a full
+    # candidate scan for every withdrawn result made this path quadratic.
+    origin_scopes = defaultdict(list)
+    for c in preview.candidates:
+        if c.id not in superseded and c.raw_fields.get("result", "").strip():
+            origin = c.evidence.get("test_item", c.location)
+            origin_scopes[(origin.format, origin.section, origin.row, origin.column)].append(c)
+    whole_origins = {
+        key for key, scope in origin_scopes.items()
+        if all(c.lifecycle == "withdrawn" for c in scope)
+    }
     for c in preview.candidates:
         if c.lifecycle != "withdrawn" or c.id in superseded:
             continue
         origin = c.evidence.get("test_item", c.location)
-        scope = [
-            x
-            for x in preview.candidates
-            if x.evidence.get("test_item", x.location) == origin
-            and x.raw_fields.get("result", "").strip()
-            and x.id not in superseded
-        ]
-        whole = bool(scope) and all(x.lifecycle == "withdrawn" for x in scope)
+        whole = (origin.format, origin.section, origin.row, origin.column) in whole_origins
         loc = origin if whole else c.location
         key = (loc.section, loc.row, loc.column, "source_decision")
         changes.setdefault(
@@ -401,12 +405,14 @@ def saved_changes(conn, upload, preview):
         change['candidate_ids'].append(c.id)
         change['after'] += (c.interpreted_fields.get('reporting_basis','')+'：'+c.interpreted_fields.get('result','')+'；')
     changes.update(projections)
-    for change in changes.values():
+    field_members = defaultdict(list)
+    for field in {change['field'] for change in changes.values()}:
         for c in preview.candidates:
-            loc = c.evidence.get(change["field"], c.location)
-            if (loc.section, loc.row, loc.column) == (change["section"], change["row"], change["column"]):
-                if c.id not in change["candidate_ids"]:
-                    change["candidate_ids"].append(c.id)
+            loc = c.evidence.get(field, c.location)
+            field_members[(loc.section, loc.row, loc.column, field)].append(c.id)
+    for key, change in changes.items():
+        known = set(change['candidate_ids'])
+        change['candidate_ids'].extend(cid for cid in field_members[key] if cid not in known)
     return list(changes.values())
 
 

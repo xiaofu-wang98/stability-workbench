@@ -394,10 +394,12 @@ class Workflow:
             while len(self._source_interpretations)>2:
                 self._source_interpretations.popitem(last=False)
         raws = self._source_rows(conn,rows,upload,_cache=source_cache.setdefault('_raw',{}))
-        # With no dictionary, history or association, mapping depends solely on
-        # this source revision and its frozen context. Cache only that pure case;
-        # final worksheet checks explicitly request fresh mapping.
-        pure_projection = upload['workflow_version'] >= 5 and not config.items and not historical and not identity_overlays
+        # Source mapping without a dictionary/association does not depend on
+        # historical result values. Reuse unchanged candidates even after the
+        # first sheet is committed; compare against CURRENT history below.
+        # Final worksheet checks still explicitly request fresh mapping.
+        pure_projection = upload['workflow_version'] >= 5 and not config.items and not identity_overlays
+        projection_config = config.model_dump_json()
         projection_cache = source_cache.setdefault('_projection',{})
         source_decisions,rule_history = {},{}
         for e in conn.execute('''SELECT e.subject_id,e.sequence,e.action,e.detail_json FROM workflow_events e
@@ -449,7 +451,7 @@ class Workflow:
             code = None
             existing_detection = None
             adopted_detection = None
-            projection_key = (cache_key,upload['context_json'],row['lifecycle'],acknowledge_warning)
+            projection_key = (cache_key,upload['context_json'],row['lifecycle'],acknowledge_warning,projection_config)
             projection = projection_cache.get(row['id']) if pure_projection and not fresh else None
             projection_hit = projection is not None and projection[0] == projection_key
             try:

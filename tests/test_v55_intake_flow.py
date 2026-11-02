@@ -293,9 +293,9 @@ def test_v56_resolved_identity_stays_resolved_when_other_field_changes():
     ('与参考品图谱一致\nThe profile is consistent with the Reference Standard', True),
     ('与参考品图谱一致\nThe profile is NOT consistent with the Reference Standard', False),
     ('结果99\nResult 88', False),
-    ('未知结论\nUnknown conclusion', False),
+    ('未知结论\nUnknown conclusion', True),
 ])
-def test_v56_bilingual_revision_requires_known_equivalence(active, eligible):
+def test_bilingual_revision_retains_paragraph_but_rejects_conflicting_results(active, eligible):
     from stability_hub.models import Location, RawObservation
     from stability_hub.xlsx_revisions import revision_proposal
     raw = RawObservation(location=Location(format='xlsx', section='Synthetic', row=3, column=7),
