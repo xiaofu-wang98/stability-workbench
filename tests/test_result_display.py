@@ -100,6 +100,17 @@ def test_groups_keep_scope_and_qualitative_results(tmp_path,xlsx,context):
                             revision=shown['base_revision'],batches=['B001A1'])
     assert not trend['points'] and trend['omitted'][0]['raw']=='Clear'
     assert trend['series'][0]['values'][0]['value'] is None
+    assert group['exact_numeric_count']==0
+
+
+def test_card_classification_separates_limits_from_exact_values(tmp_path,xlsx,context):
+    flow,p=preview(tmp_path,xlsx([['Exact','0M',0,'%'],['Limit','0M','<0.1','%']]),context)
+    confirm_initial(flow,p)
+    with flow.store.read() as conn:
+        groups=display_results(conn,p.project,ResultFilter())['analysis_groups']
+    assert next(g for g in groups if g['key']['item']=='Exact')['exact_numeric_count']==1
+    limit=next(g for g in groups if g['key']['item']=='Limit')
+    assert limit['numeric_count']==1 and limit['exact_numeric_count']==0
 
 
 def test_selected_export_keeps_only_related_draft_context(tmp_path,xlsx,context):

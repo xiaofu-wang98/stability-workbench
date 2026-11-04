@@ -25,11 +25,13 @@ def display_results(conn, project, filters):
     analyses = []
     for gid, members in groups.items():
         sample = StabilityRecord.model_validate_json((members[0][1] or members[0][0])['record_json'])
-        numeric = sum(StabilityRecord.model_validate_json((b or a)['record_json']).result.status == 'numeric'
-                      for a,b in members)
+        records = [StabilityRecord.model_validate_json((b or a)['record_json']) for a,b in members]
+        numeric = sum(record.result.status == 'numeric' for record in records)
+        exact = sum(b is not None and b['state'] in {'confirmed','legacy'} and record.result.status == 'numeric'
+                    and record.result.comparator == 'eq' for record,(_a,b) in zip(records,members,strict=True))
         analyses.append({'id':gid, 'label':labels.get(sample.key.item,sample.key.item),
                          'key':sample.key.model_dump(mode='json'), 'unit':sample.result.unit,
-                         'time_unit':analysis_scope(sample)[9], 'numeric_count':numeric,
+                         'time_unit':analysis_scope(sample)[9], 'numeric_count':numeric, 'exact_numeric_count':exact,
                          'slot_ids':[a['slot_id'] for a,b in members],
                          'batches':sorted({StabilityRecord.model_validate_json(a['record_json']).key.batch for a,b in members})})
     cells = [c.model_dump(mode='json') for c in cells_from_rows(pairs)]

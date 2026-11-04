@@ -11,10 +11,16 @@ const review = global.v4LedgerReview = {
   const serial=++this.serial; this.project=project;
   let controls=document.getElementById('v4LedgerSourceControls');
   if(!controls){controls=document.createElement('div');controls.id='v4LedgerSourceControls';document.getElementById('ledgerDataTable')?.parentElement.before(controls);}
+  if(controls.dataset.project!==project)controls.replaceChildren();
   try{
    const uploads=await global.v4Api.sourceRequest(`/projects/${encodeURIComponent(project)}/ledger-sources`);
-   if(serial!==this.serial)return;
-   controls.innerHTML=uploads.length ? `<label>查看 <select id="v4LedgerSourceChoice"><option value="">正式结果汇总（放行 / 稳定性 / 影响因素）</option>${uploads.map(u=>`<option value="${esc(u.id)}">文件核对：${esc(u.filename)}</option>`).join('')}</select></label><div id="v4LedgerInlineEditor"></div>` : '';
+   if(serial!==this.serial||(global.v4ResultCell?.activeLoadingProject&&global.v4ResultCell.activeLoadingProject!==project))return;
+   const signature=JSON.stringify([project,this.summary,uploads.map(u=>[u.id,u.filename])]);
+   if(this.summary&&controls.dataset.signature===signature&&controls.querySelector('#v4LedgerSourceChoice'))return;
+   const keepOpen=controls.dataset.project===project&&controls.querySelector('.v013-source-entry')?.open;
+   controls.innerHTML=uploads.length ? `<details class="v013-source-entry" ${this.summary&&!keepOpen?'':'open'}><summary>核对来源文件</summary>${this.summary?'':'<button type="button" class="btn btn-outline" id="v013BackToResults">返回已入库结果</button>'}<label>来源文件 <select id="v4LedgerSourceChoice"><option value="">返回已入库结果</option>${uploads.map(u=>`<option value="${esc(u.id)}">文件核对：${esc(u.filename)}</option>`).join('')}</select></label></details><div id="v4LedgerInlineEditor"></div>` : '';
+   controls.dataset.project=project;controls.dataset.signature=signature;
+   const back=document.getElementById('v013BackToResults');if(back)back.onclick=()=>global.v5Review?.formal();
    const select=document.getElementById('v4LedgerSourceChoice');
    if(select){select.onchange=()=>{if(global.v5Review)return global.v5Review.chooseSource(select.value);if(select.value){this.summary=false;busy('正在读取来源并生成当前分表…');this.open(select.value).finally(()=>global.v46Busy?.hide());}else{this.summary=true;global.v4ResultCell.enhanceLedgerTable();}};if(this.summary){select.value='';return;}select.value=uploads.some(u=>u.id===this.upload)?this.upload:uploads[0].id;await this.open(select.value);}
   }catch(error){controls.textContent='来源台账加载失败：'+error.message;}

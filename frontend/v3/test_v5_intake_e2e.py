@@ -500,11 +500,11 @@ def main():
             expect(page.locator('#ledgerDataTable tr').filter(has_text='Target assay revised')).to_contain_text('91%')
             page.screenshot(path=str(out/'05-logical-history.png'),full_page=True)
             report['cases']['A03/A09-history']='PASS UI exact history scope, collision preview, explicit adoption, display rename, immediate formal refresh; immutable physical versions unchanged'
-            page.locator('#v45Batch').select_option('BX2')
+            page.locator('[data-result-batch="BX2"]').click()
             expect(page.locator('#ledgerDataTable')).to_contain_text('99.300%',timeout=20000)
             expect(page.locator('#ledgerDataTable')).to_contain_text('R2')
             expect(page.locator('#ledgerDataTable')).not_to_contain_text('Target assay revised')
-            page.locator('#v45Batch').select_option('BX')
+            page.locator('[data-result-batch="BX"]').click()
             expect(page.locator('#ledgerDataTable')).to_contain_text('99.200%',timeout=20000)
             report['cases']['A20-batch/A24-version']='PASS formal batch switches preserve result scope and show explicit method version R2'
             # Manual extraction has a real source binding, and days remain days in output.
@@ -597,6 +597,8 @@ def main():
             page.locator('.v3-switch').click()
             page.locator('[data-open-project="V5-UI"]').first.click()
             page.get_by_role('button',name='检测台账',exact=True).click()
+            if not page.locator('#v4LedgerSourceChoice').is_visible():
+                page.locator('.v013-source-entry summary').click()
             expect(page.locator('#v4LedgerSourceChoice')).to_be_visible(timeout=20000)
             page.locator('#v4LedgerSourceChoice').select_option(scoped_d)
             expect(page.locator('#v4LedgerInlineEditor .v52-heading')).to_contain_text('scope-d.xlsx',timeout=20000)
