@@ -63,7 +63,7 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
 
     @app.get('/health', include_in_schema=False)
     def health():
-        return {'application': 'stability-data-hub', 'version': __version__, 'build': '0.1.1-release-20261102',
+        return {'application': 'stability-data-hub', 'version': __version__, 'build': '0.1.2-release-20261102',
                 'delivery_state':'release'}
 
     @app.get('/favicon.ico', include_in_schema=False)
@@ -558,6 +558,24 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
     def results(project: str, operator: ActorDependency, query: Annotated[ResultQuery, Query()]):
         filters = ResultFilter.model_validate(query.model_dump(exclude={'offset', 'limit'}))
         return workflow.results(project, filters, query.offset, query.limit, actor=operator)
+
+    @app.get('/api/v1/projects/{project}/result-display')
+    def result_display(project: str, operator: ActorDependency, filters: Annotated[ResultFilter, Query()]):
+        require(operator, Capability.VIEW)
+        from .result_display import display_results
+        with store.read() as conn:
+            return display_results(conn, project, filters)
+
+    from .workflow_contracts import ResultTrendQuery
+
+    @app.get('/api/v1/projects/{project}/result-trend')
+    def result_trend(project: str, operator: ActorDependency, query: Annotated[ResultTrendQuery, Query()]):
+        require(operator, Capability.VIEW)
+        from .result_display import trend_results
+        with store.read() as conn:
+            filters = ResultFilter.model_validate(query.model_dump(exclude={'group_id','base_revision','batches'}))
+            return trend_results(conn, project, filters, group_id=query.group_id,
+                                 revision=query.base_revision, batches=query.batches)
 
     @app.get("/api/v1/sources/{source_id}/file")
     def candidate_original(source_id: str, operator: ActorDependency):

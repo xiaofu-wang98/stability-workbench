@@ -7,8 +7,10 @@ parser=argparse.ArgumentParser(description='Rebuild the preserved V3 dashboard.'
 parser.add_argument('--output',type=Path,default=root/'app.html')
 args=parser.parse_args()
 s=(base/'template.html').read_text(encoding='utf-8')
+s=s.replace('<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>',
+            '<script>\n'+(base/'vendor/chart.umd.js').read_text(encoding='utf-8')+'\n</script>')
 replacements={
-'分析检测部数智工作台 · Analytical Testing Hub':'分析检测工作台 · 0.1.1',
+'分析检测部数智工作台 · Analytical Testing Hub':'分析检测工作台 · 0.1.2',
 'stability-hub-projects-v1':'stability-hub-projects-v3-layout',
 '📋 支柱一：出厂放行全项质量可比性':'放行检验结果比较',
 '⏱️ 支柱二：稳定性降解行为与耐受性可比性':'稳定性比较',
@@ -66,12 +68,13 @@ v4_scripts = '\n'.join([
     (base/'v5-review.js').read_text(encoding='utf-8'),
     (base/'v5-tools.js').read_text(encoding='utf-8'),
     (base/'v52-worksheet.js').read_text(encoding='utf-8'),
-    (base/'manual-sheet.js').read_text(encoding='utf-8')
+    (base/'manual-sheet.js').read_text(encoding='utf-8'),
+    (base/'result-display.js').read_text(encoding='utf-8')
 ])
 s=s.replace('</style>',(base/'v4.css').read_text(encoding='utf-8')+'\n</style>',1).replace('</body>','<script>\n'+v4_scripts+'\n</script>\n</body>')
 s=s.replace('</style>',(base/'v5.css').read_text(encoding='utf-8')+'\n</style>',1)
-s=re.sub(r'<title>.*?</title>','<title>Stability Data Hub 0.1.1 · 来源核对与人工兜底</title>',s,count=1,flags=re.S)
+s=re.sub(r'<title>.*?</title>','<title>Stability Data Hub 0.1.2 · 来源核对与人工兜底</title>',s,count=1,flags=re.S)
 s='\n'.join(line.rstrip() for line in s.splitlines())+'\n'
 args.output.parent.mkdir(parents=True,exist_ok=True)
 args.output.write_text(s,encoding='utf-8')
-print('Built 0.1.1 from preserved V3 layout.')
+print('Built 0.1.2 from preserved V3 layout.')

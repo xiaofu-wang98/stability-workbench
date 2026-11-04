@@ -9,13 +9,24 @@ from .normalize import NeedsReview
 from .result_queries import selected_rows
 from .worksheet_regions import coverage
 from .workflow_common import project_row
-from .models import ProjectConfig
+from .models import ProjectConfig, StabilityRecord
 
 
 def create_snapshot(flow,conn,request):
     pairs = selected_rows(conn,request.project,request.filters)
+    if request.slot_ids:
+        selected = set(request.slot_ids)
+        if len(selected) != len(request.slot_ids) or not selected <= {a['slot_id'] for a,b in pairs}:
+            from .workflow_common import WorkflowError
+            raise WorkflowError('result_scope_changed', '所选结果不属于当前范围，请重新读取后导出。', 409)
+        pairs = [(a,b) for a,b in pairs if a['slot_id'] in selected]
     drafts = []
     filters = request.filters.model_dump(exclude_none=True)
+    selected_scopes = [dict(s) for s in {
+        tuple(sorted((k,v) for k,v in StabilityRecord.model_validate_json(a['record_json']).key.model_dump().items()
+                     if k not in {'project','month','day'})) for a,b in pairs}] if request.slot_ids else []
+    selected_dimensions = {k for s in selected_scopes for k in s}
+    scope_matches = {}
     for row in conn.execute("""SELECT c.*,u.filename FROM workflow_candidates c JOIN workflow_uploads u ON u.id=c.upload_id
                             WHERE c.project=? AND c.lifecycle='draft' ORDER BY c.id""",(request.project,)):
         upload = flow._upload(conn,row['upload_id'])
@@ -48,6 +59,15 @@ def create_snapshot(flow,conn,request):
         if any(k in fields and fields[k] != v for k,v in filters.items()):
             continue
         unknown = [k for k in filters if k not in fields]
+        if request.slot_ids:
+            signature = tuple(sorted((k,v) for k,v in fields.items() if k in selected_dimensions))
+            if signature not in scope_matches:
+                matching = [s for s in selected_scopes if all(k not in fields or fields[k] == v for k,v in s.items())]
+                scope_matches[signature] = (bool(matching), {k for s in matching for k in s if k not in fields})
+            matched, missing = scope_matches[signature]
+            if not matched:
+                continue
+            unknown = sorted(set(unknown) | missing)
         drafts.append({'id':row['id'],'raw_json':row['raw_json'],'corrections_json':row['corrections_json'],
             'filename':row['filename'],'scope':'unassigned' if unknown else 'in_scope','unknown_dimensions':unknown})
     pending_regions = []
@@ -60,7 +80,8 @@ def create_snapshot(flow,conn,request):
     snapshot = {'project':request.project,'revision':request.base_revision,'orientation':request.orientation,
                 'item_labels':{i.id:i.label for i in linked_config(conn,ProjectConfig.model_validate_json(
                     project_row(conn,request.project)['config_json'])).items},
-                'filters':request.filters.model_dump(),'entries':[{'display':dict(a),'adopted':dict(b) if b else None} for a,b in pairs],
+                'filters':request.filters.model_dump(),'selected_slot_ids':list(request.slot_ids),
+                'entries':[{'display':dict(a),'adopted':dict(b) if b else None} for a,b in pairs],
                 'drafts':drafts,'pending_source_regions':pending_regions}
     snapshot['snapshot_id'] = digest(snapshot)
     return snapshot

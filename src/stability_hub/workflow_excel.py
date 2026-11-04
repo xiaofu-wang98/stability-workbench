@@ -48,6 +48,7 @@ def write_workbook(path, snapshot):
     info.title = "Export"
     for key in ("project", "revision", "snapshot_id", "orientation", "filters"):
         text_row(info, (key, encoded(snapshot[key]) if isinstance(snapshot[key], dict) else snapshot[key]))
+    text_row(info, ('selected_slot_ids', encoded(snapshot.get('selected_slot_ids', []))))
     text_row(info, ("说明", "红色（待确认）为已核对身份后提交的候选；正式采用值独立保留。未提交草稿不进入结果汇总。"))
     records = book.create_sheet("Records")
     text_row(records, RECORD_HEADERS)

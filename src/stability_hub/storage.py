@@ -22,6 +22,17 @@ class Store:
             migrate(conn, self.db)
 
     @contextmanager
+    def read(self):
+        """A SQLite-enforced read-only snapshot; never migrates or commits writes."""
+        conn = sqlite3.connect(self.db.as_uri() + '?mode=ro', uri=True, timeout=10)
+        conn.row_factory = sqlite3.Row
+        try:
+            conn.execute('BEGIN')
+            yield conn
+        finally:
+            conn.close()
+
+    @contextmanager
     def connect(self):
         conn = sqlite3.connect(self.db, timeout=10, factory=SnapshotConnection)
         conn.after_commit = []

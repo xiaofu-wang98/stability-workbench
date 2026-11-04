@@ -576,6 +576,14 @@
     "ExportRequest": {
       "additionalProperties": false,
       "properties": {
+        "slot_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Slot Ids",
+          "type": "array"
+        },
         "include_png": {
           "default": false,
           "title": "Include Png",

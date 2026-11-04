@@ -271,6 +271,7 @@ class ResultFilter(Model):
 
 
 class ExportRequest(Model):
+    slot_ids: tuple[str, ...] = ()
     include_png: bool = False
     project: Text
     base_revision: int = Field(ge=0)
@@ -281,6 +282,12 @@ class ExportRequest(Model):
 class ResultQuery(ResultFilter):
     offset: int = Field(default=0, ge=0)
     limit: int = Field(default=100, ge=1, le=1000)
+
+
+class ResultTrendQuery(ResultFilter):
+    group_id: str
+    base_revision: int = Field(ge=0)
+    batches: list[str] = Field(min_length=1)
 
 
 class ExportResult(Model):
