@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Stability Data Hub",
-    "version": "0.1.4"
+    "version": "0.1.5"
   },
   "paths": {
     "/api/v1/runtime": {
@@ -4396,6 +4396,90 @@
         }
       }
     },
+    "/api/v1/projects/{project}/comparison-catalog": {
+      "get": {
+        "summary": "Comparison Catalog",
+        "operationId": "comparison_catalog_api_v1_projects__project__comparison_catalog_get",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/comparison-preview": {
+      "post": {
+        "summary": "Comparison Preview",
+        "operationId": "comparison_preview_api_v1_projects__project__comparison_preview_post",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuickCompare"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/projects/{project}/comparison-studies": {
       "get": {
         "summary": "Comparison Studies",
@@ -4597,6 +4681,16 @@
                 }
               ],
               "title": "Group Id"
+            }
+          },
+          {
+            "name": "include_cells",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Include Cells"
             }
           }
         ],
@@ -6892,6 +6986,7 @@
             "enum": [
               "before",
               "after",
+              "selected",
               "pending",
               "exclude"
             ],
@@ -7178,6 +7273,107 @@
           "item_id"
         ],
         "title": "ProjectRule"
+      },
+      "QuickCompare": {
+        "properties": {
+          "axis_mode": {
+            "type": "string",
+            "enum": [
+              "overview",
+              "detail",
+              "manual"
+            ],
+            "title": "Axis Mode",
+            "default": "overview"
+          },
+          "axis_min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Axis Min"
+          },
+          "axis_max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Axis Max"
+          },
+          "base_revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Base Revision"
+          },
+          "sample_ids": {
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Sample Ids"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/ResultFilter"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/Member"
+            },
+            "type": "array",
+            "title": "Members",
+            "default": []
+          },
+          "aligned_fields": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "presentation",
+                "study_id"
+              ]
+            },
+            "type": "array",
+            "title": "Aligned Fields",
+            "default": []
+          },
+          "alignment_reason": {
+            "type": "string",
+            "title": "Alignment Reason",
+            "default": ""
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
+          "include_cells": {
+            "type": "boolean",
+            "title": "Include Cells",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "base_revision",
+          "sample_ids"
+        ],
+        "title": "QuickCompare"
       },
       "ReceiveRequest": {
         "properties": {
@@ -7540,10 +7736,21 @@
             "type": "string",
             "enum": [
               "stability",
-              "comparability"
+              "comparability",
+              "quick"
             ],
             "title": "Kind",
             "default": "stability"
+          },
+          "quick": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QuickCompare"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "study_id": {
             "anyOf": [
@@ -8797,6 +9004,9 @@
             "type": "string",
             "title": "Alignment Reason",
             "default": ""
+          },
+          "filters": {
+            "$ref": "#/components/schemas/ResultFilter"
           }
         },
         "additionalProperties": false,

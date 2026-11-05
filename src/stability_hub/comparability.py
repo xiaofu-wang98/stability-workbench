@@ -27,7 +27,7 @@ def sample_id(record):
 
 class Member(Model):
     sample_id: Text
-    role: Literal['before','after','pending','exclude']
+    role: Literal['before','after','selected','pending','exclude']
 
 
 class StudySave(Model):
@@ -38,6 +38,7 @@ class StudySave(Model):
     members: tuple[Member,...] = Field(min_length=1)
     aligned_fields: tuple[Literal['presentation','study_id'],...] = ()
     alignment_reason: str = ''
+    filters: ResultFilter = Field(default_factory=ResultFilter)
 
     @model_validator(mode='after')
     def explicit_alignment(self):
@@ -54,11 +55,35 @@ class StudyQuery(AxisOptions):
     base_revision: int = Field(ge=0)
     mode: Literal['release','stability'] = 'stability'
     group_id: str | None = None
+    include_cells: bool = True
 
 
-def inventory(conn, project):
+class QuickCompare(AxisOptions):
+    base_revision: int = Field(ge=0)
+    sample_ids: tuple[Text,...] = Field(min_length=1)
+    filters: ResultFilter = Field(default_factory=ResultFilter)
+    members: tuple[Member,...] = ()
+    aligned_fields: tuple[Literal['presentation','study_id'],...] = ()
+    alignment_reason: str = ''
+    group_id: str | None = None
+    include_cells: bool = False
+
+    @model_validator(mode='after')
+    def validate_selection(self):
+        if len(set(self.sample_ids))!=len(self.sample_ids):
+            raise ValueError('所选样品不能重复')
+        if len({m.sample_id for m in self.members})!=len(self.members) or not {m.sample_id for m in self.members}<=set(self.sample_ids):
+            raise ValueError('分组须属于明确选择的样品且不能重复')
+        if any(m.role not in {'before','after','selected'} for m in self.members):
+            raise ValueError('快速对比仅接收当前参与样品的分组')
+        if len(set(self.aligned_fields))!=len(self.aligned_fields) or (self.aligned_fields and not self.alignment_reason.strip()):
+            raise ValueError('对齐字段不能重复，且须填写确认依据')
+        return self
+
+
+def inventory(conn, project, pairs=None):
     samples = {}
-    for a,b in selected_rows(conn,project,ResultFilter()):
+    for a,b in selected_rows(conn,project,ResultFilter()) if pairs is None else pairs:
         rec = StabilityRecord.model_validate_json((b or a)['record_json'])
         key = sample_id(rec)
         samples.setdefault(key, {'id':key, **sample_identity(rec), 'slot_count':0})['slot_count'] += 1
@@ -108,15 +133,24 @@ def save(flow,project,study_id,command,actor):
 def compare(conn,project,study_id,query):
     check_revision(conn,project,query.base_revision)
     config = study(conn,project,study_id)
+    return comparison_results(conn,project,config,query)
+
+
+def comparison_results(conn,project,config,query,all_pairs=None):
     roles = {m['sample_id']:m['role'] for m in config['members']}
     aligned = set(config['aligned_fields'])
     pairs = []
     groups = defaultdict(list)
-    for a,b in selected_rows(conn,project,ResultFilter()):
-        rec = StabilityRecord.model_validate_json((b or a)['record_json'])
-        if roles.get(sample_id(rec)) not in {'before','after'}:
+    filters = ResultFilter.model_validate(config.get('filters',{}))
+    all_pairs = selected_rows(conn,project,filters) if all_pairs is None else all_pairs
+    for a,b in all_pairs:
+        display_key = StabilityRecord.model_validate_json(a['record_json']).key.model_dump()
+        if any(display_key[k]!=v for k,v in filters.model_dump(exclude_none=True).items()):
             continue
-        if (rec.key.study=='release') != (query.mode=='release'):
+        rec = StabilityRecord.model_validate_json((b or a)['record_json'])
+        if roles.get(sample_id(rec)) not in {'before','after','selected'}:
+            continue
+        if isinstance(query,StudyQuery) and (rec.key.study=='release') != (query.mode=='release'):
             continue
         scope = tuple('研究内显式对齐' if field in aligned else value
                       for field,value in zip(SCOPE_FIELDS,analysis_scope(rec),strict=True))
@@ -129,36 +163,50 @@ def compare(conn,project,study_id,query):
             raise WorkflowError('comparison_scope','当前研究/模式中没有此检测组。',409)
         snap = comparison_snapshot(project,query.base_revision,config,members,labels,query)
         return {'project':project,'base_revision':query.base_revision,
+                'cells':comparison_cells(members,roles) if query.include_cells else [],
                 'trend':chart_data(snap,aligned_fields=aligned)}
     result_groups = []
     for gid,members in groups.items():
         record = StabilityRecord.model_validate_json((members[0][1] or members[0][0])['record_json'])
-        result_groups.append({'id':gid,'label':labels.get(record.key.item,record.key.item),
+        exact = sum(b is not None and b['state'] in {'confirmed','legacy'} and
+                    (r:=StabilityRecord.model_validate_json(b['record_json'])).result.status=='numeric' and r.result.comparator=='eq'
+                    for a,b in members)
+        result_groups.append({'id':gid,'label':labels.get(record.key.item,record.key.item),'exact_numeric_count':exact,
             'key':record.key.model_dump(mode='json'),'unit':record.result.unit,
             'slot_ids':[a['slot_id'] for a,b in members],
             'scope':dict(zip(SCOPE_FIELDS,('研究内显式对齐' if f in aligned else v for f,v in zip(SCOPE_FIELDS,analysis_scope(record),strict=True)),strict=True))})
+    cells = comparison_cells(pairs,roles) if query.include_cells else []
+    roles_count = {role:sum(m['role']==role for m in config['members']) for role in ('before','after','selected')}
+    result = {'project':project,'base_revision':query.base_revision,'study':config,'mode':getattr(query,'mode','quick'),
+              'groups':result_groups,'cells':cells,'item_labels':labels,
+              'total_slots':len(pairs),'roles_count':roles_count,
+              'pending_samples':[s for s in inventory(conn,project) if roles.get(s['id'],'pending')=='pending'] if isinstance(query,StudyQuery) else []}
+    return result
+
+
+def comparison_cells(pairs,roles):
     cells = []
     for cell,(a,b) in zip(cells_from_rows(pairs),pairs,strict=True):
         record = StabilityRecord.model_validate_json((b or a)['record_json'])
         cells.append({**cell.model_dump(mode='json'),'study_role':roles[sample_id(record)],
                       'sample_id':sample_id(record),'unit':record.result.unit,
                       'standards':[s.model_dump(mode='json') for s in record.standards]})
-    result = {'project':project,'base_revision':query.base_revision,'study':config,'mode':query.mode,
-              'groups':result_groups,'cells':cells,'item_labels':labels,
-              'pending_samples':[s for s in inventory(conn,project) if roles.get(s['id'],'pending')=='pending']}
-    return result
+    return cells
 
 
 def comparison_snapshot(project,revision,config,members,labels,query):
     roles = {m['sample_id']:m['role'] for m in config['members']}
     series_labels = {}
-    for a,b in members:
-        r = StabilityRecord.model_validate_json((b or a)['record_json'])
+    records = [StabilityRecord.model_validate_json((b or a)['record_json']) for a,b in members]
+    origins = sorted({(r.key.batch,sample_id(r),r.key.study_id) for r in records})
+    for (a,_b),r in zip(members,records,strict=True):
         sid = sample_id(r)
-        role = {'before':'变更前','after':'变更后'}[roles[sid]]
-        curve = digest([sid,r.key.study_id])[:8]
-        series_labels[a['slot_id']] = f'{r.key.batch} · {role} · {curve}'
-    snap = {'project':project,'revision':revision,'filters':{},'item_labels':labels,'study':config,
+        role = {'before':'变更前','after':'变更后','selected':'按批次'}[roles[sid]]
+        batch_origins = [o for o in origins if o[0]==r.key.batch]
+        index = batch_origins.index((r.key.batch,sid,r.key.study_id))+1
+        suffix = f' · {role} · 来源{index}' if role!='按批次' or len(batch_origins)>1 else ''
+        series_labels[a['slot_id']] = r.key.batch+suffix
+    snap = {'project':project,'revision':revision,'filters':config.get('filters',{}),'item_labels':labels,'study':config,
             'series_labels':series_labels,'axis':query.model_dump(include={'axis_mode','axis_min','axis_max'}),
             'entries':[{'display':dict(a),'adopted':dict(b) if b else None} for a,b in members]}
     snap['snapshot_id'] = digest(snap)

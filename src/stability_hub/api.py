@@ -63,7 +63,7 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
 
     @app.get('/health', include_in_schema=False)
     def health():
-        return {'application': 'stability-data-hub', 'version': __version__, 'build': '0.1.4-release-20261105',
+        return {'application': 'stability-data-hub', 'version': __version__, 'build': '0.1.5-release-20261105',
                 'delivery_state':'release'}
 
     @app.get('/favicon.ico', include_in_schema=False)
@@ -621,8 +621,22 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
     def download_image(export_id: str,operator: ActorDependency):
         return FileResponse(exports.download_image(export_id,actor=operator),filename='trend.png',media_type='image/png')
 
-    from .comparability import StudySave, StudyQuery
+    from .comparability import StudySave, StudyQuery, QuickCompare
     from .study_reports import ReportRequest
+
+    @app.get('/api/v1/projects/{project}/comparison-catalog')
+    def comparison_catalog(project: str, operator: ActorDependency):
+        require(operator, Capability.VIEW)
+        from .quick_comparison import catalog
+        with store.read() as conn:
+            return catalog(conn,project)
+
+    @app.post('/api/v1/projects/{project}/comparison-preview')
+    def comparison_preview(project: str, command: QuickCompare, operator: ActorDependency):
+        require(operator, Capability.VIEW)
+        from .quick_comparison import quick_compare
+        with store.read() as conn:
+            return quick_compare(conn,project,command)
 
     @app.get('/api/v1/projects/{project}/comparison-studies')
     def comparison_studies(project: str, operator: ActorDependency):

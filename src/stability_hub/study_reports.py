@@ -15,14 +15,15 @@ from .result_snapshot import create_snapshot
 from .result_queries import cells_from_rows
 from .workflow_excel import write_workbook
 from .workflow_excel_verify import verify_workbook
-from .comparability import compare, StudyQuery, comparison_snapshot, SCOPE_FIELDS, sample_id
+from .comparability import compare, StudyQuery, QuickCompare, comparison_snapshot, SCOPE_FIELDS, sample_id
 from .trend_export import analysis_scope, chart_data, write_png
 
 
 class ReportRequest(AxisOptions):
     project: str = Field(min_length=1)
     base_revision: int = Field(ge=0)
-    kind: Literal['stability','comparability'] = 'stability'
+    kind: Literal['stability','comparability','quick'] = 'stability'
+    quick: QuickCompare | None = None
     study_id: str | None = None
     mode: Literal['release','stability','all'] = 'all'
     filters: ResultFilter = Field(default_factory=ResultFilter)
@@ -59,7 +60,8 @@ def write_document(path,snapshot,charts):
     doc.styles['Normal'].paragraph_format.space_after = Pt(5)
     for border in doc.styles.element.xpath('.//w:pBdr'):
         border.getparent().remove(border)
-    title = snapshot['project'] + (' 可比性研究结果报告' if snapshot.get('comparison_studies') else ' 稳定性检测结果报告')
+    quick = any(s.get('kind')=='quick' for s in snapshot.get('comparison_studies',[]))
+    title = snapshot['project'] + (' 批次对比结果报告' if quick else ' 可比性研究结果报告' if snapshot.get('comparison_studies') else ' 稳定性检测结果报告')
     doc.add_paragraph(title,'Title')
     doc.add_paragraph(f"数据版本 {snapshot['revision']}。本报告汇总所选已提交事实，表格并列最新展示值与正式采用值；曲线仅采用正式确认的精确数值。缺失和限值结果不补零。不自动作合格、可比性或有效期结论。")
     names = {'batch':'批号','sample_type':'材料','presentation':'规格','purpose':'用途','study':'考察类型',
@@ -72,7 +74,7 @@ def write_document(path,snapshot,charts):
         doc.add_heading(study['title'],1)
         doc.add_paragraph('分组依据：'+study['reason'])
         doc.add_paragraph('研究内显式对齐：'+('、'.join(names[k] for k in study['aligned_fields']) or '无')+'。'+study.get('alignment_reason',''))
-        role_names = {'before':'变更前','after':'变更后','pending':'待分组','exclude':'不参与'}
+        role_names = {'before':'变更前','after':'变更后','selected':'按批次对比','pending':'待分组','exclude':'不参与'}
         shown = set()
         for record in records:
             sid = sample_id(record)
@@ -145,7 +147,21 @@ def create_report(flow,command,actor):
     configs = []
     with flow.store.read() as conn:
         check_revision(conn,command.project,command.base_revision)
-        if command.kind=='comparability':
+        if command.kind=='quick':
+            if command.quick is None:
+                raise WorkflowError('quick_required','请提供明确的快速对比范围。')
+            if command.quick.base_revision!=command.base_revision:
+                raise WorkflowError('stale_revision','快速对比与导出数据版本不同，请刷新。',409)
+            from .quick_comparison import quick_compare
+            view = quick_compare(conn,command.project,command.quick.model_copy(update={'include_cells':True,'group_id':None}))
+            ids = [c['slot_id'] for c in view['cells']]
+            if selected and (len(set(selected))!=len(selected) or not set(selected)<=set(ids)):
+                raise WorkflowError('report_scope','所选结果不属于当前快速对比范围。',409)
+            selected = selected or tuple(ids)
+            if not selected:
+                raise WorkflowError('empty_report','当前快速对比范围没有已提交结果。')
+            configs = [view['study']]
+        elif command.kind=='comparability':
             if not command.study_id:
                 raise WorkflowError('study_required','请先选择已保存的可比研究。')
             modes = ('release','stability') if command.mode=='all' else (command.mode,)
@@ -158,11 +174,11 @@ def create_report(flow,command,actor):
                 raise WorkflowError('report_scope','所选槽位不属于该研究与报告模式。',409)
             selected = selected or tuple(ids)
             if not selected:
-                raise WorkflowError('empty_report','当前研究没有已分配到变更前／后的结果。')
+                raise WorkflowError('empty_report','当前研究范围没有参与对比的已提交结果。')
         elif command.mode != 'all':
             raise WorkflowError('report_mode','检测台账报告请使用筛选条件确定范围。')
         request = ExportRequest(project=command.project,base_revision=command.base_revision,
-                                slot_ids=selected,filters=command.filters)
+                                slot_ids=selected,filters=command.quick.filters if command.kind=='quick' else command.filters)
         snapshot = create_snapshot(flow,conn,request)
     if not snapshot['entries']:
         raise WorkflowError('empty_report','所选范围没有已提交结果。')
