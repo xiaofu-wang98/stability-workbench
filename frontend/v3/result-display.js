@@ -61,7 +61,7 @@ const display=g.v012Display={data:null,serial:0,chart:null,filters:{},cards:new 
   tools.querySelector('[data-table-mode]').onclick=()=>ledger.change('tableMode',ledger.tableMode==='compact'?'full':'compact');
   tools.querySelector('#v012MatrixExcel').onclick=()=>this.exportSlots(cells.map(c=>c.slot_id),false);
   const numeric=groups.filter(a=>(a.exact_numeric_count??a.numeric_count)>0),qualitative=groups.filter(a=>!(a.exact_numeric_count??a.numeric_count));
-  const cardMarkup=a=>`<article class="card v013-trend-card" data-trend-card="${esc(a.id)}"><div class="card-header"><h4>${esc(a.label)}${a.unit?' ('+esc(a.unit)+')':''}</h4><span class="v013-trend-badge">正式采用值</span></div><div class="card-body"><p class="v013-identity">${esc(a.key.sample_type)} · ${esc(human(a.key.presentation))} · ${esc(studyNames[a.key.study])} · ${esc(human(a.key.condition))}<br>${esc(a.key.method)} · ${esc(human(a.key.method_version))} · ${esc(a.key.reporting_basis||'共用报告结果')}</p><p data-trend-status role="status">滚动到此图时读取正式采用值…</p><div class="v013-canvas"><canvas role="img" aria-label="${esc(a.label)} 正式采用值趋势图"></canvas></div><details class="v013-curve-options"><summary>叠加兼容批次</summary>${a.batches.map(batch=>`<label><input type="checkbox" data-curve-batch value="${esc(batch)}" ${batch===ledger.batch?'checked':''}>${esc(batch)}</label>`).join('')}</details><div data-omitted></div><p data-point-detail role="status"></p><button type="button" class="btn btn-outline" data-retry>重新读取本图</button><button type="button" class="btn btn-outline" data-chart-export disabled>导出本图 Excel / PNG</button><span data-export-status role="status"></span><span data-downloads></span></div></article>`;
+  const cardMarkup=a=>`<article class="card v013-trend-card" data-trend-card="${esc(a.id)}"><div class="card-header"><h4>${esc(a.label)}${a.unit?' ('+esc(a.unit)+')':''}</h4><span class="v013-trend-badge">正式采用值</span></div><div class="card-body"><p class="v013-identity">${esc(a.key.sample_type)} · ${esc(human(a.key.presentation))} · ${esc(studyNames[a.key.study])} · ${esc(human(a.key.condition))}<br>${esc(a.key.method)} · ${esc(human(a.key.method_version))} · ${esc(a.key.reporting_basis||'共用报告结果')}</p><p data-trend-status role="status">滚动到此图时读取正式采用值…</p><div class="v013-canvas"><canvas role="img" aria-label="${esc(a.label)} 正式采用值趋势图"></canvas></div><details class="v013-curve-options"><summary>叠加兼容批次</summary>${a.batches.map(batch=>`<label><input type="checkbox" data-curve-batch value="${esc(batch)}" ${batch===ledger.batch?'checked':''}>${esc(batch)}</label>`).join('')}</details>${g.v014Axes.markup()}<div data-omitted></div><p data-point-detail role="status"></p><button type="button" class="btn btn-outline" data-retry>重新读取本图</button><button type="button" class="btn btn-outline" data-chart-export disabled>导出本图 Excel / PNG</button><span data-export-status role="status"></span><span data-downloads></span></div></article>`;
   node.innerHTML=`<div class="v3-label">趋势图</div><p class="v3-note">当前批次 ${esc(ledger.batch)} · 正式采用值 · 数据版本 ${esc(renderer.currentBaseRevision)}。表格保留双状态；未关联适用标准时不绘制限度线，不作合格判定。</p><div id="v013TrendGrid" class="v013-trend-grid">${numeric.map(cardMarkup).join('')}</div>${qualitative.length?`<details id="v013Qualitative"><summary>定性、限值及其他结果（${qualitative.length}）</summary><div class="v013-trend-grid">${qualitative.map(cardMarkup).join('')}</div></details>`:''}<div class="v013-export-message"><span id="v012ExportStatus" role="status"></span><span id="v012Downloads"></span></div>`;
   const advanced=document.getElementById('v5OutputControls');if(advanced)node.after(advanced);
   if(!groups.length){node.insertAdjacentHTML('beforeend',`<p role="status">${esc(renderer.loadError?'结果读取失败：'+renderer.loadError:'当前范围没有已入库结果。')}</p>`);return;}
@@ -71,6 +71,7 @@ const display=g.v012Display={data:null,serial:0,chart:null,filters:{},cards:new 
    card.querySelectorAll('[data-curve-batch]').forEach(input=>input.onchange=()=>this.loadCard(state));
    card.querySelector('[data-retry]').onclick=()=>this.loadCard(state);
    card.querySelector('[data-chart-export]').onclick=()=>this.exportSlots(state.slotIds,true,state);
+   g.v014Axes.bind(card,()=>this.loadCard(state));
    this.observer.observe(card);
   }
  },
@@ -82,15 +83,16 @@ const display=g.v012Display={data:null,serial:0,chart:null,filters:{},cards:new 
   state.node.querySelector('[data-omitted]').replaceChildren();state.node.querySelector('[data-point-detail]').replaceChildren();
   const batches=[...state.node.querySelectorAll('[data-curve-batch]:checked')].map(i=>i.value),status=state.node.querySelector('[data-trend-status]');
   if(!batches.length){status.textContent='请至少选择一个批次。';return;}
+  let axis;try{axis=g.v014Axes.options(state.node);}catch(e){status.textContent=e.message;return;}
   status.textContent='正在读取正式采用值…';
-  this.queue.push({state,sequence,generation:this.serial,project:this.data.project,revision:this.data.base_revision,batches});this.drain();
+  this.queue.push({state,sequence,generation:this.serial,project:this.data.project,revision:this.data.base_revision,batches,axis});this.drain();
  },
  drain(){
   while(this.active<3&&this.queue.length){
-   const task=this.queue.shift(),{state,sequence,generation,project,revision,batches}=task;
+   const task=this.queue.shift(),{state,sequence,generation,project,revision,batches,axis}=task;
    if(sequence!==state.sequence||generation!==this.serial||!state.node.isConnected)continue;
    this.active++;
-   const params=new URLSearchParams(Object.entries(this.filters).filter(([,v])=>v!=null));params.set('group_id',state.group.id);params.set('base_revision',revision);batches.forEach(b=>params.append('batches',b));
+   const params=new URLSearchParams(Object.entries(this.filters).filter(([,v])=>v!=null));params.set('group_id',state.group.id);params.set('base_revision',revision);batches.forEach(b=>params.append('batches',b));Object.entries(axis).forEach(([k,v])=>params.set(k,v));
    const current=()=>sequence===state.sequence&&generation===this.serial&&state.node.isConnected&&g.v5Review.scene==='formal';
    request(`/projects/${encodeURIComponent(project)}/result-trend?${params}`).then(trend=>{
     if(!current())return;
@@ -100,7 +102,7 @@ const display=g.v012Display={data:null,serial:0,chart:null,filters:{},cards:new 
   }
  },
  drawCard(state,trend){
-  const node=state.node;state.trend=trend;state.slotIds=[...new Set(trend.series.flatMap(s=>s.values.map(p=>p.slot_id)).filter(Boolean))];
+  const node=state.node;g.v014Axes.describe(node,trend.axis);state.trend=trend;state.slotIds=[...new Set(trend.series.flatMap(s=>s.values.map(p=>p.slot_id)).filter(Boolean))];
   node.querySelector('[data-chart-export]').disabled=!g.v4Api.can('export')||!state.slotIds.length;
   node.querySelector('[data-trend-status]').textContent=trend.points.length?`正式采用 ${trend.points.length} 点${trend.points.length===1?' · 仅1个有效时间点':''}${trend.omitted.length?' · '+trend.omitted.length+'项未绘制':''}`:'无可绘制的正式精确数值；结果原文保留在上方完整表格中。';
   node.querySelector('[data-omitted]').innerHTML=trend.omitted.length?`<details><summary>未绘制结果及原因（${trend.omitted.length}）</summary>${trend.omitted.map(p=>`<p>${esc(p.batch)} · ${esc(p.time)} · ${esc(p.raw)} · ${esc(p.reason==='no adopted result'?'尚无正式采用值':p.reason==='pending'?'待确认':'非精确数值，保留原文')}</p>`).join('')}</details>`:'';
@@ -109,7 +111,7 @@ const display=g.v012Display={data:null,serial:0,chart:null,filters:{},cards:new 
   if(typeof g.Chart==='undefined')throw Error('本地图表库未能加载，结果表仍可查看。');
   const colors=['#0284c7','#7c3aed','#16a34a','#d97706','#db2777'];
   const datasets=trend.series.map((s,i)=>({label:s.batch,borderColor:colors[i%colors.length],backgroundColor:colors[i%colors.length],tension:0,spanGaps:false,pointRadius:3,data:s.values.map(p=>({...p,y:p.value===null?null:Number(p.value)}))}));
-  state.chart=new g.Chart(node.querySelector('canvas'),{type:'line',data:{datasets},options:{animation:false,responsive:true,maintainAspectRatio:false,parsing:{xAxisKey:'x',yAxisKey:'y'},plugins:{legend:{display:true,labels:{font:{size:10}}},tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label} · ${ctx.raw.time||'放行'} · 正式采用 ${ctx.raw.value} ${trend.scope[8]}`}}},scales:{x:{type:'linear',title:{display:true,text:trend.scope[9]==='D'?'考察时间（天）':trend.scope[9]==='M'?'考察时间（月）':'批次'},ticks:trend.scope[9]==='release'?{callback:x=>trend.batches[x]||''}:{precision:0}},y:{title:{display:true,text:trend.scope[8]||'原文未注明单位'}}},onClick:(_e,elements)=>{if(elements.length){const hit=elements[0],point=datasets[hit.datasetIndex].data[hit.index];if(point.slot_id)this.inspectPoint(point,state);}}}});
+  state.chart=new g.Chart(node.querySelector('canvas'),{type:'line',data:{datasets},options:{animation:false,responsive:true,maintainAspectRatio:false,parsing:{xAxisKey:'x',yAxisKey:'y'},plugins:{legend:{display:true,labels:{font:{size:10}}},tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label} · ${ctx.raw.time||'放行'} · 正式采用 ${ctx.raw.value} ${trend.scope[8]}`}}},scales:{x:{type:'linear',title:{display:true,text:trend.scope[9]==='D'?'考察时间（天）':trend.scope[9]==='M'?'考察时间（月）':'批次'},ticks:trend.scope[9]==='release'?{callback:x=>trend.batches[x]||''}:{precision:0}},y:{min:trend.axis.min,max:trend.axis.max,title:{display:true,text:trend.scope[8]||'原文未注明单位'}}},onClick:(_e,elements)=>{if(elements.length){const hit=elements[0],point=datasets[hit.datasetIndex].data[hit.index];if(point.slot_id)this.inspectPoint(point,state);}}}});
   if(!this.chart){this.chart=state.chart;this.trend=trend;}
  },
  inspectPoint(point,state){
@@ -126,7 +128,7 @@ const display=g.v012Display={data:null,serial:0,chart:null,filters:{},cards:new 
   const status=state?node.querySelector('[data-export-status]'):panel.querySelector('#v012ExportStatus'),box=state?node.querySelector('[data-downloads]'):panel.querySelector('#v012Downloads');
   const button=state?node.querySelector('[data-chart-export]'):document.getElementById('v012MatrixExcel');button.disabled=true;box.replaceChildren();status.textContent='正在生成并反读核验…';
   try{
-   const result=await g.v4Api.requestExport({project,base_revision:revision,filters:{},slot_ids:ids,include_png:png,orientation:ledger.orientation||'items'});
+   const result=await g.v4Api.requestExport({project,base_revision:revision,filters:{},slot_ids:ids,include_png:png,...(state?.trend?{axis_mode:state.trend.axis.mode,axis_min:state.trend.axis.min,axis_max:state.trend.axis.max}:{}),orientation:ledger.orientation||'items'});
    if(!current())return;
    status.textContent=`已核验 · ${ids.length} 个结果槽位 · 数据版本 ${revision} · Excel双状态${png?' / PNG正式采用值':''}`;
    for(const [url,label,name] of [[result.download_url,'下载 Excel','results.xlsx'],[result.image_download_url,'下载 PNG','trend.png']])if(url){const a=document.createElement('button');a.type='button';a.className='btn btn-outline';a.textContent=label;a.onclick=()=>g.v5Outputs.download(url,name).catch(e=>status.textContent='下载失败：'+e.message);box.append(a);}

@@ -270,7 +270,13 @@ class ResultFilter(Model):
     method_version: str | None = None
 
 
-class ExportRequest(Model):
+class AxisOptions(Model):
+    axis_mode: Literal['overview', 'detail', 'manual'] = 'overview'
+    axis_min: float | None = Field(default=None, allow_inf_nan=False)
+    axis_max: float | None = Field(default=None, allow_inf_nan=False)
+
+
+class ExportRequest(AxisOptions):
     slot_ids: tuple[str, ...] = ()
     include_png: bool = False
     project: Text
@@ -284,7 +290,7 @@ class ResultQuery(ResultFilter):
     limit: int = Field(default=100, ge=1, le=1000)
 
 
-class ResultTrendQuery(ResultFilter):
+class ResultTrendQuery(ResultFilter, AxisOptions):
     group_id: str
     base_revision: int = Field(ge=0)
     batches: list[str] = Field(min_length=1)

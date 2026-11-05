@@ -43,7 +43,7 @@ def display_results(conn, project, filters):
             'analysis_groups':analyses, 'item_labels':labels}
 
 
-def trend_results(conn, project, filters, *, group_id, revision, batches=()):
+def trend_results(conn, project, filters, *, group_id, revision, batches=(), axis=None):
     check_revision(conn, project, revision)
     _, groups = grouped_results(conn, project, filters)
     members = groups.get(group_id)
@@ -56,4 +56,4 @@ def trend_results(conn, project, filters, *, group_id, revision, batches=()):
     snapshot = {'project':project,'revision':revision,'filters':filters.model_dump(),
                 'entries':[{'display':dict(a),'adopted':dict(b) if b else None} for a,b in members]}
     snapshot['snapshot_id'] = digest(snapshot)
-    return chart_data(snapshot)
+    return chart_data(snapshot, axis=axis)

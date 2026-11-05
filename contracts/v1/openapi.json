@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Stability Data Hub",
-    "version": "0.1.3"
+    "version": "0.1.4"
   },
   "paths": {
     "/api/v1/runtime": {
@@ -3773,6 +3773,53 @@
             }
           },
           {
+            "name": "axis_mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "overview",
+                "detail",
+                "manual"
+              ],
+              "type": "string",
+              "default": "overview",
+              "title": "Axis Mode"
+            }
+          },
+          {
+            "name": "axis_min",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Axis Min"
+            }
+          },
+          {
+            "name": "axis_max",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Axis Max"
+            }
+          },
+          {
             "name": "day",
             "in": "query",
             "required": false,
@@ -4316,6 +4363,342 @@
       "get": {
         "summary": "Download Image",
         "operationId": "download_image_api_v1_exports__export_id__image_get",
+        "parameters": [
+          {
+            "name": "export_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Export Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/comparison-studies": {
+      "get": {
+        "summary": "Comparison Studies",
+        "operationId": "comparison_studies_api_v1_projects__project__comparison_studies_get",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/comparison-studies/{study_id}": {
+      "post": {
+        "summary": "Save Comparison",
+        "operationId": "save_comparison_api_v1_projects__project__comparison_studies__study_id__post",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project"
+            }
+          },
+          {
+            "name": "study_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Study Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudySave"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/comparison-studies/{study_id}/results": {
+      "get": {
+        "summary": "Comparison Results",
+        "operationId": "comparison_results_api_v1_projects__project__comparison_studies__study_id__results_get",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project"
+            }
+          },
+          {
+            "name": "study_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Study Id"
+            }
+          },
+          {
+            "name": "axis_mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "overview",
+                "detail",
+                "manual"
+              ],
+              "type": "string",
+              "default": "overview",
+              "title": "Axis Mode"
+            }
+          },
+          {
+            "name": "axis_min",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Axis Min"
+            }
+          },
+          {
+            "name": "axis_max",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Axis Max"
+            }
+          },
+          {
+            "name": "base_revision",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "title": "Base Revision"
+            }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "release",
+                "stability"
+              ],
+              "type": "string",
+              "default": "stability",
+              "title": "Mode"
+            }
+          },
+          {
+            "name": "group_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Group Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reports": {
+      "post": {
+        "summary": "Report Export",
+        "operationId": "report_export_api_v1_reports_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reports/{export_id}/file": {
+      "get": {
+        "summary": "Report Download",
+        "operationId": "report_download_api_v1_reports__export_id__file_get",
+        "parameters": [
+          {
+            "name": "export_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Export Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reports/{export_id}/word": {
+      "get": {
+        "summary": "Report Word",
+        "operationId": "report_word_api_v1_reports__export_id__word_get",
         "parameters": [
           {
             "name": "export_id",
@@ -5626,6 +6009,38 @@
       },
       "ExportRequest": {
         "properties": {
+          "axis_mode": {
+            "type": "string",
+            "enum": [
+              "overview",
+              "detail",
+              "manual"
+            ],
+            "title": "Axis Mode",
+            "default": "overview"
+          },
+          "axis_min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Axis Min"
+          },
+          "axis_max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Axis Max"
+          },
           "slot_ids": {
             "items": {
               "type": "string"
@@ -6465,6 +6880,32 @@
         ],
         "title": "ManualSheetUndo"
       },
+      "Member": {
+        "properties": {
+          "sample_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Sample Id"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "before",
+              "after",
+              "pending",
+              "exclude"
+            ],
+            "title": "Role"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "sample_id",
+          "role"
+        ],
+        "title": "Member"
+      },
       "MutationResult": {
         "properties": {
           "project": {
@@ -7050,6 +7491,105 @@
           "fingerprint"
         ],
         "title": "Reinterpret"
+      },
+      "ReportRequest": {
+        "properties": {
+          "axis_mode": {
+            "type": "string",
+            "enum": [
+              "overview",
+              "detail",
+              "manual"
+            ],
+            "title": "Axis Mode",
+            "default": "overview"
+          },
+          "axis_min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Axis Min"
+          },
+          "axis_max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Axis Max"
+          },
+          "project": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Project"
+          },
+          "base_revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Base Revision"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "stability",
+              "comparability"
+            ],
+            "title": "Kind",
+            "default": "stability"
+          },
+          "study_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Study Id"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "release",
+              "stability",
+              "all"
+            ],
+            "title": "Mode",
+            "default": "all"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/ResultFilter"
+          },
+          "slot_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Slot Ids",
+            "default": []
+          },
+          "include_charts": {
+            "type": "boolean",
+            "title": "Include Charts",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "project",
+          "base_revision"
+        ],
+        "title": "ReportRequest"
       },
       "Result": {
         "properties": {
@@ -8210,6 +8750,65 @@
           "results"
         ],
         "title": "StructuralDecision"
+      },
+      "StudySave": {
+        "properties": {
+          "base_revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Base Revision"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Title"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Reason"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/Member"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Members"
+          },
+          "aligned_fields": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "presentation",
+                "study_id"
+              ]
+            },
+            "type": "array",
+            "title": "Aligned Fields",
+            "default": []
+          },
+          "alignment_reason": {
+            "type": "string",
+            "title": "Alignment Reason",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "base_revision",
+          "idempotency_key",
+          "title",
+          "reason",
+          "members"
+        ],
+        "title": "StudySave"
       },
       "TaskBatchApply": {
         "properties": {

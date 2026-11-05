@@ -887,15 +887,13 @@
       if (typeof switchMainTab === 'function') {
         switchMainTab = function(tabId) {
           if(global.v5Review&&!global.v5Review.leave())return;
-          if (['comparability','reports'].includes(tabId)) {
-            toast('此模块尚未接入真实数据；当前可用数据接收和检测台账。'); return;
-          }
-          if (!['intake','ledger'].includes(tabId)) return;
+          if (!['intake','ledger','comparability','reports'].includes(tabId)) return;
           activeWorkspaceTab = tabId;
-          document.querySelectorAll('.nav-tab').forEach((button,index) => button.classList.toggle('active',index === (tabId === 'intake' ? 0 : 1)));
+          document.querySelectorAll('.nav-tab').forEach((button,index) => button.classList.toggle('active',index === ['intake','ledger','comparability','reports'].indexOf(tabId)));
           document.querySelectorAll('.tab-page').forEach(page => page.classList.toggle('active',page.id === 'tab-' + tabId));
           if (tabId === 'ledger') return global.v5Review?global.v5Review.enterLedger(currentProjectKey):global.v4ResultCell?.loadProjectCells(currentProjectKey);
           global.v5Review?.setScene('upload');
+          if (['comparability','reports'].includes(tabId)) return global.v014Research?.enter(tabId,currentProjectKey);
         };
       }
       if (typeof selectProject === 'function') {
@@ -912,7 +910,7 @@
           window.history.replaceState(null,'',address);
           document.querySelector('main.main-content').hidden = false;
           document.getElementById('scopedWorkspace').hidden = true;
-          document.querySelectorAll('.nav-tab').forEach((button,index) => {button.hidden = index > 1; if (index < 2) button.disabled = false;});
+          document.querySelectorAll('.nav-tab').forEach((button,index) => {button.hidden = false; button.disabled = false;});
           const favorite = document.getElementById('workspaceFavorite'); if (favorite) {favorite.disabled=false; favorite.hidden=false;}
           global.v4Intake?.onContextChanged();
           global.v4ResultCell?.clearCells(); global.v4ResultCell?.enhanceLedgerTable();
@@ -920,12 +918,6 @@
           if (announce) toast(`已进入 ${id}`);
         };
       }
-      document.querySelectorAll('.nav-tab').forEach(button => {
-        if (/可比性|报告/.test(button.textContent)) {
-          button.disabled = true; button.setAttribute('aria-disabled','true'); button.title = '尚未接入真实数据';
-          button.textContent += '（未开放）';
-        }
-      });
       global.v4ResultCell?.enhanceLedgerTable();
       const bar = document.createElement('div');
       bar.id = 'v43Connection';
@@ -946,8 +938,8 @@
           if (typeof projectRegistry !== 'undefined') {
             const allowed = new Set(projects.map(p => p.project));
             projectRegistry = projects.map(p => ({
-              id:p.project,name:p.name || p.project,type:'未配置产品类型',stage:'待确认',status:'进行中',modules:['intake','ledger']}));
-            projectRegistry.forEach(p => { p.modules = ['intake','ledger']; });
+              id:p.project,name:p.name || p.project,type:'未配置产品类型',stage:'待确认',status:'进行中',modules:['intake','ledger','comparability','reports']}));
+            projectRegistry.forEach(p => { p.modules = ['intake','ledger','comparability','reports']; });
             const requested = new URLSearchParams(window.location.search).get('project');
             preferred = allowed.has(requested) ? requested : null;
             hubPreferences.favorites=hubPreferences.favorites.filter(id=>allowed.has(id));
@@ -962,7 +954,7 @@
           if (preferred) {
             if(!global.v5Review)await global.v4ResultCell?.loadProjectCells(prj);
             await global.v4Intake?.refreshRecent();
-            if(new URLSearchParams(window.location.search).get('view')==='ledger' && typeof switchMainTab==='function')switchMainTab('ledger');
+            const view=new URLSearchParams(window.location.search).get('view');if(['ledger','comparability','reports'].includes(view)&&typeof switchMainTab==='function')switchMainTab(view);
           } else global.v4Intake?.goUploadHome();
         } catch (err) {
           text.textContent = `连接失败：${err.message}。请使用对应版本启动器，再点重新连接。`;

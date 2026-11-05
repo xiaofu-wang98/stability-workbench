@@ -576,6 +576,40 @@
     "ExportRequest": {
       "additionalProperties": false,
       "properties": {
+        "axis_mode": {
+          "default": "overview",
+          "enum": [
+            "overview",
+            "detail",
+            "manual"
+          ],
+          "title": "Axis Mode",
+          "type": "string"
+        },
+        "axis_min": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Axis Min"
+        },
+        "axis_max": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Axis Max"
+        },
         "slot_ids": {
           "default": [],
           "items": {

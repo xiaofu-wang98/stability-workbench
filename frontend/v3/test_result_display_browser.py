@@ -59,6 +59,8 @@ def main():
             page.set_default_timeout(30000)
             page.on('pageerror',lambda e:report['errors'].append(str(e)))
             page.on('request',lambda r:report['requests'].append({'method':r.method,'url':r.url}))
+            # A reload replaces the queue; canceled old-document requests may never emit finished.
+            page.on('framenavigated',lambda frame:in_flight.clear() if frame==page.main_frame else None)
             page.on('request',on_request)
             page.on('requestfinished',lambda r:in_flight.discard(r))
             page.on('requestfailed',lambda r:in_flight.discard(r))
@@ -163,6 +165,8 @@ def main():
                     page.wait_for_load_state('networkidle')
                     app.state.actor=actor_for_role('acceptance-lead','Lead',Role.PROJECT_LEAD)
                     page.set_viewport_size({'width':1440,'height':1000})
+                    page.wait_for_load_state('networkidle')
+                    page.wait_for_function('v012Display.active===0 && v012Display.queue.length===0')
                     page.reload(wait_until='networkidle')
                     page.locator('#v013TrendGrid [data-trend-card]').first.scroll_into_view_if_needed()
                     page.wait_for_function('[...v012Display.cards.values()].some(s=>s.chart&&s.trend?.points.length)')
@@ -193,6 +197,9 @@ def main():
                 (out/'final.html').write_text(page.content(),encoding='utf-8')
                 page.screenshot(path=str(out/'final.png'))
                 browser.close()
+    except Exception:
+        report['passed']=False
+        raise
     finally:
         server.should_exit=True
         thread.join(timeout=10)

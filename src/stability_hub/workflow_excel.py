@@ -177,6 +177,9 @@ class ExcelExports:
             conn.execute("BEGIN")
             check_revision(conn, request.project, request.base_revision)
             snapshot = create_snapshot(self.workflow,conn,request)
+            snapshot['axis'] = {k:getattr(request,k) for k in ('axis_mode','axis_min','axis_max')}
+            from .models import digest
+            snapshot['snapshot_id'] = digest({k:v for k,v in snapshot.items() if k!='snapshot_id'})
             if not snapshot['entries']:
                 raise WorkflowError("empty_export", "当前范围没有可汇总结果。")
         export_id = uid("export")

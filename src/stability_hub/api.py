@@ -63,7 +63,7 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
 
     @app.get('/health', include_in_schema=False)
     def health():
-        return {'application': 'stability-data-hub', 'version': __version__, 'build': '0.1.3-release-20261104',
+        return {'application': 'stability-data-hub', 'version': __version__, 'build': '0.1.4-release-20261105',
                 'delivery_state':'release'}
 
     @app.get('/favicon.ico', include_in_schema=False)
@@ -573,9 +573,10 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
         require(operator, Capability.VIEW)
         from .result_display import trend_results
         with store.read() as conn:
-            filters = ResultFilter.model_validate(query.model_dump(exclude={'group_id','base_revision','batches'}))
+            filters = ResultFilter.model_validate(query.model_dump(exclude={'group_id','base_revision','batches','axis_mode','axis_min','axis_max'}))
             return trend_results(conn, project, filters, group_id=query.group_id,
-                                 revision=query.base_revision, batches=query.batches)
+                                 revision=query.base_revision, batches=query.batches,
+                                 axis={k:getattr(query,k) for k in ('axis_mode','axis_min','axis_max')})
 
     @app.get("/api/v1/sources/{source_id}/file")
     def candidate_original(source_id: str, operator: ActorDependency):
@@ -619,6 +620,53 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
     @app.get('/api/v1/exports/{export_id}/image')
     def download_image(export_id: str,operator: ActorDependency):
         return FileResponse(exports.download_image(export_id,actor=operator),filename='trend.png',media_type='image/png')
+
+    from .comparability import StudySave, StudyQuery
+    from .study_reports import ReportRequest
+
+    @app.get('/api/v1/projects/{project}/comparison-studies')
+    def comparison_studies(project: str, operator: ActorDependency):
+        require(operator, Capability.VIEW)
+        from .comparability import studies, inventory
+        from .workflow_common import project_row
+        with store.read() as conn:
+            return {'project':project,'base_revision':project_row(conn,project)['revision'],
+                    'studies':studies(conn,project),'samples':inventory(conn,project)}
+
+    @app.post('/api/v1/projects/{project}/comparison-studies/{study_id}')
+    def save_comparison(project: str, study_id: str, command: StudySave, operator: ActorDependency):
+        from .comparability import save
+        return save(workflow,project,study_id,command,operator)
+
+    @app.get('/api/v1/projects/{project}/comparison-studies/{study_id}/results')
+    def comparison_results(project: str, study_id: str, operator: ActorDependency, query: Annotated[StudyQuery, Query()]):
+        require(operator, Capability.VIEW)
+        from .comparability import compare
+        with store.read() as conn:
+            return compare(conn,project,study_id,query)
+
+    @app.post('/api/v1/reports')
+    def report_export(command: ReportRequest, operator: ActorDependency):
+        from .study_reports import create_report
+        return create_report(workflow,command,operator)
+
+    @app.get('/api/v1/reports/{export_id}/file')
+    def report_download(export_id: str, operator: ActorDependency):
+        path = exports.download(export_id,actor=operator)
+        if path.name != 'report.zip':
+            raise WorkflowError('report_not_found','不是报告导出。',404)
+        return FileResponse(path,filename='report.zip',media_type='application/zip')
+
+    @app.get('/api/v1/reports/{export_id}/word')
+    def report_word(export_id: str, operator: ActorDependency):
+        path = exports.download(export_id,actor=operator)
+        if path.name != 'report.zip':
+            raise WorkflowError('report_not_found','不是报告导出。',404)
+        from zipfile import ZipFile
+        with ZipFile(path) as package:
+            content = package.read('report.docx')
+        return Response(content,media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                        headers={'Content-Disposition':'attachment; filename="report.docx"'})
 
     if frontend:
         frontend_path = Path(frontend).resolve()
