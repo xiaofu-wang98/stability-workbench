@@ -24,14 +24,27 @@ COMPARATORS = {
 }
 
 
+SEMANTIC_VERSION = 'v020-result-1'
+NOT_REPORTED = re.compile(r'不(?:进行|做|予|再)?(?:汇报|报告)(?:检测)?(?:结果|数据)?|\bnot\s+(?:be\s+)?reported\b', re.I)
+
+
+def ambiguous_reporting(text: str) -> bool:
+    """Historical/negated reporting prose cannot decide the current result."""
+    return bool(NOT_REPORTED.search(text) and re.search(
+        r'原(?:来|先|结果|数据)|曾经|此前|之前|现(?:在|报告|汇报|结果)|改为|恢复|不是|并非|而非|'
+        r'\b(?:previously|previous|formerly|historical|now|final|instead|resume[ds]?)\b', text, re.I))
+
+
 def is_not_reported(text: str) -> bool:
-    return bool(re.search(r'不(?:进行|做|予|再)?(?:汇报|报告)(?:检测)?(?:结果|数据)?|\bnot\s+(?:be\s+)?reported\b', text, re.I))
+    return bool(NOT_REPORTED.search(text)) and not ambiguous_reporting(text)
 
 
-def normalize_result(raw: str, unit: str, result_type: str) -> Result:
+def normalize_result(raw: str, unit: str, result_type: str, *, legacy_reporting=False) -> Result:
     text = raw.strip()
     token = text.casefold()
-    if is_not_reported(text):
+    if not legacy_reporting and ambiguous_reporting(text):
+        raise NeedsReview('reporting_semantics', '原文同时包含历史、否定或当前汇报说明，请明确本次结果；原文完整保留。')
+    if (bool(NOT_REPORTED.search(text)) if legacy_reporting else is_not_reported(text)):
         return Result(status='not_reported', raw_text=raw, unit=unit,
                       report_references=tuple(dict.fromkeys(re.findall(r'\bAR-[A-Z0-9]+(?:-[A-Z0-9]+)+', text, re.I))))
     states = {

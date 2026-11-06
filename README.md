@@ -1,4 +1,8 @@
-# Stability Data Hub 0.1.5
+# Stability Data Hub 0.2.0
+
+0.2.0 改善陌生方案编号、汇报语义与中英文业务备注的识别；备注按真实检项和时间点定位，无法确定的范围仍保留原文供核对。新增查询索引并在事务内复用撤销集合。普通改单值优先显示结果、单位和说明，其余字段按需展开。未引入AI。详见 [0.2.0 发布说明](docs/release-0.2.0.md)。
+
+本版分支为 `codex/0.2.0`，从0.1.5提交 `a105c2a` 开始；旧分支与提交保留。数据库升级到schema 9仅新增索引，并自动备份旧库。若需并行使用0.1.5，先用 `scripts/backup.py` 创建独立数据副本，并以 `start.cmd --home 副本目录` 启动0.2.0；旧程序不支持打开升级后的schema 9。开发验收均使用隔离数据，未迁移日常data。
 
 本项目承接V5.6，本轮V5.7功能升级后独立整理为0.1.1，使用全新Git仓库。保留既有页面布局，新增人工工作副本兜底模式，并优化重复刷新。
 
@@ -52,6 +56,7 @@ python frontend/v3/check.py
 python -m ruff check src/stability_hub/ tests/test_manual_sheet.py start.py
 python -m pytest -q
 python frontend/v3/test_manual_sheet_browser.py
+python frontend/v3/test_v020_edit_browser.py
 python frontend/v3/test_v5_intake_e2e.py
 
 浏览器验收需要先安装Chromium：python -m playwright install chromium。测试只使用临时目录或outputs中的隔离副本。data、outputs、.venv及缓存都不进入Git。

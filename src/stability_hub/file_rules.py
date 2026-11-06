@@ -150,6 +150,7 @@ def reinterpret_preview(flow, conn, upload, actor):
     try:
         from .numeric_formats import VERSION as numeric_version
         from .matrix_fields import IDENTITY_VERSION
+        from .normalize import SEMANTIC_VERSION
         from .standards import VERSION as standards_version
 
         event(
@@ -159,7 +160,8 @@ def reinterpret_preview(flow, conn, upload, actor):
             "reinterpret_draft",
             actor,
             "只读规则差异预览；事务回滚",
-            {"numeric_rule_version": numeric_version, "identity_rule_version": IDENTITY_VERSION, "standards_rule_version": standards_version, "preview_only": True},
+            {"numeric_rule_version": numeric_version, "identity_rule_version": IDENTITY_VERSION,
+             "semantic_rule_version": SEMANTIC_VERSION, "standards_rule_version": standards_version, "preview_only": True},
         )
         conn.execute(
             "UPDATE workflow_uploads SET interpretation_config_json=? WHERE id=?",
@@ -242,6 +244,7 @@ def reinterpret_preview(flow, conn, upload, actor):
             "changes": differences,
             "numeric_rule_version": numeric_version,
             "identity_rule_version": IDENTITY_VERSION,
+            "semantic_rule_version": SEMANTIC_VERSION,
             "standards_rule_version": standards_version,
             "structural_changes": structures,
             "structural_exceptions": structure_exceptions,

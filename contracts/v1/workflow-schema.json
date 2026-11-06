@@ -163,6 +163,13 @@
           "title": "Comment",
           "type": "string"
         },
+        "inherited_fields": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Inherited Fields",
+          "type": "object"
+        },
         "superseded_by": {
           "default": [],
           "items": {

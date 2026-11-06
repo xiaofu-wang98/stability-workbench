@@ -4,10 +4,8 @@ import re
 
 from .models import digest
 from .source_notes import review_text, informational_reference
+from .business_notes import BUSINESS, identifiers
 
-BUSINESS = re.compile(
-    r"\b(?:AR|AE)[-（(]|\bOOS\b|\bOOE\b|暂停|终止|停检|偏差|复测|更正|不汇报|未汇报|异常|未通过|报错|调查|改为", re.I
-)
 HELP = re.compile(r"^\s*(?:填表说明|填写说明|操作说明|软件帮助|系统提示|修改日志)[:：]")
 
 
@@ -63,7 +61,7 @@ def annotate(notes, preview, tasks):
                 if ids
                 else "需确认作用范围",
                 "pending": bool(positions & pending),
-                "identifiers": re.findall(r"(?:AR|AE)-[A-Za-z0-9-]+|OOS|OOE", note["text"], re.I),
+                "identifiers": identifiers(note['text']) or re.findall(r'\bOOS\b|\bOOE\b', note['text'], re.I),
             }
         )
     return sorted(

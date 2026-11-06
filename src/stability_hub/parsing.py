@@ -260,8 +260,10 @@ def parse_source(path: Path, *, allow_partial=False) -> ParsedDocument:
     else:
         raise UnsupportedFormat("Only .xlsx and .docx are supported")
     from .matrix_fields import IDENTITY_VERSION
+    from .normalize import SEMANTIC_VERSION
     from .standards import VERSION, expand
     parsed.observations = [r.model_copy(update={'source_value': {
-        **r.source_value, 'identity_rule_version': IDENTITY_VERSION, 'standards_rule_version': VERSION}}) for r in parsed.observations]
+        **r.source_value, 'identity_rule_version': IDENTITY_VERSION, 'semantic_rule_version': SEMANTIC_VERSION,
+        'standards_rule_version': VERSION}}) for r in parsed.observations]
     parsed.observations = [child for raw in parsed.observations for child in expand(raw)]
     return parsed

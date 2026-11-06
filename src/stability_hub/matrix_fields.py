@@ -1,14 +1,17 @@
 """Stable, reviewable interpretation of matrix source text; never invent a project item."""
 import re
 
-IDENTITY_VERSION = 'v54-identity-1'
+LEGACY_IDENTITY_VERSION = 'v54-identity-1'
+IDENTITY_VERSION = 'v020-identity-2'
+IDENTITY_VERSIONS = {LEGACY_IDENTITY_VERSION, IDENTITY_VERSION}
 
 
 def interpret_raw(raw, source=None):
     from .standards import select
     fields = select(raw, raw.fields if source is None else source)
     return interpret_matrix_fields(fields, raw.location.section,
-        reference_rules=raw.source_value.get('identity_rule_version') == IDENTITY_VERSION
+        reference_rules=raw.source_value.get('identity_rule_version') in IDENTITY_VERSIONS,
+        explicit_protocol=raw.source_value.get('identity_rule_version') == IDENTITY_VERSION,
     ) if raw.adapter == 'stability_matrix' else dict(fields)
 
 
@@ -223,7 +226,7 @@ def selected_condition(text):
     return ' · '.join(parts)
 
 
-def interpret_matrix_fields(source, section, *, reference_rules=True):
+def interpret_matrix_fields(source, section, *, reference_rules=True, explicit_protocol=True):
     """Raw fields remain exact source strings. This interpretation precedes human corrections."""
     fields = dict(source)
     title = source.get('study_title', '')
@@ -252,6 +255,12 @@ def interpret_matrix_fields(source, section, *, reference_rules=True):
     protocol = re.sub(r'\s+', '', source.get('study_id', '') or title)
     ids = re.findall(r'STB\([A-Za-z]+\)-[A-Za-z0-9.-]+', protocol)
     fields['study_id'] = ids[0].rstrip('）).') if len(set(ids)) == 1 else ''
+    if explicit_protocol and compact(source.get('study_id', '')):
+        # A value under an explicit protocol caption is an opaque identifier.
+        # Do not require a particular client's prefix or infer one from a title.
+        reported = [v.strip() for v in source['study_id'].splitlines() if v.strip()]
+        if len(set(reported)) == 1:
+            fields['study_id'] = reported[0]
     time = month_token(source.get('time_point', ''))
     if time is None and source.get('sample_info'):
         times = re.findall(r'(?<![\d.])(\d{1,3})\s*M\b', source['sample_info'], re.I)

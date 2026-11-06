@@ -1,8 +1,4 @@
 from fastapi.testclient import TestClient
-import importlib.util
-from pathlib import Path
-
-import pytest
 
 from stability_hub.api import create_app
 from stability_hub.models import ProjectConfig
@@ -16,7 +12,8 @@ def test_empty_dictionary_can_be_configured_without_fake_items_and_survives_rest
     actor = actor_for_role('tech', '实验员', Role.TECHNICIAN)
     app = create_app(store, [config], actor)
     with TestClient(app) as client:
-        assert client.get('/health').json()['version'] == '0.1.5'
+        from stability_hub import __version__
+        assert client.get('/health').json()['version'] == __version__
         assert client.get('/health').json()['delivery_state'] == 'release'
         assert client.get('/api/v1/runtime').json()['data_home'] == str(tmp_path.resolve())
         assert client.get('/api/v1/projects/IP166E/configuration').json()['config']['items'] == []

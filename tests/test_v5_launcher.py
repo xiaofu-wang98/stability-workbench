@@ -40,7 +40,8 @@ def test_launcher_allocates_real_isolated_port_and_identifies_preview(launcher):
                     break
                 except OSError:
                     time.sleep(.05)
-            assert health and health['delivery_state']=='release' and health['version']=='0.1.5'
+            from stability_hub import __version__
+            assert health and health['delivery_state']=='release' and health['version']==__version__
             with opener.open(f'http://127.0.0.1:{port}/api/v1/projects',timeout=2) as response:
                 assert json.load(response)==[]
             with opener.open(f'http://127.0.0.1:{port}/',timeout=2) as response:

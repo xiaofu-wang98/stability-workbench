@@ -280,6 +280,7 @@ def main():
             expect(page.locator('#v46ConfirmSheet')).to_be_disabled()
             # Dirty forms prevent switching sheet and do not save implicitly.
             first_cell().locator('[data-v5="edit"]').first.click()
+            page.locator('#v5ActiveForm [data-edit-advanced] summary').click()
             page.locator('#v5ActiveForm [name="batch"]').fill('UNSAVED')
             page.get_by_role('button',name='Hidden notes（原件隐藏）',exact=False).click()
             expect(page.locator('#v4LedgerReviewMessage')).to_contain_text('未保存修改')
@@ -296,6 +297,7 @@ def main():
             other=browser.new_page()
             other.goto(f'http://127.0.0.1:{ports[Role.TECHNICIAN]}/?mode=real&project=V5-UI&view=ledger&upload={region_upload}',wait_until='networkidle')
             first_cell(other).locator('[data-v5="edit"]').first.click()
+            other.locator('#v5ActiveForm [data-edit-advanced] summary').click()
             other.locator('#v5ActiveForm [name="batch"]').fill('BX2')
             other.locator('#v5ActiveForm [name="reason"]').fill('Synthetic concurrent single row correction')
             other.get_by_role('button',name='保存草稿决定',exact=True).click()
@@ -603,6 +605,7 @@ def main():
             page.locator('#v4LedgerSourceChoice').select_option(scoped_d)
             expect(page.locator('#v4LedgerInlineEditor .v52-heading')).to_contain_text('scope-d.xlsx',timeout=20000)
             first_cell().locator('[data-v5="edit"]').first.click()
+            page.locator('#v5ActiveForm [data-edit-advanced] summary').click()
             page.locator('#v5ActiveForm [name="batch"]').fill('UNSAVED-CROSS-PROJECT')
             page.locator('.v3-switch').click()
             page.locator('[data-open-project="V5-ALT"]').first.click()

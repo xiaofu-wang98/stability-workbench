@@ -3,7 +3,7 @@ import re
 import calendar
 from datetime import date, datetime
 
-from .matrix_fields import compact, item_text, method_text, month_token, purity_subresults
+from .matrix_fields import compact, item_text, month_token, purity_subresults
 from .models import Location, RawObservation
 from .normalize import is_not_reported
 from .merge_layout import MERGE_HAZARD, vertical_padding
@@ -298,35 +298,21 @@ def parse_matrix_sheet(sheet):
         if planned:
             blocks.append({'planning_date_row': next(iter(planned.values())).row,
                            'note': '计划日期辅助行已排除，不计入检测结果。', 'planning_notes': planning_notes})
-        from .source_notes import review_text
+        from .business_notes import is_business_note, note_scope
         notes = [c for (row, col), c in cells.items() if end_row < row < metadata_start and
-                 re.search(r'修改|更正|修订|调查|AE-|OOS|OOE|OOT|根据|检测组提供|发起|暂停|终止', review_text(text(c)), re.I)]
+                 is_business_note(text(c))]
         if notes:
+            scope = observations[block_start:]
+            lines_by_result = {i: [] for i in range(len(scope))}
+            for note in notes:
+                for line in text(note).splitlines():
+                    for i in note_scope(line, scope):
+                        lines_by_result[i].append((note, line.strip()))
             for index in range(block_start, len(observations)):
                 raw = observations[index]
-                relevant = []
-                matched_lines = []
-                identity = raw.fields.get('test_item', '') + ' ' + raw.fields.get('method', '')
-                for note in notes:
-                    cell_matched = []
-                    for line in text(note).splitlines():
-                        line_str = review_text(line)
-                        if not line_str:
-                            continue
-                        times = re.findall(r'(?<!\d)(\d+)\s*M(?![A-Za-z0-9])', line_str, re.I)
-                        if len(set(times)) >= 1 and month_token(raw.fields.get('time_point', '')) not in {int(t) for t in times}:
-                            continue
-                        tags = re.findall(r'渗透压|等电点|肽图|NRCE|RCE|CE-SDS|SEC|icIEF|CZE|DAR|游离|N糖|pH|蛋白|活性|内毒素|微粒|颜色|澄清度|外观', line_str, re.I)
-                        if tags and not any(tag.casefold() in identity.casefold() or
-                                (method_text(tag) and method_text(tag) == method_text(raw.fields.get('method', '') or raw.fields.get('test_item', ''), embedded=True)) for tag in tags):
-                            continue
-                        if '该检项' in line_str and '*' not in raw.fields.get('test_item', ''):
-                            continue
-                        cell_matched.append(line.strip())
-                    if cell_matched:
-                        relevant.append(note)
-                        if any(re.search(r'修改|更正|修订|调查|AE-|OOS|OOE|OOT|根据|报错|暂停|终止', ln, re.I) for ln in cell_matched):
-                            matched_lines.append(f"{note.coordinate}: {'；'.join(cell_matched)}")
+                matched = lines_by_result[index - block_start]
+                relevant = list(dict.fromkeys(c for c, line in matched))
+                matched_lines = [f'{c.coordinate}: {line}' for c, line in matched]
                 if not relevant:
                     continue
                 extra = {f'block_note_{n}': c for n, c in enumerate(relevant, 1)}

@@ -8,8 +8,14 @@ from .workflow_schema import STATEMENTS
 
 from .source_schema import SCHEMA as SOURCE_SCHEMA
 
-CURRENT_VERSION = 8
+CURRENT_VERSION = 9
 MIGRATIONS = {
+    9: (
+        'CREATE INDEX workflow_candidates_upload ON workflow_candidates(upload_id)',
+        'CREATE INDEX workflow_events_subject_action ON workflow_events(subject_id,action,sequence)',
+        'CREATE INDEX workflow_events_project_action ON workflow_events(project,action,sequence)',
+        "INSERT INTO schema_migrations(version,description) VALUES (9,'Scoped candidate and event query indexes')",
+    ),
     8: (
         '''CREATE TABLE workflow_identity_adoptions (
             project TEXT NOT NULL REFERENCES workflow_projects(project),

@@ -124,6 +124,7 @@ class CandidateMapping(Model):
 
 
 class CandidateView(Candidate):
+    inherited_fields: dict[str, str] = Field(default_factory=dict)
     superseded_by: tuple[str, ...] = ()
     result_anchor: dict = Field(default_factory=dict)
     mapping_source: dict[str,str] = Field(default_factory=dict)

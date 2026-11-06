@@ -217,7 +217,8 @@ class Workflow:
                     raws[row['id']] = raw.model_copy(update={'revisions': current.revisions, 'evidence': current.evidence})
         from .numeric_formats import VERSION as numeric_version
         upgrade=conn.execute("SELECT detail_json FROM workflow_events WHERE subject_id=? AND action='reinterpret_draft' ORDER BY sequence DESC LIMIT 1",(upload['id'],)).fetchone()
-        from .matrix_fields import IDENTITY_VERSION
+        from .matrix_fields import IDENTITY_VERSIONS
+        from .normalize import SEMANTIC_VERSION
         versions = json.loads(upgrade[0]) if upgrade else {}
         from .standards import VERSION as standards_version, LEGACY_VERSION as standards_legacy
         physical = None
@@ -227,8 +228,10 @@ class Workflow:
                 metadata = dict(raw.source_value)
                 if versions.get('numeric_rule_version') == numeric_version:
                     metadata['rule_version'] = numeric_version
-                if versions.get('identity_rule_version') == IDENTITY_VERSION:
-                    metadata['identity_rule_version'] = IDENTITY_VERSION
+                if versions.get('identity_rule_version') in IDENTITY_VERSIONS:
+                    metadata['identity_rule_version'] = versions['identity_rule_version']
+                if versions.get('semantic_rule_version') == SEMANTIC_VERSION:
+                    metadata['semantic_rule_version'] = SEMANTIC_VERSION
                 if versions.get('standards_rule_version') in {standards_version,standards_legacy}:
                     target_standard=versions['standards_rule_version']
                     if metadata.get('standards_rule_version') != target_standard and raw.location.format == 'xlsx':
@@ -503,6 +506,8 @@ class Workflow:
                     and not context.defaults.get("presentation", "").strip()
                     and sample_type in config.presentation_defaults):
                 applied_defaults["presentation"] = config.presentation_defaults[sample_type]
+            inherited_fields = {k: v for k, v in context.defaults.items()
+                                if not fields.get(k, '').strip() and k not in corrections}
             from .ledger_review import LedgerReview
             if projection_hit and len(projection)>3:
                 attribution_problem = NeedsReview(*projection[3]) if projection[3] is not None else None
@@ -544,7 +549,8 @@ class Workflow:
                 test_date=corrections.get("test_date", raw.fields.get("test_date")) or None,
                 evidence=raw.evidence,
                 interpreted_fields=fields,
-                corrections=corrections, applied_defaults=applied_defaults, allowed_actions=tuple(actions),
+                corrections=corrections, applied_defaults=applied_defaults,
+                inherited_fields=inherited_fields, allowed_actions=tuple(actions),
             ))
         for indices in slots.values():
             if len(indices) > 1:

@@ -8,7 +8,17 @@ from .migrations import migrate
 
 class SnapshotConnection(sqlite3.Connection):
     """Publish derived read state only after the transaction has committed."""
-    pass
+
+    def execute(self, sql, parameters=()):
+        # total_changes is monotonic even across ROLLBACK TO. An undo set built
+        # inside a rolled-back savepoint cannot represent the restored state.
+        if sql.lstrip().upper().startswith(('ROLLBACK', 'BEGIN', 'COMMIT')):
+            getattr(self, 'undo_sets', {}).clear()
+        return super().execute(sql, parameters)
+
+    def rollback(self):
+        getattr(self, 'undo_sets', {}).clear()
+        return super().rollback()
 
 
 class Store:
@@ -24,7 +34,8 @@ class Store:
     @contextmanager
     def read(self):
         """A SQLite-enforced read-only snapshot; never migrates or commits writes."""
-        conn = sqlite3.connect(self.db.as_uri() + '?mode=ro', uri=True, timeout=10)
+        conn = sqlite3.connect(self.db.as_uri() + '?mode=ro', uri=True, timeout=10, factory=SnapshotConnection)
+        conn.undo_sets = {}
         conn.row_factory = sqlite3.Row
         try:
             conn.execute('BEGIN')
@@ -37,6 +48,7 @@ class Store:
         conn = sqlite3.connect(self.db, timeout=10, factory=SnapshotConnection)
         conn.after_commit = []
         conn.review_states = {}
+        conn.undo_sets = {}
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys=ON")
         try:

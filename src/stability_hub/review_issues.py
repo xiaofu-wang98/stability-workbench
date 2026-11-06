@@ -138,10 +138,28 @@ def source_issues(candidate_id,raw):
     return tuple(issues)
 
 
+def undone_batches(conn, candidate_id):
+    """Read the project's undo set once per transaction state, including inherited decisions."""
+    project = conn.execute('SELECT project FROM workflow_candidates WHERE id=?', (candidate_id,)).fetchone()
+    if project is None:
+        return set()
+    cache = getattr(conn, 'undo_sets', None)
+    key = (project[0], conn.total_changes)
+    if cache is not None and key in cache:
+        return cache[key]
+    result = frozenset(json.loads(r[0])['batch_id'] for r in conn.execute(
+        "SELECT detail_json FROM workflow_events WHERE project=? AND action='undo_review_batch'", (project[0],)))
+    if cache is not None:
+        if len(cache) > 8:
+            cache.clear()
+        cache[key] = result
+    return result
+
+
 def effective_source_decisions(conn,candidate_id):
     """Replay and immutable export snapshots use the same active audit decisions."""
     restored = conn.execute("SELECT COALESCE(MAX(sequence),0) FROM workflow_events WHERE subject_id=? AND action='restore_draft'",(candidate_id,)).fetchone()[0]
-    undone = {json.loads(r[0])['batch_id'] for r in conn.execute("SELECT detail_json FROM workflow_events WHERE action='undo_review_batch'")}
+    undone = undone_batches(conn, candidate_id)
     return [d for row in conn.execute(
         "SELECT detail_json FROM workflow_events WHERE subject_id=? AND action IN ('resolve_issue','resolve_structure','inherit_source_decision') AND sequence>? ORDER BY sequence",(candidate_id,restored))
         if (d:=json.loads(row[0])).get('batch_id') not in undone]
@@ -156,7 +174,7 @@ def resolved_raw(conn,candidate_id,raw,decisions=None,corrections=None):
     # V5.1 whole-bundle decisions replay only their original frozen bundle.
     legacy_evidence=tuple(sorted(set([raw.location,*raw.evidence.values()]),key=lambda e:(e.format,e.section,e.row,e.column)))
     legacy_id=digest([candidate_id,'source_revision',json.dumps(raw.revisions,ensure_ascii=False,sort_keys=True),[e.model_dump() for e in legacy_evidence]])
-    undone={json.loads(r[0])['batch_id'] for r in conn.execute("SELECT detail_json FROM workflow_events WHERE action='undo_review_batch'")} if conn is not None else set()
+    undone=undone_batches(conn, candidate_id) if conn is not None else set()
     decisions=[d for d in decisions if d.get('batch_id') not in undone]
     legacy_comment=digest([candidate_id,'source_comment',raw.comment,[e.model_dump() for e in legacy_evidence]])
     # Replay exact historical structure decisions without rewriting their events.

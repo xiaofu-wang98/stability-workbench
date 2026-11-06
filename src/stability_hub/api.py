@@ -63,7 +63,7 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
 
     @app.get('/health', include_in_schema=False)
     def health():
-        return {'application': 'stability-data-hub', 'version': __version__, 'build': '0.1.5-release-20261105',
+        return {'application': 'stability-data-hub', 'version': __version__, 'build': '0.2.0-release-20261106',
                 'delivery_state':'release'}
 
     @app.get('/favicon.ico', include_in_schema=False)

@@ -5,7 +5,12 @@ from decimal import Decimal
 
 from openpyxl.styles.numbers import is_date_format
 
-from .normalize import NUMBER, NeedsReview, normalize_result
+from .normalize import NUMBER, NeedsReview, normalize_result as _normalize_result, SEMANTIC_VERSION
+
+
+def normalize_for_source(raw, text, unit, result_type):
+    return _normalize_result(text, unit, result_type,
+        legacy_reporting=raw.source_value.get('semantic_rule_version') != SEMANTIC_VERSION)
 
 VERSION = "excel-number-2"
 LEGACY_VERSION = "excel-number-1"
@@ -45,7 +50,7 @@ def legacy_interpret_result(raw, text, unit, result_type):
     if stripped.endswith(("%", "％")) and NUMBER.fullmatch(stripped[:-1].strip()):
         if unit not in {"", "%", "％"}:
             raise NeedsReview("numeric_format", "百分号文字与单位冲突，请明确填写解释值及单位。")
-        result = normalize_result(stripped[:-1].strip(), "%", result_type)
+        result = normalize_for_source(raw, stripped[:-1].strip(), "%", result_type)
         return result.model_copy(
             update={"raw_text": text, "interpretation": {**basis, "rule": "text_percent"}}
         )
@@ -59,7 +64,7 @@ def legacy_interpret_result(raw, text, unit, result_type):
             decimals = len(fmt.split(".")[1].rstrip("%")) if "." in fmt else 0
             shown = f"{value:.{decimals}f}%"
             # Stored analytical value retains precision; display rounding never edits it.
-            result = normalize_result(str(value), "%", result_type)
+            result = normalize_for_source(raw, str(value), "%", result_type)
             return result.model_copy(
                 update={
                     "raw_text": text,
@@ -75,7 +80,7 @@ def legacy_interpret_result(raw, text, unit, result_type):
             raise NeedsReview(
                 "numeric_format", "未支持的Excel数字格式（缩放/自定义），请明确解释值及单位：" + fmt
             )
-    result = normalize_result(text, unit, result_type)
+    result = normalize_for_source(raw, text, unit, result_type)
     return result.model_copy(update={"interpretation": basis})
 
 
@@ -94,7 +99,7 @@ def interpret_result(raw, text, unit, result_type):
     if stripped.endswith(("%", "％")) and NUMBER.fullmatch(stripped[:-1].strip()):
         if unit not in {"", "%", "％"}:
             raise NeedsReview("numeric_format", "百分号文字与单位冲突，请明确解释值及单位。")
-        result = normalize_result(stripped[:-1].strip(), "%", result_type)
+        result = normalize_for_source(raw, stripped[:-1].strip(), "%", result_type)
         return result.model_copy(
             update={"raw_text": text, "interpretation": {**basis, "rule": "text_percent"}}
         )
@@ -113,8 +118,8 @@ def interpret_result(raw, text, unit, result_type):
             raise NeedsReview(
                 "numeric_format", f"Excel显示 {shown}，系统读取 {stripped}；百分比与检测单位冲突。"
             )
-        result = normalize_result(
-            str(Decimal(stripped) * factor), "%" if factor == 100 else unit, result_type
+        result = normalize_for_source(
+            raw, str(Decimal(stripped) * factor), "%" if factor == 100 else unit, result_type
         )
         return result.model_copy(
             update={
@@ -122,5 +127,5 @@ def interpret_result(raw, text, unit, result_type):
                 "interpretation": {**basis, "rule": rule, "display_text": shown, "factor": str(factor)},
             }
         )
-    result = normalize_result(text, unit, result_type)
+    result = normalize_for_source(raw, text, unit, result_type)
     return result.model_copy(update={"interpretation": basis})
