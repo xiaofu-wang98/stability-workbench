@@ -47,8 +47,8 @@ def test_shared_statement_expands_all_rows_and_exports_without_numeric_value(tmp
     flow.configure(ProjectConfig(project='P'))
     tech = actor_for_role('tech', '实验员', Role.TECHNICIAN)
     preview = flow.upload('P', path.name, data, ImportContext(), 'upload', actor=tech)
-    # V5 requires a scoped human decision for ambiguous unnamed subrows; the
-    # synthetic operator keeps the source's combined non-reporting statement.
+    # Name questions need an explicit identity, not a generic keep-body decision.
+    # Each logical row still keeps the source's combined non-reporting statement.
     from stability_hub.review_issues import resolve_issue
     from stability_hub.v5_contracts import IssueDecision,RegionDecision
     from stability_hub.worksheet_regions import coverage,classify
@@ -56,9 +56,11 @@ def test_shared_statement_expands_all_rows_and_exports_without_numeric_value(tmp
         for issue in c.issues:
             current = flow.preview(preview.preview_id,actor=tech)
             row = next(x for x in current.candidates if x.id == c.id)
+            naming = bool(issue.proposal.get('guidance'))
             resolve_issue(flow,preview.preview_id,IssueDecision(base_revision=current.base_revision,idempotency_key='review-'+issue.id,
                 reason='synthetic human retains source combined non-reporting statement',candidate_id=c.id,
-                candidate_revision=row.candidate_revision,issue_id=issue.id,action='keep_body'),actor=tech)
+                candidate_revision=row.candidate_revision,issue_id=issue.id,action='manual' if naming else 'keep_body',
+                fields={'test_item': f'Electrophoresis · fraction {row.logical_row}'} if naming else {}),actor=tech)
     preview = flow.preview(preview.preview_id,actor=tech)
     assert all(c.status == 'new' for c in preview.candidates)
     assert len({c.record.key.slot_id for c in preview.candidates}) == 3

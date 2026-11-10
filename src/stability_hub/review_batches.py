@@ -218,6 +218,15 @@ def preview_batch(flow, conn, upload_id, scope, actor):
                     for cid in sorted(applied_ids, key=lambda cid: (
                         candidates[cid].location.section, candidates[cid].location.row, candidates[cid].location.column))
                 ] if operation == 'keep_single' else [],
+                "review_results": [
+                    {'candidate_id': cid, 'location': candidates[cid].location.model_dump(mode='json'),
+                     'logical_row': candidates[cid].logical_row,
+                     'original_result': candidates[cid].raw_fields.get('result', ''),
+                     'current_result': candidates[cid].corrections.get('result', candidates[cid].interpreted_fields.get('result', candidates[cid].raw_fields.get('result', ''))),
+                     'time_point': candidates[cid].interpreted_fields.get('time_point', candidates[cid].raw_fields.get('time_point', '')),
+                     'result_changed': 'result' in fields}
+                    for cid in sorted(applied_ids)
+                ] if task.proposal.get('guidance') or task.code in {'identity_conflict', 'method_conflict'} else [],
             }
         )
     for change in changes:

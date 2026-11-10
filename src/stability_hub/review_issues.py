@@ -111,8 +111,12 @@ def source_issues(candidate_id,raw):
     for hint in raw.system_hints:
         if conflict and any(text in hint['text'] for text in ('子结果标注包含多个含义', '多行子结果未提供可区分的名称')):
             continue  # Replaced by the explicit unresolved identity, including old frozen drafts.
-        add('source_comment',hint['text'],('result','test_item','method'),('keep_body','manual','exclude'),
-            origin=Location.model_validate(hint['source']),origin_kind='system_hint')
+        from .review_guidance import hint_guidance
+        guide = hint_guidance(hint)
+        add('source_comment',hint['text'],tuple(guide['required_fields']) if guide else ('result','test_item','method'),
+            ('manual','exclude') if guide else ('keep_body','manual','exclude'),
+            origin=Location.model_validate(hint['source']),origin_kind='system_hint',
+            proposal={'guidance': guide} if guide else None)
     from .matrix_fields import method_conflict
     conflict_method = method_conflict(raw.fields.get('method', ''))
     if conflict_method:
@@ -186,10 +190,15 @@ def resolved_raw(conn,candidate_id,raw,decisions=None,corrections=None):
         if d['issue_id'] in legacy_structures:
             resolved[legacy_structures[d['issue_id']]] = d
         if d['issue_id']==legacy_comment:
-            resolved.update({i.id:d for i in original_issues.values() if i.code=='source_comment'})
+            resolved.update({i.id:d for i in original_issues.values() if i.code=='source_comment' and not i.proposal.get('guidance')})
         if d['issue_id']==legacy_id:
             resolved.update({i.id:d for i in original_issues.values() if i.code=='source_revision'})
         if d['issue_id'] in original_issues:
+            if original_issues[d['issue_id']].proposal.get('guidance'):
+                try:
+                    validate_selection(original_issues[d['issue_id']], d['action'], d.get('fields', {}))
+                except WorkflowError:
+                    continue  # Old result-only decisions do not answer a name question.
             resolved[d['issue_id']] = d
     updates = {}
     for iid in resolved:
@@ -248,6 +257,13 @@ def validate_selection(issue,action,fields):
         raise WorkflowError('issue_scope', '排版核对仅解除本处结构问题，不接受字段改值。')
     if action=='manual' and not fields:
         raise WorkflowError('missing_fields','人工解释须填写明确字段。')
+    guide = issue.proposal.get('guidance', {})
+    if action == 'manual' and guide:
+        if any(not fields.get(k, '').strip() for k in guide['required_fields']):
+            raise WorkflowError('missing_fields', '请明确当前问题所需的分项名称，结果和方法无需重填。')
+        from .review_guidance import valid_item_name
+        if 'test_item' in guide['required_fields'] and not valid_item_name(fields['test_item']):
+            raise WorkflowError('identity_unresolved', '请填写具体检测分项；“报告数据”或“未命名”不能作为分项名称。')
     if issue.code == 'identity_conflict' and (action != 'manual' or not fields.get('test_item', '').strip()):
         raise WorkflowError('identity_unresolved', '必须明确子结果身份；保留原文不能解除中英文冲突。')
     if issue.code == 'identity_conflict' and fields.get('test_item', '').strip() == issue.proposal.get('unresolved_identity', '').strip():

@@ -47,7 +47,7 @@ def project_tasks(preview, flights, sheets):
                 any(i.code == "source_comment" for i in candidates[m["candidate_id"]].issues) for m in members
             ):
                 exception = "该结果同时有未核对批注，请先明确批注与新值的关系"
-        elif proposal:
+        elif proposal and 'guidance' not in proposal:
             exception = proposal.get("reason")
         batch_key = digest(
             [
@@ -282,6 +282,8 @@ def project_tasks(preview, flights, sheets):
                         "blockers": tuple(dict.fromkeys((*task.blockers, flight.section + "|" + blocker)))
                     }
                 )
+    from .review_guidance import guide_tasks
+    guide_tasks(tasks, candidates)
     return list(tasks.values()), blocker_tasks
 
 

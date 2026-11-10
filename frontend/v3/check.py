@@ -97,10 +97,12 @@ with sync_playwright() as p:
         let node=document.getElementById('v5Form')||document.createElement('div');
         node.id='v5Form';document.body.append(node);
         const ui=v5Review; ui.busy=false;ui.sheet='Synthetic';
-        ui.preview={candidates:[{id:'synthetic',location:{row:2,column:4},
+        ui.matrix={sheets:[{name:'Synthetic',cells:[{row:2,column:3,text:'还原型CE-SDS法(NR CE-SDS Method)'}]}]};
+        ui.preview={candidates:[{id:'synthetic',location:{section:'Synthetic',row:2,column:4},
             raw_fields:{test_item:'Synthetic assay',time_point:'0M',result:'2.7'},
             interpreted_fields:{time_point:'0M',result:'2.7'},corrections:{}}]};
         window.conflictTask={id:'method-task',fields:['method'],members:[{candidate_id:'synthetic'}],
+            evidence:[{section:'Synthetic',row:2,column:3}],
             detail:'Synthetic opposing labels',proposal:{identity_options:{chinese:'R CE-SDS',english:'NR CE-SDS'}}};
         ui.previewScope=(scope)=>{window.capturedConflictScope=scope;};
         ui.identityConflict(window.conflictTask);
@@ -117,6 +119,36 @@ with sync_playwright() as p:
     conflict.locator('.btn-primary').click()
     assert page.evaluate('window.capturedConflictScope') == {
         'section':'Synthetic','task_ids':['method-task'],'operation':'manual','fields':{'method':'NR CE-SDS'}}
+    # The name question must not offer a result field or preselect a business answer.
+    page.evaluate("""() => {
+        const ui=v5Review;ui.dirty=false;
+        ui.preview.candidates[0].raw_fields.result='不进行汇报结果，详见：AR-C-NEW-2026999';
+        ui.preview.candidates[0].interpreted_fields.result=ui.preview.candidates[0].raw_fields.result;
+        window.nameTask={id:'name-task',code:'source_comment',fields:['test_item'],
+            evidence:[{section:'Synthetic',row:2,column:3}],members:[{candidate_id:'synthetic'}],
+            proposal:{guidance:{kind:'missing_subresult',title:'明确本行的检测分项',
+                question:'请明确分项名称',required_fields:['test_item'],name_options:[{
+                    value:'Synthetic assay · fraction',evidence:[]}]}},detail:'Name missing'};
+        ui.focusedQuestion(window.nameTask);
+    }""")
+    naming=page.locator('#v5ActiveForm')
+    expect(naming.locator('[name="result"]')).to_have_count(0)
+    expect(naming.locator('[name="method"]')).to_have_count(0)
+    expect(naming.locator('[name="test_item"]')).to_have_value('')
+    expect(naming.locator('.v020-review-context')).to_contain_text('AR-C-NEW-2026999')
+    expect(naming.locator('.btn-primary')).to_be_disabled()
+    naming.locator('[data-name-option="0"]').click()
+    expect(naming.locator('[name="test_item"]')).to_have_value('Synthetic assay · fraction')
+    for width,height in [(390,844),(1440,1000)]:
+        page.set_viewport_size({'width':width,'height':height})
+        rect=naming.locator('.btn-primary').bounding_box()
+        assert rect and 0 <= rect['y'] and rect['y']+rect['height'] <= height
+        assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
+        page.screenshot(path=str(out/f'07-name-question-{width}.png'))
+    naming.locator('.btn-primary').click()
+    assert page.evaluate('window.capturedConflictScope') == {
+        'section':'Synthetic','task_ids':['name-task'],'operation':'manual',
+        'fields':{'test_item':'Synthetic assay · fraction'}}
     assert not errors,errors
     # Pin the accepted 215ae6d template, ignoring checkout line endings and trailing whitespace.
     assert hashlib.sha256(('\n'.join(line.rstrip() for line in (root/'frontend/v3/template.html').read_text(encoding='utf-8').splitlines()).rstrip()+'\n').encode('utf-8')).hexdigest()=='b39c6ad73c266701e27d06733e718f20e95de5b40ce3dc7e77d08bdbe85a8569'

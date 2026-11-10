@@ -27,7 +27,7 @@ const fieldDescriptions={
 };
 
 const ui=g.v5Review={esc,names,actions,api,colName,dirty:false,pending:new Map(),serial:0,
- issueName(i){if(i.source_kind==='system_hint')return '系统解释提示';return ({identity_ambiguity:'规格或方法需明确',source_comment:'原文说明需核对',source_revision:'原文删改需解释',formula_result:'公式结果需核对',numeric_format:'数值格式需明确',structure:'归属或结构需明确'})[i.code]||'来源问题';},
+ issueName(i){if(i.proposal?.guidance)return i.proposal.guidance.title;if(i.code==='identity_conflict')return '明确中英文分项含义';if(i.code==='method_conflict')return '明确中英文方法含义';if(i.source_kind==='system_hint')return '系统解释提示';return ({identity_ambiguity:'规格或方法需明确',source_comment:'原文说明需核对',source_revision:'原文删改需解释',formula_result:'公式结果需核对',numeric_format:'数值格式需明确',structure:'归属或结构需明确'})[i.code]||'来源问题';},
  root(){return `/previews/${this.upload}/v5`;},
  command(value,reason='人工核对来源'){return {base_revision:this.preview.base_revision,idempotency_key:'v5-'+crypto.randomUUID(),...value,reason:value.reason?.trim()||reason?.trim()||'核对原表后修正来源解释'};},
   fields(keys,values={},disabled=false,forExport=false){return keys.map(k=>{

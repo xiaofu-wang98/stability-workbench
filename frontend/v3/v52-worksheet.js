@@ -2,6 +2,7 @@
 (function(g){
 'use strict';
 const ui=g.v5Review,esc=ui.esc,api=ui.api;
+const originalIssue=ui.issue;
 const labels={method_conflict:'中英文方法冲突',identity_conflict:'中英文子结果冲突',row_exclusion:'整行不采用',source_revision:'来源删改',identity_ambiguity:'名称 / 规格',source_comment:'来源批注',identity:'身份 / 子结果',collision:'身份重复',region:'来源区域',history:'历史处置',approval:'等待批准',formula_result:'结果公式',numeric_format:'数值解释',structure:'来源结构',receipt:'接收来源',unresolved:'需重新核对'};
 const states={needs_review:'待判断',needs_approval:'等待批准',ready:'可确认入库',committed:'已入库',historical_partial:'待判断'};
 Object.assign(ui,{
@@ -89,6 +90,7 @@ Object.assign(ui,{
  },
  toggleDirectory(){this.directoryClosed=!this.directoryClosed;document.getElementById('v52Workspace')?.classList.toggle('directory-closed',this.directoryClosed);},
  taskTitle(t){
+  if(t.proposal?.guidance)return t.proposal.guidance.title;
   return ({
     row_exclusion: t.proposal.rows ? '原表已整项划线，建议确认排除' : ('第 ' + t.proposal.row + ' 行原表已划线，建议确认排除'),
     identity: '核对 ' + (t.fields?.length ? t.fields.map(f => this.names[f] || f).join(' / ') : '基础信息'),
@@ -140,7 +142,7 @@ Object.assign(ui,{
   }
   return info;
  },
- async previewScope(scope,title,requireReason=false){
+ async previewScope(scope,title,requireReason=false,questionReason=''){
   if(!this.leave())return;
   const requestKey=JSON.stringify([this.upload,scope]);if(this.preparingScope?.key===requestKey&&this.preparingScope.context===this.previewContext())return;
   this.captureSourceView();
@@ -153,7 +155,12 @@ Object.assign(ui,{
     requireReason ||= scope.operation==='exclude_selected';
     const excluding=info.changes.length&&info.changes.every(c=>c.operation==='exclude');
     const defaultReason=requireReason?'':excluding?info.changes.map(c=>c.explanation).filter(Boolean).join('；'):'核对原表建议、范围和例外后保存草稿';
-    const form=this.form(title,`${this.scopeMarkup(info)}<p>${esc(info.notice||'')}</p>`,defaultReason);
+    const form=this.form(title,`${this.scopeMarkup(info)}<p>${esc(info.notice||'')}</p>`,questionReason||defaultReason);
+    const questionTask=scope.task_ids?.length===1?this.matrix.worksheet_review.tasks.find(t=>t.id===scope.task_ids[0]):null;
+    if(scope.operation==='manual'&&questionTask&&(questionTask.proposal.guidance||['identity_conflict','method_conflict'].includes(questionTask.code))){
+     this.prepareFocusedForm(form);const back=document.createElement('button');back.type='button';back.className='btn btn-outline';back.textContent='返回修改';form.querySelector('.btn-primary').after(back);
+     back.onclick=()=>{const reason=form.elements.reason.value;this.cancel();if(questionTask.proposal.guidance)this.focusedQuestion(questionTask,scope.fields,reason);else this.identityConflict(questionTask,scope.fields[questionTask.fields[0]],reason);};
+    }
     const readyContext=this.previewContext();
     form.querySelector('.btn-primary').textContent=excluding?'确认排除此范围':info.changes.every(c=>c.operation==='keep_single')?'确认沿用各时间点结果':'确认采纳并应用';
     form.elements.reason.required=requireReason;
@@ -169,7 +176,7 @@ Object.assign(ui,{
   }
   const operation={keep_active:'采纳有效值',manual:'人工明确解释',exclude:'排除不入库',classify:'区域分类',keep_body:'保留当前正文及数值',keep_single:'核对排版，沿用每处现有一条结果'};
   const revision=(c)=>Object.entries(c.source_revisions||{}).map(([field,r])=>`<p>${esc(this.names[field]||field)}原表：${(r.segments||[]).map(s=>s.struck?'<del>'+esc(s.text)+'</del>':esc(s.text)).join('')}<br>已划掉：${esc((r.segments||[]).filter(s=>s.struck).map(s=>s.text).join(''))}；保留：${esc(r.active_text||'（空）')}</p>`).join('');
-  return `<div class="v52-preview-table"><table class="v55-action-diff-table"><thead><tr><th>来源位置 / 动作</th><th>原表证据 / 当前值</th><th>本次拟保存</th></tr></thead><tbody>${info.changes.map(c=>`<tr><td>${c.evidence.map(e=>esc(e.section)+'!'+this.colName(e.column)+e.row).join('、')}<br>${operation[c.operation]}</td><td>${revision(c)}${c.retained_results?.length?`<ul>${c.retained_results.map(r=>`<li>${this.colName(r.location.column)}${r.location.row} · ${esc(r.fields.time_point)} · 沿用值 ${esc(r.display_result||r.fields.result)} ${esc(r.display_unit||r.fields.unit)} · ${esc(r.fields.test_item)}</li>`).join('')}</ul>`:''}${Object.entries(c.fields).map(([k,v])=>'<strong>'+esc(this.names[k]||k)+'</strong>：'+esc(v.before??'（空）')).join('<br>')||esc(c.explanation)}</td><td>${Object.entries(c.fields).map(([k,v])=>'<strong>'+esc(this.names[k]||k)+'</strong>：<span class="v55-diff-after">'+esc(v.after??'（空）')+'</span>').join('<br>')||operation[c.operation]}${c.explanation?'<p>'+esc(c.explanation)+'</p>':''}</td></tr>`).join('')}</tbody></table></div>${info.exceptions.map(e=>`<p role="alert">例外保留：${esc(e.section)} ${esc((e.evidence||[]).map(l=>this.colName(l.column)+l.row).join('、'))} · ${esc(e.reason)}</p>`).join('')}<p>涉及 ${info.summary.tasks} 处来源决定，影响 ${info.summary.results} 个关联结果。</p>`;
+  return `<div class="v52-preview-table"><table class="v55-action-diff-table"><thead><tr><th>来源位置 / 动作</th><th>原表证据 / 当前值</th><th>本次拟保存</th></tr></thead><tbody>${info.changes.map(c=>`<tr><td>${c.evidence.map(e=>esc(e.section)+'!'+this.colName(e.column)+e.row).join('、')}<br>${operation[c.operation]}</td><td>${revision(c)}${c.retained_results?.length?`<ul>${c.retained_results.map(r=>`<li>${this.colName(r.location.column)}${r.location.row} · ${esc(r.fields.time_point)} · 沿用值 ${esc(r.display_result||r.fields.result)} ${esc(r.display_unit||r.fields.unit)} · ${esc(r.fields.test_item)}</li>`).join('')}</ul>`:''}${(c.review_results||[]).length?`<details open><summary>关联结果与时间点（${c.review_results.length} 条）</summary>${c.review_results.map(r=>`<p>${this.colName(r.location.column)}${r.location.row} · 原表第 ${r.logical_row||r.location.row} 行 · ${esc(r.time_point)}<br>原始结果：${esc(r.original_result)}<br>${r.result_changed?'本次另行明确结果':'结果保持'}：${esc(r.current_result)}</p>`).join('')}</details>`:''}${Object.entries(c.fields).map(([k,v])=>'<strong>'+esc(this.names[k]||k)+'</strong>：'+esc(v.before??'（空）')).join('<br>')||esc(c.explanation)}</td><td>${Object.entries(c.fields).map(([k,v])=>'<strong>'+esc(this.names[k]||k)+'</strong>：<span class="v55-diff-after">'+esc(v.after??'（空）')+'</span>').join('<br>')||operation[c.operation]}${c.explanation?'<p>'+esc(c.explanation)+'</p>':''}</td></tr>`).join('')}</tbody></table></div>${info.exceptions.map(e=>`<p role="alert">例外保留：${esc(e.section)} ${esc((e.evidence||[]).map(l=>this.colName(l.column)+l.row).join('、'))} · ${esc(e.reason)}</p>`).join('')}<p>涉及 ${info.summary.tasks} 处来源决定，影响 ${info.summary.results} 个关联结果。</p>`;
  },
  notesMarkup(){const notes=(this.matrix.worksheet_review.notes||[]).filter(n=>n.section===this.sheet);if(!notes.length)return '';return `<details class="v53-notes"><summary>本表重要备注${notes.length>4?'，还有 '+(notes.length-4)+' 条':''} · 展开完整原文与范围</summary>${notes.map(n=>`<p>${esc(n.text)}<button type="button" data-v5="locateNote" data-id="${esc(n.id)}">${n.pending?'定位待处理来源':'定位原文'}</button><small>${esc(n.evidence.map(e=>this.colName(e.column)+e.row).join('、'))} · ${esc(n.scope)}</small></p>`).join('')}</details><div class="v53-note-lines">${notes.slice(0,4).map(n=>`<div title="${esc(n.text)}">${esc(n.evidence.map(e=>this.colName(e.column)+e.row).join('、'))} · ${esc(n.text.replace(/\s+/g,' '))}</div>`).join('')}</div>`;},
  locateNote(id){const n=this.matrix.worksheet_review.notes.find(n=>n.id===id);if(n)this.locateTask({evidence:n.evidence});},
@@ -279,6 +286,7 @@ Object.assign(ui,{
   }
   if(t.code==='structure')return this.structure(member.candidate_id);
   if(['identity_conflict','method_conflict'].includes(t.code))return this.identityConflict(t);
+  if(t.proposal?.guidance||['identity_ambiguity','numeric_format','formula_result'].includes(t.code))return this.focusedQuestion(t);
   const proposal=t.proposal||{};
   const form=this.form(t.proposal?.source_kind==='system_hint'?'系统解释提示':labels[t.code]||'来源核对',`<p>源格 ${t.evidence.map(e=>esc(e.section)+'!'+this.colName(e.column)+e.row).join('、')} · 关联 ${t.members.length} 个结果</p>${proposal.field?`<p>${esc(this.names[proposal.field]||proposal.field)}原文：${esc(proposal.before)}</p><p>建议：${esc(proposal.after||'未注明')} · ${esc(proposal.reason)}</p>`:`<p>${esc(t.detail)}</p>`}<button type="button" id="v52ThisType">预览本表同类处理</button>${t.exception?`<p role="alert">例外：${esc(t.exception)}</p>`:''}<details open><summary>请明确当前争议字段</summary><div class="v5-fields">${this.fields(t.fields,c?.corrections||{})}</div></details>`);
   document.getElementById('v52ThisType').onclick=()=>{this.cancel();this.batchTasks(id);};
@@ -293,17 +301,49 @@ Object.assign(ui,{
   form.addEventListener('input',()=>{generation++;document.getElementById('v5ApplyScope')?.setAttribute('disabled','');});form.addEventListener('change',()=>{generation++;document.getElementById('v5ApplyScope')?.setAttribute('disabled','');});
   form.onsubmit=async e=>{e.preventDefault();if(form.dataset.loading)return;form.dataset.loading='1';const request=++generation;const submit=form.querySelector('.btn-primary');submit.disabled=true;this.localMessage('正在准备明确范围的预览…');try{const sample=all.find(t=>t.batch_key===form.elements.kind.value),sections=[this.sheet,...(form.elements.extend.checked?[...form.querySelectorAll('[name="sheet"]:checked')].map(n=>n.value):[])];const scope={section:this.sheet,include_sections:sections.slice(1),task_ids:[...form.querySelectorAll('[name="source"]:checked')].map(n=>n.value).filter(id=>sections.includes(all.find(t=>t.id===id).section)),operation:form.elements.operation.value,fields:form.elements.operation.value==='manual'?Object.fromEntries(sample.fields.filter(k=>String(form.elements[k]?.value||'').trim()).map(k=>[k,form.elements[k].value])):{},exclude_candidate_ids:[...form.querySelectorAll('[name="except"]:checked')].map(n=>n.value)};const info=await api(this.root()+'/tasks/preview',scope),s=info.summary;if(!form.isConnected||request!==generation||origin!==[this.upload,this.sheet,this.serial].join('|'))return;this.localMessage('预览已准备，请核对各处自己的值与例外。');document.getElementById('v5ScopePreview').innerHTML=this.scopeMarkup(info)+`<p>${esc(info.notice)}</p><button type="button" class="btn btn-primary" id="v5ApplyScope" ${s.tasks?'':'disabled'}>确认此范围并保存草稿</button>`;document.getElementById('v5ApplyScope').onclick=async()=>{if(request!==generation)return;this.rememberSheet();try{const result=await this.mutate(this.root()+'/tasks/apply',{scope,fingerprint:info.fingerprint,reason:form.elements.reason.value||'核对各处建议、范围与例外后保存本文件草稿'},'草稿处理已保存');if(result&&result.display_refreshed!==false)this.message(`本次已处理 ${s.sources} 处来源；仍有 ${result.remaining_tasks} 项待决定。其他表没有自动入库。`);}catch{}};}catch(e){if(form.isConnected)this.localMessage('预览失败：'+e.message);}finally{delete form.dataset.loading;if(form.isConnected)submit.disabled=false;}};
  },
- identityConflict(t){
+ issue(id,iid){const t=this.matrix?.worksheet_review.tasks.find(t=>t.members.some(m=>m.candidate_id===id&&m.issue_id===iid));if(t&&(t.proposal?.guidance||['identity_conflict','method_conflict','identity_ambiguity','numeric_format','formula_result'].includes(t.code)))return this.task(t.id);return originalIssue.call(this,id,iid);},
+ reviewContext(t){
+  const members=t.members.map(m=>this.member(m.candidate_id)).filter(Boolean),first=members[0];if(!first)return '';
+  const current=(c,k)=>c.corrections[k]??c.interpreted_fields[k]??c.raw_fields[k]??'';
+  const address=loc=>loc.section+'!'+this.colName(loc.column)+loc.row;
+  const source=t.evidence.map(e=>{const cell=this.matrix.sheets.find(s=>s.name===e.section)?.cells.find(c=>c.row===e.row&&c.column===e.column);return `<p><button type="button" class="btn btn-outline" data-review-locate="${e.row}:${e.column}">定位 ${esc(address(e))}</button> <span>${esc(cell?.text||'原表未填写')}</span></p>`;}).join('');
+  const results=members.map(c=>{const range=c.result_anchor?.range,ref=range?this.colName(range[1])+range[0]+':'+this.colName(range[3])+range[2]:this.colName(c.location.column)+c.location.row;return `<li><button type="button" class="btn btn-outline" data-review-locate="${c.location.row}:${c.location.column}">定位 ${esc(ref)}</button> · 原表第 ${c.logical_row||c.location.row} 行 · ${esc(current(c,'time_point')||'时间点未注明')}<div class="v020-source-text">原始结果：${esc(c.raw_fields.result||'（空）')}</div>${Object.hasOwn(c.corrections,'result')?`<div class="v020-source-text">当前草稿结果：${esc(c.corrections.result||'（空）')}</div>`:''}</li>`;}).join('');
+  return `<div class="v020-review-context"><p><strong>${esc(current(first,'batch')||'批号未注明')}</strong> · ${esc(current(first,'condition')||'条件未注明')} · ${members.length} 个关联结果</p><p>原检测项：${esc(first.raw_fields.test_item)}<br>当前方法：${esc(current(first,'method')||'原表未注明')}</p><details><summary>查看有疑问的标签原文与定位</summary>${source}</details><details ${members.length<=2?'open':''}><summary>查看结果原文、时间点及定位（${members.length} 条）</summary><ul class="v020-result-context">${results}</ul></details></div>`;
+ },
+ prepareFocusedForm(form){
+  form.classList.add('v020-focused-question');const body=document.createElement('div');body.className='v020-question-body';const reason=form.elements.reason.closest('.v5-fields');let node=form.firstElementChild.nextElementSibling;while(node&&node!==reason){const next=node.nextElementSibling;body.append(node);node=next;}reason.before(body);
+ },
+ bindReviewLocations(form){form.querySelectorAll('[data-review-locate]').forEach(b=>b.onclick=()=>{const [row,column]=b.dataset.reviewLocate.split(':').map(Number);this.locateTask({evidence:[{section:this.sheet,row,column}]});});},
+ focusedQuestion(t,initial={},reason=null){
+  const guide=t.proposal.guidance||{},member=this.member(t.members[0].candidate_id),options=guide.name_options||[],naming=guide.required_fields?.includes('test_item');
+  const title=guide.title||({numeric_format:'明确结果的数值与单位',formula_result:'填写核实后的公式结果',identity_ambiguity:'明确本处规格或方法'})[t.code];
+  const question=guide.question||t.detail;
+  const values={...(naming?{}:Object.fromEntries(t.fields.map(k=>[k,member.corrections[k]??member.interpreted_fields[k]??'']))),...initial};
+  const choices=options.map((o,i)=>`<button type="button" class="btn btn-outline" data-name-option="${i}">采用同一行名称：${esc(o.value)}</button>`).join('');
+  const evidence=options.flatMap(o=>o.evidence).map(e=>`<li>${esc(e.location.section)}!${this.colName(e.location.column)}${e.location.row} · ${esc(e.time_point)}：${esc(e.result)}</li>`).join('');
+  const form=this.form(title,`<p class="v020-question">${esc(question)}</p>${this.reviewContext(t)}${naming?`<p>${esc(guide.suggestion_notice||'')}</p><div class="v020-name-options">${choices}</div>${evidence?`<details><summary>候选名称的原文依据</summary><ul>${evidence}</ul></details>`:''}`:''}<div class="v5-fields">${this.fields(t.fields,values)}</div><p class="v020-question-help">${esc(guide.help||'请核实以上字段；下一步将展示修改前后及明确影响范围。')}</p><p>${t.fields.includes('result')?'本次只处理列出的字段。':'本次只明确名称或身份，各结果原文、单位和 AR 等引用保留。'}</p><p class="v020-question-status" role="status"></p>`,naming?'对照同一原表行明确检测分项，保留各时间点结果':'对照原表明确本处字段解释');
+  this.prepareFocusedForm(form);this.bindReviewLocations(form);
+  if(reason!==null)form.elements.reason.value=reason;
+  if(naming){form.elements.test_item.placeholder='填写完整检测项及分项名称';form.elements.test_item.closest('label').querySelector('.v5-field-hint').textContent='可点选有原文依据的候选名称，也可直接填写。';}
+  const submit=form.querySelector('.btn-primary');submit.textContent='预览修改与影响范围';
+  const check=()=>{const required=guide.required_fields||t.fields.filter(k=>k!=='unit');submit.disabled=required.some(k=>!String(form.elements[k]?.value||'').trim());form.querySelector('.v020-question-status').textContent=submit.disabled?'请点选候选名称或填写本次需要明确的字段。':'下一步核对拟保存内容；此时尚未改动草稿。';};
+  form.querySelectorAll('[data-name-option]').forEach(b=>b.onclick=()=>{form.elements.test_item.value=options[Number(b.dataset.nameOption)].value;this.dirty=true;check();});form.addEventListener('input',check);check();
+  form.onsubmit=e=>{e.preventDefault();if(submit.disabled)return;const fields=Object.fromEntries(t.fields.map(k=>[k,form.elements[k].value.trim()])),reason=form.elements.reason.value;this.cancel();return this.previewScope({section:this.sheet,task_ids:[t.id],operation:'manual',fields},'预览'+title,false,reason);};
+ },
+ identityConflict(t,initial='',reason=null){
   const field=t.fields[0],method=field==='method',kind=method?'方法':'子结果身份';
   const options=t.proposal.identity_options||{},members=t.members.map(m=>this.member(m.candidate_id));
   const rows=members.map(c=>`<li>${this.colName(c.location.column)}${c.location.row} · 时间点 ${esc(c.interpreted_fields.time_point||c.raw_fields.time_point)} · 保留各自结果 ${esc(c.corrections.result??c.interpreted_fields.result??c.raw_fields.result)}</li>`).join('');
   const quickBtns=Object.entries(options).map(([k,v])=>`<button type="button" class="btn btn-sm btn-outline" data-quick-identity="${esc(k)}" style="margin-right:6px;">采用${k==='chinese'?'中文':'英文'}含义：<strong>${esc(v)}</strong></button>`).join('');
-  const form=this.form('明确中英文'+kind,`<p>系统发现的身份冲突；原检测项名称：${esc(members[0].raw_fields.test_item)}</p><p>${esc(t.detail)}</p>${quickBtns?`<div style="margin:8px 0;"><span>快捷点选（不预选答案）：</span>${quickBtns}</div>`:''}<div class="v5-fields" style="grid-template-columns:1fr"><label>解释依据<select name="identityChoice" required><option value="">请选择，不预选业务答案</option><option value="chinese">按中文含义解释</option><option value="english">按英文含义解释</option><option value="custom">分别指定当前行身份</option></select></label><label>本次范围拟采用的${esc(kind)}<input name="identityValue" required readonly value=""></label></div><p>本次只明确${esc(kind)}，影响 ${members.length} 个结果；各时间点仍保留各自原值。</p><details ${members.length<=3?'open':''}><summary>查看受影响的分项和时间点（${members.length} 处）</summary><ul>${rows}</ul></details><p class="v55-identity-reason" role="status">尚未选择${esc(kind)}，不能确认。</p>`,'核对中英文原标签后明确'+kind);
+  const form=this.form('明确中英文'+kind,`<p class="v020-question">同一标签的中英文含义不同，请选择本行实际采用的${esc(kind)}。</p>${this.reviewContext(t)}<details><summary>查看冲突说明</summary><p>${esc(t.detail)}</p></details>${quickBtns?`<div style="margin:8px 0;"><span>快捷点选（不预选答案）：</span>${quickBtns}</div>`:''}<div class="v5-fields" style="grid-template-columns:1fr"><label>解释依据<select name="identityChoice" required><option value="">请选择，不预选业务答案</option><option value="chinese">按中文含义解释</option><option value="english">按英文含义解释</option><option value="custom">分别指定当前行身份</option></select></label><label>本次范围拟采用的${esc(kind)}<input name="identityValue" required readonly value=""></label></div><p>本次只明确${esc(kind)}，影响 ${members.length} 个结果；各时间点仍保留各自原值。</p><details><summary>查看当前解释值（${members.length} 处）</summary><ul>${rows}</ul></details><p class="v55-identity-reason" role="status">尚未选择${esc(kind)}，不能确认。</p>`,'核对中英文原标签后明确'+kind);
+  this.prepareFocusedForm(form);this.bindReviewLocations(form);
+  if(reason!==null)form.elements.reason.value=reason;
   const submit=form.querySelector('.btn-primary'),choice=form.elements.identityChoice,input=form.elements.identityValue;submit.textContent='预览'+kind+'与受影响时间点';submit.disabled=true;
   const check=()=>{submit.disabled=!choice.value||!input.value.trim();form.querySelector('.v55-identity-reason').textContent=submit.disabled?'尚未完成'+kind+'解释，不能确认。':'下一步预览'+kind+'及受影响时间点。';};
   choice.onchange=()=>{input.readOnly=choice.value!=='custom';input.value=options[choice.value]||'';this.dirty=true;check();};input.oninput=check;
   form.querySelectorAll('[data-quick-identity]').forEach(btn=>{btn.onclick=()=>{choice.value=btn.dataset.quickIdentity;choice.onchange();};});
-  form.onsubmit=e=>{e.preventDefault();if(submit.disabled)return;const fields={[field]:input.value.trim()};this.cancel();return this.previewScope({section:this.sheet,task_ids:[t.id],operation:'manual',fields},'预览明确'+kind);};
+  if(initial){choice.value='custom';input.readOnly=false;input.value=initial;check();}
+  form.onsubmit=e=>{e.preventDefault();if(submit.disabled)return;const fields={[field]:input.value.trim()},reason=form.elements.reason.value;this.cancel();return this.previewScope({section:this.sheet,task_ids:[t.id],operation:'manual',fields},'预览明确'+kind,false,reason);};
  },
  async sourceStructure(){if(!this.leave())return;try{const info=await api(this.root()+'/source-structure');const form=this.form('核对冻结原件的来源用途',`<p>${esc(info.version)} · ${info.changes.length} 处明确非结果区域</p><div class="v52-source-list">${info.changes.map(c=>`<p>${esc(c.section)}!${esc(c.coordinates.join('、'))} · ${Object.entries(c.cell_roles).map(([k,v])=>esc(k)+': '+esc({identity:'表头信息',standard:'标准说明',note:'模板/备注',auxiliary:'计划日期/辅助来源'}[v]||v)).join('；')}</p>`).join('')}</div><p>${esc(info.notice)}</p>`);form.querySelector('.btn-primary').disabled=!info.changes.length;form.onsubmit=async e=>{e.preventDefault();await this.mutate(this.root()+'/source-structure',{fingerprint:info.fingerprint,reason:form.elements.reason.value||'核对非结果来源用途证据及范围'},'来源用途解释版本已保存；剩余争议已重新核对。');};}catch(e){this.message(e.message);}},
  async undoBatch(id){if(!this.leave())return;await this.mutate(this.root()+'/tasks/undo',{batch_id:id,reason:'撤销本次明确草稿批次，重新核对受影响解释'},'草稿批次已撤销；争议及资格已重新计算。');},
