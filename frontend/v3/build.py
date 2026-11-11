@@ -10,7 +10,7 @@ s=(base/'template.html').read_text(encoding='utf-8')
 s=s.replace('<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>',
             '<script>\n'+(base/'vendor/chart.umd.js').read_text(encoding='utf-8')+'\n</script>')
 replacements={
-'分析检测部数智工作台 · Analytical Testing Hub':'分析检测工作台 · 0.2.0',
+'分析检测部数智工作台 · Analytical Testing Hub':'稳研工作台 · 0.1.0 开发版',
 'stability-hub-projects-v1':'stability-hub-projects-v3-layout',
 '📋 支柱一：出厂放行全项质量可比性':'放行检验结果比较',
 '⏱️ 支柱二：稳定性降解行为与耐受性可比性':'稳定性比较',
@@ -71,12 +71,13 @@ v4_scripts = '\n'.join([
     (base/'manual-sheet.js').read_text(encoding='utf-8'),
     (base/'result-display.js').read_text(encoding='utf-8'),
     (base/'research-reports.js').read_text(encoding='utf-8'),
-    (base/'quick-comparison.js').read_text(encoding='utf-8')
+    (base/'quick-comparison.js').read_text(encoding='utf-8'),
+    (base/'business-worksheets.js').read_text(encoding='utf-8'),
 ])
 s=s.replace('</style>',(base/'v4.css').read_text(encoding='utf-8')+'\n</style>',1).replace('</body>','<script>\n'+v4_scripts+'\n</script>\n</body>')
 s=s.replace('</style>',(base/'v5.css').read_text(encoding='utf-8')+'\n</style>',1)
-s=re.sub(r'<title>.*?</title>','<title>Stability Data Hub 0.2.0 · 来源核对与人工兜底</title>',s,count=1,flags=re.S)
+s=re.sub(r'<title>.*?</title>','<title>稳研工作台 · Stability Workbench 0.1.0 开发版</title>',s,count=1,flags=re.S)
 s='\n'.join(line.rstrip() for line in s.splitlines())+'\n'
 args.output.parent.mkdir(parents=True,exist_ok=True)
 args.output.write_text(s,encoding='utf-8')
-print('Built 0.2.0 from preserved V3 layout.')
+print('Built Stability Workbench 0.1.0 development dashboard from V3.')

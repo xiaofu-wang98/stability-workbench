@@ -75,6 +75,16 @@ def normalize_result(raw: str, unit: str, result_type: str, *, legacy_reporting=
     raise NeedsReview("unrecognized_result", f"Cannot parse numeric result: {raw!r}")
 
 
+def normalize_worksheet_result(raw: str, unit: str, result_type: str) -> Result:
+    """Preserve the typed expression while interpreting a planned cell's unit."""
+    text = raw.strip()
+    if unit == "%" and text.endswith("%"):
+        text = text[:-1].rstrip()
+    if text.casefold() in {"na*", "n/a*"}:
+        text = "N/A"
+    return normalize_result(text, unit, result_type).model_copy(update={"raw_text": raw})
+
+
 def normalize_month(raw: str) -> int:
     match = re.fullmatch(r"(\d+)\s*(?:m|months?|个月|月)?", raw.strip(), re.I)
     if not match:

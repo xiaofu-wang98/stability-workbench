@@ -436,7 +436,18 @@
           const src = await window.v4Api.getSource(sourceId);
           this.loadedSource = src;
           src.coordinates = src.raw?.location || src.coordinates;
-          if (src) {
+          if (src.kind === 'worksheet_entry') {
+            sourceInfoHtml = `<div class="v4-drawer-section">
+              <h4 class="v4-section-title">研究工作表录入</h4>
+              <div class="v4-drawer-meta-grid">
+                <div><span class="v4-meta-lbl">录入人</span><span>${esc(src.submitted_by)}</span></div>
+                <div><span class="v4-meta-lbl">录入时间</span><span>${esc(src.submitted_at)}</span></div>
+                <div><span class="v4-meta-lbl">计划版本</span><span>${esc(src.plan_version)}</span></div>
+                <div><span class="v4-meta-lbl">前一版本</span><span>${esc(src.previous_version_id || '—')}</span></div>
+              </div>
+              <p>${esc(src.reason || '')}</p>
+            </div>`;
+          } else {
             sourceInfoHtml = `
               <div class="v4-drawer-section">
                 <h4 class="v4-section-title">📄 来源文档与定位溯源</h4>
@@ -484,7 +495,15 @@
           </div>
         `;
       }
+      if (!isPending && canAdopt && this.loadedSource?.intent === 'retest' &&
+          cellData.display?.result_version_id !== cellData.adopted?.result_version_id) {
+        reviewActionsHtml = `<div class="v4-drawer-section">
+          <button type="button" class="btn btn-primary" onclick="v4SourceDrawer.executeReview('${esc(cellData.display.result_version_id)}', 'adopt')">正式采用此复测</button>
+        </div>`;
+      }
 
+      const worksheetEntry = this.loadedSource?.kind === 'worksheet_entry' ||
+        cellData.adopted?.source_ids?.some(id => id.startsWith('entry_result_'));
       body.innerHTML = `
         <div class="v4-drawer-section">
           <div class="v4-drawer-meta-grid">
@@ -506,7 +525,7 @@
             <div class="v4-card-meta">
               <div>结果版本：${esc(cellData.display?.result_version_id || '—')}</div>
               <div>独立检测编号：${esc(cellData.display?.detection_id || '—')}</div>
-              <div>来源文档：${esc(cellData.display?.source_ids?.join(', ') || '—')}</div>
+              <div>来源：${esc(cellData.display?.source_ids?.join(', ') || '—')}</div>
               <div>状态：${isPending ? '⚠️ 待确认事实（尚未正式采用）' : '已归档'}</div>
             </div>
           </div>
@@ -519,7 +538,7 @@
             <div class="v4-card-meta">
               <div>结果版本：${esc(cellData.adopted?.result_version_id || '—')}</div>
               <div>独立检测编号：${esc(cellData.adopted?.detection_id || '—')}</div>
-              <div>来源文档：${esc(cellData.adopted?.source_ids?.join(', ') || '—')}</div>
+              <div>来源：${esc(cellData.adopted?.source_ids?.join(', ') || '—')}</div>
               <div>状态：正式受控基线</div>
             </div>
           </div>
@@ -527,16 +546,19 @@
 
         ${sourceInfoHtml}
 
-        ${cellData.adopted?.result_version_id && window.v4Api.can('confirm_fact') ? `<div class="v4-drawer-section"><h4>修改正式记录的数据</h4><p>填写新值和简短说明即可，无需OOS/OOE编号。保存后为待高级确认的新版本，原正式值继续保留。</p><form onsubmit="v4SourceDrawer.saveDisplayChange(event)"><label class="v4-field"><span>修改后的结果（保持原结果单位）</span><textarea class="v4-input" name="result" required>${esc(this.loadedSource?.corrections?.result ?? this.loadedSource?.raw?.fields?.result ?? '')}</textarea></label><label class="v4-field"><span>修改说明</span><input class="v4-input" name="reason" required placeholder="例如：原始录入小数点有误，已核对原件"></label><button class="btn btn-primary">保存修改并提交高级确认</button><p id="v44DisplayChangeStatus" role="status"></p></form></div>` : ''}
+        ${cellData.adopted?.source_ids?.some(id => id.startsWith('entry_result_')) ?
+          '<div class="v4-drawer-section">请打开研究工作表更正此结果。</div>' :
+          cellData.adopted?.result_version_id && window.v4Api.can('confirm_fact') ? `<div class="v4-drawer-section"><h4>修改正式记录的数据</h4><p>填写新值和简短说明即可，无需OOS/OOE编号。保存后为待高级确认的新版本，原正式值继续保留。</p><form onsubmit="v4SourceDrawer.saveDisplayChange(event)"><label class="v4-field"><span>修改后的结果（保持原结果单位）</span><textarea class="v4-input" name="result" required>${esc(this.loadedSource?.corrections?.result ?? this.loadedSource?.raw?.fields?.result ?? '')}</textarea></label><label class="v4-field"><span>修改说明</span><input class="v4-input" name="reason" required placeholder="例如：原始录入小数点有误，已核对原件"></label><button class="btn btn-primary">保存修改并提交高级确认</button><p id="v44DisplayChangeStatus" role="status"></p></form></div>` : ''}
 
         <div class="v4-drawer-section">
           <h4 class="v4-section-title">审计与权限规则</h4>
           <p class="v4-drawer-desc">
-            业务规则规范：展示值采用最新检测事实（待确认以红色警示），正式采用值独立受控。
-            两者无论数值是否相同，不同 detection_id 均属不同实验事实。首次无重复结果可由普通实验员核对确认并采用；重复写入须高级复核，普通实验员不能替换原正式值。
+            ${worksheetEntry
+              ? '在研究工作表更正结果时，填写原因后保存新版本并更新正式采用值。独立复测需明确采用。'
+              : '来源核对页展示最新检测事实，待确认值以红色警示。首次无冲突的结果由实验员核对后采用，来源重复提交须复核。'}
           </p>
           <div class="v4-perm-note">
-            ${canAdopt ? '<span class="v4-badge-perm">您具备正式改值 / 采用权限</span>' : '<span class="v4-badge-perm v4-perm-limited">当前为实验员权限：无法变更正式采用结果</span>'}
+            ${canAdopt ? '<span class="v4-badge-perm">您具备结果复核和采用权限</span>' : ''}
           </div>
         </div>
 

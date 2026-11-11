@@ -179,3 +179,20 @@ body[data-review-scene=source] #v52SheetPane{padding-bottom:90px}
 .v015-sidebar [data-q-item]{display:block;width:100%;margin-top:8px}
 .v015-results .v015-result-tabs{margin-top:10px}
 @media(max-width:1000px){.v015-workbench{grid-template-columns:minmax(0,1fr)}.v015-sidebar .v015-batches{max-height:none;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden}.v015-sidebar .v015-batches>div{width:auto;flex:0 0 auto}.v015-sidebar [data-q-batch]{width:auto}}
+.business-worksheet-dialog {
+  width: min(1200px, calc(100vw - 28px));
+  max-width: none;
+  padding: 18px;
+  color: #243746;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+}
+.business-worksheet-dialog::backdrop { background: #10283e88; }
+.business-worksheet-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.business-worksheet-grid { width: 100%; height: min(57vh, 680px); position: relative; }
+.business-worksheet-pending { white-space: pre-line; color: #92400e; }
+.business-worksheet-form:not([hidden]),
+.business-worksheet-form fieldset:not([hidden]) { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; }
+.business-worksheet-form { padding: 12px 0; }
+.business-worksheet-form label { display: grid; gap: 4px; }
+.business-worksheet-form fieldset { width: 100%; padding: 0; border: 0; }

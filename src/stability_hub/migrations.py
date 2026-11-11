@@ -7,9 +7,11 @@ from uuid import uuid4
 from .workflow_schema import STATEMENTS
 
 from .source_schema import SCHEMA as SOURCE_SCHEMA
+from .worksheet_schema import SCHEMA as WORKSHEET_SCHEMA
 
-CURRENT_VERSION = 9
+CURRENT_VERSION = 10
 MIGRATIONS = {
+    10: WORKSHEET_SCHEMA,
     9: (
         'CREATE INDEX workflow_candidates_upload ON workflow_candidates(upload_id)',
         'CREATE INDEX workflow_events_subject_action ON workflow_events(subject_id,action,sequence)',

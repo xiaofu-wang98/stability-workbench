@@ -12,5 +12,7 @@ __pycache__/
 *.egg-info/
 /build/
 /dist/
+/frontend/v3/univer/node_modules/
+/frontend/v3/univer/dist/
 .env
 .env.*

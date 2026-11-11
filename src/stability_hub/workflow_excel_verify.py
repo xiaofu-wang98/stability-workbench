@@ -105,6 +105,11 @@ def verify_workbook(path, snapshot):
                     errors.append('Historical identity overlay differs')
             for source in json.loads(version["source_json"]):
                 try:
+                    if source.get("kind") == "worksheet_entry":
+                        from .normalize import normalize_worksheet_result
+                        if normalize_worksheet_result(source["raw_text"], source["unit"], source["result_type"]) != physical.result:
+                            errors.append("Worksheet result differs: " + sid)
+                        continue
                     file = Path(source["stored_path"])
                     if file not in original:
                         original[file] = (hashlib.sha256(file.read_bytes()).hexdigest(), reread_source_rows(file, archive_only=bool(source.get('raw_json', {}).get('evidence'))))
@@ -247,8 +252,16 @@ def verify_workbook(path, snapshot):
         if any(seen != set(expected) for seen in matrix_seen.values()):
             errors.append("Matrix coverage differs")
         actual_sources = {row[0].value: row for row in book["Sources"].iter_rows(min_row=2)}
-        if set(actual_sources) != set(sources):
+        direct_sources = {sid: source for sid, source in sources.items() if source.get("kind") == "worksheet_entry"}
+        if set(actual_sources) != set(sources) - set(direct_sources):
             errors.append("Source coverage differs")
+        expected_direct = {tuple(str(source[key]) for key in
+                            ("source_id", "worksheet_id", "row_id", "point_id", "plan_version", "raw_text", "unit", "result_type"))
+                           for source in direct_sources.values()}
+        actual_direct = [tuple(str(value) if value is not None else "" for value in row)
+                         for row in book["WorksheetEntries"].iter_rows(min_row=2, values_only=True)] if "WorksheetEntries" in book else []
+        if set(actual_direct) != expected_direct or len(actual_direct) != len(expected_direct):
+            errors.append("Worksheet entry coverage differs")
         for sid, source in sources.items():
             if sid in actual_sources:
                 row = actual_sources[sid]

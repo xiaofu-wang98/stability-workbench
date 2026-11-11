@@ -23,6 +23,7 @@ from .parsing import parse_source
 from .permissions import Actor, Capability, require
 from .result_versions import ResultVersions
 from .workflow import Workflow
+from .business_worksheets import BusinessWorksheets, CreateWorksheet, ExtendPlan, LeaseToken, SaveWorksheet
 from .workflow_common import WorkflowError
 from .workflow_contracts import (
     ConfigurationChange, ConfigurationView, CandidateEdit, CandidateMapping, ConfirmRequest, ExportRequest, ExportResult, MutationResult, ResultFilter,
@@ -59,12 +60,13 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
     for config in configs:
         workflow.configure(config)
     versions, exports = ResultVersions(workflow), ExcelExports(workflow)
+    worksheets = BusinessWorksheets(workflow, versions)
     app.state.actor, app.state.api_token, app.state.workflow = actor, api_token, workflow
 
     @app.get('/health', include_in_schema=False)
     def health():
         return {'application': 'stability-data-hub', 'version': __version__, 'build': '0.2.0-release-20261106',
-                'delivery_state':'release'}
+                'delivery_state':'release', 'workbench_version': '0.1.0-dev'}
 
     @app.get('/favicon.ico', include_in_schema=False)
     def favicon():
@@ -75,7 +77,7 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
         require(operator, Capability.VIEW)
         return {'version': __version__, 'data_home': str(store.home), 'actor': operator.display_name,
                 'role': operator.role, 'mode': 'local', 'code_commit': build_commit, 'code_dirty': dirty,
-                'code_root': str(code_root), 'delivery_state': 'release'}
+                'code_root': str(code_root), 'delivery_state': 'release', 'workbench_version': '0.1.0-dev'}
     if origins:
         app.add_middleware(CORSMiddleware, allow_origins=list(origins), allow_methods=["GET", "POST", "PATCH"],
                            allow_headers=["Content-Type", "Authorization", "Idempotency-Key"])
@@ -105,6 +107,46 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
         return JSONResponse({"code": "invalid_input", "message": str(exc), "details": {}}, status_code=422)
 
     source_tables = SourceTables(workflow)
+
+    @app.get("/api/v1/projects/{project}/worksheets")
+    def list_worksheets(project: str, operator: ActorDependency):
+        return worksheets.list(project, operator)
+
+    @app.post("/api/v1/projects/{project}/worksheets", status_code=201)
+    def create_worksheet(project: str, command: CreateWorksheet, operator: ActorDependency):
+        return worksheets.create(project, command, operator)
+
+    @app.get("/api/v1/worksheets/{sheet_id}")
+    def read_worksheet(sheet_id: str, operator: ActorDependency):
+        return worksheets.get(sheet_id, operator)
+
+    @app.post("/api/v1/worksheets/{sheet_id}/lease")
+    def acquire_worksheet(sheet_id: str, operator: ActorDependency):
+        return worksheets.acquire(sheet_id, operator)
+
+    @app.post("/api/v1/worksheets/{sheet_id}/lease/renew")
+    def renew_worksheet(sheet_id: str, command: LeaseToken, operator: ActorDependency):
+        return worksheets.heartbeat(sheet_id, command, operator)
+
+    @app.post("/api/v1/worksheets/{sheet_id}/lease/release")
+    def release_worksheet(sheet_id: str, command: LeaseToken, operator: ActorDependency):
+        return worksheets.release(sheet_id, command, operator)
+
+    @app.post("/api/v1/worksheets/{sheet_id}/save")
+    def save_worksheet(sheet_id: str, command: SaveWorksheet, operator: ActorDependency):
+        return worksheets.save(sheet_id, command, operator)
+
+    @app.post("/api/v1/worksheets/{sheet_id}/plan")
+    def extend_worksheet(sheet_id: str, command: ExtendPlan, operator: ActorDependency):
+        return worksheets.extend(sheet_id, command, operator)
+
+    @app.post("/api/v1/worksheets/{sheet_id}/confirmation")
+    def export_worksheet_confirmation(
+        sheet_id: str, operator: ActorDependency, revision: Annotated[int, Query(ge=1)],
+        selection_id: Annotated[str, Query(min_length=64, max_length=64)],
+    ):
+        from .worksheet_confirmation import create_confirmation
+        return create_confirmation(worksheets, sheet_id, revision, selection_id, operator)
 
     @app.get('/api/v1/previews/{preview_id}/file')
     def upload_original(preview_id: str,operator: ActorDependency):
@@ -614,7 +656,8 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
 
     @app.get("/api/v1/exports/{export_id}/file")
     def download(export_id: str, operator: ActorDependency):
-        return FileResponse(exports.download(export_id, actor=operator), filename="results.xlsx",
+        path = exports.download(export_id, actor=operator)
+        return FileResponse(path, filename=path.name,
                             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     @app.get('/api/v1/exports/{export_id}/image')
@@ -684,6 +727,13 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
 
     if frontend:
         frontend_path = Path(frontend).resolve()
+
+        @app.get("/assets/worksheet/{filename}", include_in_schema=False)
+        def worksheet_asset(filename: str):
+            directory = code_root / "frontend" / "v3" / "univer" / "dist"
+            if filename not in {"editor.js", "editor.css"} or not (directory / filename).is_file():
+                raise WorkflowError("worksheet_editor_unavailable", "研究工作表组件尚未构建。", 404)
+            return FileResponse(directory / filename)
 
         @app.get("/", include_in_schema=False)
         def index():

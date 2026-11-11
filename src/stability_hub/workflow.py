@@ -17,7 +17,7 @@ from .parsing import parse_source
 from .permissions import Actor, Capability, require
 from .result_queries import cells_from_rows, selected_rows
 from .storage import Store
-from .workflow_common import WorkflowError, bump, check_revision, encoded, event, project_row, remember, replay, uid
+from .workflow_common import WorkflowError, bump, check_revision, encoded, event, next_result_sequence, project_row, remember, replay, uid
 from .workflow_contracts import CandidateView, MutationResult, ResultFilter, ResultPage, UploadPreview
 from .identity_links import frozen_config, linked_config, check_historical_identity
 
@@ -346,8 +346,9 @@ class Workflow:
                 return self._preview(conn, prior, actor)
             conn.execute("INSERT OR IGNORE INTO documents VALUES (?,?,?)", (sha, filename, str(frozen)))
             upload_id = uid("upload")
-            conn.execute("""INSERT INTO workflow_uploads(id,project,source_hash,filename,context_json,uploaded_by,client_key,request_hash)
-                         VALUES (?,?,?,?,?,?,?,?)""", (upload_id, project, sha, filename, context.model_dump_json(), actor.id, idempotency_key, request_hash))
+            conn.execute("""INSERT INTO workflow_uploads(sequence,id,project,source_hash,filename,context_json,uploaded_by,client_key,request_hash)
+                         VALUES (?,?,?,?,?,?,?,?,?)""", (next_result_sequence(conn), upload_id, project, sha, filename,
+                         context.model_dump_json(), actor.id, idempotency_key, request_hash))
             conn.execute('UPDATE workflow_uploads SET interpretation_config_json=?,workflow_version=5 WHERE id=?',
                          (project_row(conn,project)['config_json'],upload_id))
             if _legacy_compatibility:

@@ -126,7 +126,16 @@ def write_workbook(path, snapshot):
             sheet.freeze_panes = f"F{header_row+1}" if layout == "stability" else f"E{header_row+1}" if layout == "release_items" else f"B{header_row+1}"
     sources = book.create_sheet("Sources")
     text_row(sources, ["source_id", "filename", "sha256", "location", "raw_fields", "corrections", "identity_association"])
+    entries = [source for source in source_index.values() if source.get("kind") == "worksheet_entry"]
+    if entries:
+        direct = book.create_sheet("WorksheetEntries")
+        text_row(direct, ["source_id", "worksheet_id", "row_id", "point_id", "plan_version", "raw_text", "unit", "result_type"])
+        for source in sorted(entries, key=lambda item: item["source_id"]):
+            text_row(direct, [source[key] for key in
+                              ("source_id", "worksheet_id", "row_id", "point_id", "plan_version", "raw_text", "unit", "result_type")])
     for sid, source in sorted(source_index.items()):
+        if source.get("kind") == "worksheet_entry":
+            continue
         text_row(sources, [sid, source["filename"], source["document_hash"], encoded(source["raw_json"]["location"]),
                            encoded(source["raw_json"]["fields"]), encoded(source.get("corrections", {})),encoded(source.get('identity_association',{}))])
     drafts = book.create_sheet("Unsubmitted")

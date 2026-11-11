@@ -68,15 +68,18 @@ def test_version8_index_upgrade_backs_up_without_rewriting_facts(tmp_path, xlsx,
     database = target_home / 'history.sqlite'
     with flow.store.read() as origin, sqlite3.connect(database) as target:
         origin.backup(target)
+        for name in ['business_worksheet_slots', 'business_worksheet_leases', 'business_worksheet_plans',
+                     'business_worksheets', 'workflow_result_clock']:
+            target.execute(f'DROP TABLE {name}')
         for name in ['workflow_candidates_upload', 'workflow_events_subject_action', 'workflow_events_project_action']:
             target.execute(f'DROP INDEX {name}')
-        target.execute('DELETE FROM schema_migrations WHERE version=9')
+        target.execute('DELETE FROM schema_migrations WHERE version>=9')
         target.execute('PRAGMA user_version=8')
         before = target.execute('SELECT id,record_json,source_json FROM workflow_versions').fetchall()
         candidates = target.execute('SELECT id,raw_json FROM workflow_candidates').fetchall()
     upgraded = Store(target_home)
     with upgraded.read() as conn:
-        assert conn.execute('PRAGMA user_version').fetchone()[0] == 9
+        assert conn.execute('PRAGMA user_version').fetchone()[0] == 10
         assert [tuple(r) for r in conn.execute('SELECT id,record_json,source_json FROM workflow_versions')] == before
         assert [tuple(r) for r in conn.execute('SELECT id,raw_json FROM workflow_candidates')] == candidates
         assert not conn.execute('PRAGMA foreign_key_check').fetchall()

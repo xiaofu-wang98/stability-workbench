@@ -1,6 +1,7 @@
 """Small shared helpers for workflow transactions and provenance."""
 
 import json
+import time
 from uuid import uuid4
 
 from .models import digest
@@ -18,6 +19,20 @@ def uid(prefix: str) -> str:
 
 def encoded(value) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True)
+
+
+def next_result_sequence(conn):
+    """Order spreadsheet entry and file imports on one transactional clock."""
+    return conn.execute(
+        "UPDATE workflow_result_clock SET sequence=sequence+1 WHERE singleton=1 RETURNING sequence"
+    ).fetchone()[0]
+
+
+def ensure_worksheet_slot_unlocked(conn, slot_id):
+    if conn.execute("""SELECT 1 FROM business_worksheet_slots s
+                       JOIN business_worksheet_leases l ON l.sheet_id=s.sheet_id
+                       WHERE s.slot_id=? AND l.expires_at>?""", (slot_id, int(time.time()))).fetchone():
+        raise WorkflowError("worksheet_occupied", "此结果所在的研究工作表正在编辑，请待占用释放后再提交。", 409)
 
 
 def project_row(conn, project):

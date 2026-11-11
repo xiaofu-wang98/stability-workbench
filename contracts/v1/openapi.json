@@ -21,6 +21,408 @@
         }
       }
     },
+    "/api/v1/projects/{project}/worksheets": {
+      "get": {
+        "summary": "List Worksheets",
+        "operationId": "list_worksheets_api_v1_projects__project__worksheets_get",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create Worksheet",
+        "operationId": "create_worksheet_api_v1_projects__project__worksheets_post",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWorksheet"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worksheets/{sheet_id}": {
+      "get": {
+        "summary": "Read Worksheet",
+        "operationId": "read_worksheet_api_v1_worksheets__sheet_id__get",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worksheets/{sheet_id}/lease": {
+      "post": {
+        "summary": "Acquire Worksheet",
+        "operationId": "acquire_worksheet_api_v1_worksheets__sheet_id__lease_post",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worksheets/{sheet_id}/lease/renew": {
+      "post": {
+        "summary": "Renew Worksheet",
+        "operationId": "renew_worksheet_api_v1_worksheets__sheet_id__lease_renew_post",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LeaseToken"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worksheets/{sheet_id}/lease/release": {
+      "post": {
+        "summary": "Release Worksheet",
+        "operationId": "release_worksheet_api_v1_worksheets__sheet_id__lease_release_post",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LeaseToken"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worksheets/{sheet_id}/save": {
+      "post": {
+        "summary": "Save Worksheet",
+        "operationId": "save_worksheet_api_v1_worksheets__sheet_id__save_post",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveWorksheet"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worksheets/{sheet_id}/plan": {
+      "post": {
+        "summary": "Extend Worksheet",
+        "operationId": "extend_worksheet_api_v1_worksheets__sheet_id__plan_post",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtendPlan"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worksheets/{sheet_id}/confirmation": {
+      "post": {
+        "summary": "Export Worksheet Confirmation",
+        "operationId": "export_worksheet_confirmation_api_v1_worksheets__sheet_id__confirmation_post",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          },
+          {
+            "name": "revision",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Revision"
+            }
+          },
+          {
+            "name": "selection_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "title": "Selection Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/previews/{preview_id}/file": {
       "get": {
         "summary": "Upload Original",
@@ -5825,6 +6227,55 @@
         ],
         "title": "Capability"
       },
+      "CellChange": {
+        "properties": {
+          "row_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Row Id"
+          },
+          "point_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Point Id"
+          },
+          "expected_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Version Id"
+          },
+          "value": {
+            "type": "string",
+            "maxLength": 8000,
+            "minLength": 1,
+            "title": "Value"
+          },
+          "intent": {
+            "type": "string",
+            "enum": [
+              "initial",
+              "correction",
+              "retest"
+            ],
+            "title": "Intent"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "row_id",
+          "point_id",
+          "value",
+          "intent"
+        ],
+        "title": "CellChange"
+      },
       "ConfigurationChange": {
         "properties": {
           "base_revision": {
@@ -5995,6 +6446,63 @@
           "items"
         ],
         "title": "ConfirmRequest"
+      },
+      "CreateWorksheet": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Name"
+          },
+          "identity": {
+            "$ref": "#/components/schemas/StudyIdentity"
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Start Date"
+          },
+          "basis": {
+            "type": "string",
+            "title": "Basis",
+            "default": ""
+          },
+          "items": {
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 150,
+            "minItems": 1,
+            "title": "Items"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/PlannedPoint"
+            },
+            "type": "array",
+            "maxItems": 120,
+            "minItems": 1,
+            "title": "Points"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "name",
+          "identity",
+          "start_date",
+          "items",
+          "points"
+        ],
+        "title": "CreateWorksheet"
       },
       "DraftDecision": {
         "properties": {
@@ -6240,6 +6748,49 @@
           "download_url"
         ],
         "title": "ExportResult"
+      },
+      "ExtendPlan": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Token"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision"
+          },
+          "basis": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Basis"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/PlannedPoint"
+            },
+            "type": "array",
+            "maxItems": 120,
+            "minItems": 1,
+            "title": "Points"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token",
+          "idempotency_key",
+          "revision",
+          "basis",
+          "points"
+        ],
+        "title": "ExtendPlan"
       },
       "ExternalReference": {
         "properties": {
@@ -6744,6 +7295,21 @@
         ],
         "title": "ItemDisplayName"
       },
+      "LeaseToken": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Token"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token"
+        ],
+        "title": "LeaseToken"
+      },
       "LedgerDecision": {
         "properties": {
           "base_revision": {
@@ -7087,6 +7653,53 @@
           "items"
         ],
         "title": "NewItems"
+      },
+      "PlannedPoint": {
+        "properties": {
+          "unit": {
+            "type": "string",
+            "enum": [
+              "M",
+              "D"
+            ],
+            "title": "Unit"
+          },
+          "amount": {
+            "type": "integer",
+            "maximum": 3650.0,
+            "minimum": 0.0,
+            "title": "Amount"
+          },
+          "planned_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Planned Date"
+          },
+          "required_items": {
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 150,
+            "title": "Required Items"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "unit",
+          "amount",
+          "required_items"
+        ],
+        "title": "PlannedPoint"
       },
       "PreviewSummary": {
         "properties": {
@@ -8426,6 +9039,58 @@
         ],
         "title": "RuleRetirement"
       },
+      "SaveWorksheet": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Token"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Reason",
+            "default": ""
+          },
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/CellChange"
+            },
+            "type": "array",
+            "maxItems": 5000,
+            "title": "Changes",
+            "default": []
+          },
+          "layout": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorksheetLayout"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token",
+          "idempotency_key",
+          "revision"
+        ],
+        "title": "SaveWorksheet"
+      },
       "SharedEdit": {
         "properties": {
           "base_revision": {
@@ -8965,6 +9630,85 @@
         ],
         "title": "StructuralDecision"
       },
+      "StudyIdentity": {
+        "properties": {
+          "sample_type": {
+            "type": "string",
+            "enum": [
+              "DS",
+              "DP",
+              "placebo"
+            ],
+            "title": "Sample Type"
+          },
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "unknown",
+              "routine",
+              "reference"
+            ],
+            "title": "Purpose",
+            "default": "unknown"
+          },
+          "reporting_basis": {
+            "type": "string",
+            "title": "Reporting Basis",
+            "default": ""
+          },
+          "batch": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Batch"
+          },
+          "presentation": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Presentation"
+          },
+          "study": {
+            "type": "string",
+            "enum": [
+              "long_term",
+              "accelerated",
+              "stress"
+            ],
+            "title": "Study"
+          },
+          "study_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Study Id"
+          },
+          "condition": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Condition"
+          },
+          "orientation": {
+            "type": "string",
+            "enum": [
+              "",
+              "正置",
+              "倒置",
+              "平放"
+            ],
+            "title": "Orientation",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "sample_type",
+          "batch",
+          "presentation",
+          "study",
+          "study_id",
+          "condition"
+        ],
+        "title": "StudyIdentity"
+      },
       "StudySave": {
         "properties": {
           "base_revision": {
@@ -9456,6 +10200,33 @@
           "decisions"
         ],
         "title": "WorksheetDraftState"
+      },
+      "WorksheetLayout": {
+        "properties": {
+          "row_heights": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Row Heights"
+          },
+          "column_widths": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Column Widths"
+          },
+          "title_merge_to": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Title Merge To",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "WorksheetLayout"
       }
     }
   }

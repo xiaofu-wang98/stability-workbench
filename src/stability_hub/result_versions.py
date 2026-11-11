@@ -9,7 +9,10 @@ from .models import RawObservation, StabilityRecord
 from .identity_links import linked_config, frozen_config
 from .identity_associations import latest, adopted, logical_row, overlays, set_adoption, record_link
 from .permissions import Capability, require
-from .workflow_common import WorkflowError, bump, check_revision, encoded, event, remember, replay, uid
+from .workflow_common import (
+    WorkflowError, bump, check_revision, encoded, ensure_worksheet_slot_unlocked, event, next_result_sequence,
+    remember, replay, uid,
+)
 from .workflow_contracts import MutationResult
 from .workflow_contracts import ConfirmItem, ConfirmRequest
 
@@ -47,6 +50,7 @@ class ResultVersions:
                     raise WorkflowError("candidate_unresolved", "请先处理身份、源内容或同文件多结果歧义。")
                 row = self.workflow._candidate(conn, item.candidate_id)
                 record = view.record
+                ensure_worksheet_slot_unlocked(conn, record.key.slot_id)
                 existing = latest(conn,project,record.key.slot_id)
                 duplicate = existing is not None
                 if duplicate and item.intent == "initial":
@@ -139,9 +143,9 @@ class ResultVersions:
             fields.pop('item', None)
             fields.pop('month', None)
             fields.pop('day', None)
-            conn.execute('''INSERT INTO workflow_uploads(id,project,source_hash,filename,context_json,uploaded_by,client_key,request_hash)
-                            VALUES (?,?,?,?,?,?,?,?)''',
-                         (upload_id, project, source['document_hash'], source['filename'],
+            conn.execute('''INSERT INTO workflow_uploads(sequence,id,project,source_hash,filename,context_json,uploaded_by,client_key,request_hash)
+                            VALUES (?,?,?,?,?,?,?,?,?)''',
+                         (next_result_sequence(conn), upload_id, project, source['document_hash'], source['filename'],
                           source['context_json'] if isinstance(source['context_json'], str) else encoded(source['context_json']),
                           actor.id, 'change:' + request.idempotency_key, hashlib.sha256(encoded(payload).encode()).hexdigest()))
             conn.execute('''INSERT INTO workflow_candidates(id,project,upload_id,raw_json,detection_id,corrections_json,acknowledge_warning)
@@ -156,6 +160,40 @@ class ResultVersions:
             result = self.confirm(upload_id, command, actor=actor, _conn=conn,_sheet_section=raw.location.section)
             remember(conn, project, actor, request.idempotency_key, payload, result.model_dump(mode='json'))
             return result
+
+    def record_worksheet_result(self, conn, record, *, actor, previous, current, intent, reason, source):
+        """Record a direct entry in the same version and adoption tables as file intake."""
+        require(actor, Capability.CONFIRM_FACT)
+        project, slot_id = record.key.project, record.key.slot_id
+        if intent == "correction" and (not previous or not reason):
+            raise WorkflowError("correction_requires_reason", "更正需要当前采用结果及说明。")
+        if intent == "initial" and current:
+            raise WorkflowError("duplicate_requires_review", "已有检测，请明确选择更正或新增检测。", 409)
+        if intent == "retest" and not current:
+            raise WorkflowError("intent_mismatch", "请先录入首次检测。")
+        if intent == "retest" and not reason:
+            raise WorkflowError("retest_requires_reason", "请填写新增检测说明。")
+
+        parent = previous if intent == "correction" else current
+        detection_id = previous["detection_id"] if intent == "correction" else uid("detection")
+        if intent != "correction":
+            conn.execute("INSERT INTO workflow_detections(id,project) VALUES (?,?)", (detection_id, project))
+        cross_slot = parent and parent.get("physical_slot_id", parent["slot_id"]) != slot_id
+        version_id = uid("result")
+        source = {**source, "source_id": "entry_" + version_id}
+        conn.execute("""INSERT INTO workflow_versions(id,project,slot_id,record_json,detection_id,source_json,
+            upload_sequence,intent,reason,references_json,submitted_by,previous_version_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (version_id, project, slot_id, record.model_dump_json(), detection_id, encoded([source]),
+             next_result_sequence(conn), intent, reason, "[]", actor.id, parent["id"] if parent and not cross_slot else None))
+        if cross_slot:
+            conn.execute("INSERT INTO workflow_identity_lineage VALUES (?,?)", (version_id, parent["id"]))
+        conn.execute("INSERT INTO workflow_version_states VALUES (?, 'confirmed')", (version_id,))
+        if intent in {"initial", "correction"}:
+            set_adoption(conn, project, slot_id, version_id)
+        event(conn, project, version_id, "worksheet_" + intent, actor, reason,
+              {"detection_id": detection_id, "previous_version_id": parent["id"] if parent else None,
+               "worksheet_id": source["worksheet_id"], "adopted": intent != "retest"})
+        return version_id
 
     def _version(self, conn, version_id):
         row = conn.execute("""SELECT v.*,s.state,i.previous_version_id AS identity_previous_version_id
@@ -182,6 +220,7 @@ class ResultVersions:
             check_revision(conn, project, request.base_revision)
             if row["state"] not in {"pending", "confirmed"}:
                 raise WorkflowError("invalid_state", "该结果已撤回、拒绝或为迁移旧值，不能重复复核。", 409)
+            ensure_worksheet_slot_unlocked(conn, row["slot_id"])
             if row["intent"] == "correction":
                 require(actor, Capability.CORRECT_RESULT)
                 if request.action == "confirm_fact":
@@ -257,6 +296,15 @@ class ResultVersions:
 
     def source(self, source_id, *, actor):
         require(actor, Capability.VIEW)
+        if source_id.startswith("entry_result_"):
+            with self.store.read() as conn:
+                row = self._version(conn, source_id.removeprefix("entry_"))
+                source = next((item for item in json.loads(row["source_json"]) if item["source_id"] == source_id), None)
+                if not source:
+                    raise WorkflowError("not_found", "来源不存在。", 404)
+                return {**source, "project": row["project"], "version_id": row["id"],
+                        "submitted_at": row["submitted_at"], "submitted_by": row["submitted_by"],
+                        "previous_version_id": row["previous_version_id"], "reason": row["reason"], "intent": row["intent"]}
         with self.store.connect() as conn:
             conn.execute("BEGIN")
             if not source_id.startswith("legacy_"):

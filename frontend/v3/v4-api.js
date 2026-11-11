@@ -948,7 +948,8 @@
             if (preferred && preferred !== currentProjectKey) selectProject(preferred, false);
             if (typeof renderProjectDirectory === 'function') renderProjectDirectory();
           }
-          text.textContent = `V${runtime.version} 候选 · 代码 ${(runtime.code_commit||'unknown').slice(0,12)}${runtime.code_dirty?'（含未提交修复）':''} · ${runtime.actor} (${runtime.role}) · 数据库：${runtime.data_home}`;
+          const version = runtime.workbench_version ? '稳研工作台 ' + runtime.workbench_version : 'V' + runtime.version;
+          text.textContent = `${version} · 代码 ${(runtime.code_commit||'unknown').slice(0,12)}${runtime.code_dirty?'（含未提交修复）':''} · ${runtime.actor} (${runtime.role}) · 数据库：${runtime.data_home}`;
           bar.style.background = '#ecfdf5';
           const prj = typeof currentProjectKey !== 'undefined' ? currentProjectKey : 'IP166E';
           if (preferred) {
