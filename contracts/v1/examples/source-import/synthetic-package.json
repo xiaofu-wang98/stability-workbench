@@ -1,0 +1,283 @@
+{
+  "format_version": 1,
+  "source_hash": "d2f0c47b704a4025e0bb1aac92356987d4066e89e16ad503dc30e7cac3c91945",
+  "extractor_version": "hub-ooxml-1",
+  "tables": [
+    {
+      "table_id": "table-1",
+      "table_index": 1,
+      "part": "word/document.xml",
+      "section": "ooxml:word/document.xml#1",
+      "parent_table_id": null,
+      "caption": "表13：合成夹具",
+      "rows": [
+        [
+          {
+            "coord": "R1C1",
+            "row": 1,
+            "column": 1,
+            "grid_column": 1,
+            "text": "Purity",
+            "colspan": 1,
+            "rowspan": 1,
+            "continuation": false,
+            "anchor": null,
+            "xml_sha256": "93ec66c67f3bac400cc41c440f89932b0b2418646b08d95af2a6786e09c0e72d",
+            "references": [],
+            "formula": "",
+            "has_image": false,
+            "is_blank": false
+          },
+          {
+            "coord": "R1C2",
+            "row": 1,
+            "column": 2,
+            "grid_column": 2,
+            "text": "12M",
+            "colspan": 1,
+            "rowspan": 1,
+            "continuation": false,
+            "anchor": null,
+            "xml_sha256": "8bab5689e58d11c11f4d299953826ee5a587dafe73e5e297aebde6e6b2d50069",
+            "references": [],
+            "formula": "",
+            "has_image": false,
+            "is_blank": false
+          },
+          {
+            "coord": "R1C3",
+            "row": 1,
+            "column": 3,
+            "grid_column": 3,
+            "text": "98",
+            "colspan": 1,
+            "rowspan": 1,
+            "continuation": false,
+            "anchor": null,
+            "xml_sha256": "8bcfa03e232f40d56211c05849130d84909c26104b3257bd84fbe7c97bd9369f",
+            "references": [],
+            "formula": "",
+            "has_image": false,
+            "is_blank": false
+          },
+          {
+            "coord": "R1C4",
+            "row": 1,
+            "column": 4,
+            "grid_column": 4,
+            "text": "%",
+            "colspan": 1,
+            "rowspan": 1,
+            "continuation": false,
+            "anchor": null,
+            "xml_sha256": "f23fedba534fedfd4af5b9012e8d6e0b4a848b6523a656f0ec9f58513f9da073",
+            "references": [],
+            "formula": "",
+            "has_image": false,
+            "is_blank": false
+          }
+        ],
+        [
+          {
+            "coord": "R2C1",
+            "row": 2,
+            "column": 1,
+            "grid_column": 1,
+            "text": "合并\n换行",
+            "colspan": 1,
+            "rowspan": 2,
+            "continuation": false,
+            "anchor": null,
+            "xml_sha256": "f98312ec5aec1f245dd5173ab52ac112818002ae5a522c3cb0cc0e3040d03ed0",
+            "references": [],
+            "formula": "",
+            "has_image": false,
+            "is_blank": false
+          },
+          {
+            "coord": "R2C2",
+            "row": 2,
+            "column": 2,
+            "grid_column": 2,
+            "text": "嵌套\n",
+            "colspan": 1,
+            "rowspan": 1,
+            "continuation": false,
+            "anchor": null,
+            "xml_sha256": "61c6b4ec0985e7d952734a579e11feb545b2819f3144eb72cc995becb023c4d3",
+            "references": [],
+            "formula": "",
+            "has_image": false,
+            "is_blank": false
+          },
+          {
+            "coord": "R2C3",
+            "row": 2,
+            "column": 3,
+            "grid_column": 3,
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1,
+            "continuation": false,
+            "anchor": null,
+            "xml_sha256": "04fcf52c1d6d439e896605c73d2bea10041d7bbacb91fd5b6220a0667f9c37cc",
+            "references": [],
+            "formula": "",
+            "has_image": false,
+            "is_blank": true
+          },
+          {
+            "coord": "R2C4",
+            "row": 2,
+            "column": 4,
+            "grid_column": 4,
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1,
+            "continuation": false,
+            "anchor": null,
+            "xml_sha256": "04fcf52c1d6d439e896605c73d2bea10041d7bbacb91fd5b6220a0667f9c37cc",
+            "references": [],
+            "formula": "",
+            "has_image": false,
+            "is_blank": true
+          }
+        ],
+        [
+          {
+            "coord": "R3C1",
+            "row": 3,
+            "column": 1,
+            "grid_column": 1,
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1,
+            "continuation": true,
+            "anchor": "R2C1",
+            "xml_sha256": "716fae64ffe0e562197f50bff0e3d3f9259d791f50db9702d1b118a5caefc400",
+            "references": [],
+            "formula": "",
+            "has_image": false,
+            "is_blank": true
+          },
+          {
+            "coord": "R3C2",
+            "row": 3,
+            "column": 2,
+            "grid_column": 2,
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1,
+            "continuation": false,
+            "anchor": null,
+            "xml_sha256": "04fcf52c1d6d439e896605c73d2bea10041d7bbacb91fd5b6220a0667f9c37cc",
+            "references": [],
+            "formula": "",
+            "has_image": false,
+            "is_blank": true
+          },
+          {
+            "coord": "R3C3",
+            "row": 3,
+            "column": 3,
+            "grid_column": 3,
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1,
+            "continuation": false,
+            "anchor": null,
+            "xml_sha256": "04fcf52c1d6d439e896605c73d2bea10041d7bbacb91fd5b6220a0667f9c37cc",
+            "references": [],
+            "formula": "",
+            "has_image": false,
+            "is_blank": true
+          },
+          {
+            "coord": "R3C4",
+            "row": 3,
+            "column": 4,
+            "grid_column": 4,
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1,
+            "continuation": false,
+            "anchor": null,
+            "xml_sha256": "04fcf52c1d6d439e896605c73d2bea10041d7bbacb91fd5b6220a0667f9c37cc",
+            "references": [],
+            "formula": "",
+            "has_image": false,
+            "is_blank": true
+          }
+        ]
+      ],
+      "headers": [],
+      "footnotes": [
+        "注：保留原文及空白"
+      ],
+      "xml_sha256": "7cd75a1640a63930e516812f5d554010e8b363889733b37e1705cf501930df98"
+    },
+    {
+      "table_id": "table-2",
+      "table_index": 2,
+      "part": "word/document.xml",
+      "section": "ooxml:word/document.xml#2",
+      "parent_table_id": "table-1",
+      "caption": "物理表 2",
+      "rows": [
+        [
+          {
+            "coord": "R1C1",
+            "row": 1,
+            "column": 1,
+            "grid_column": 1,
+            "text": "嵌套",
+            "colspan": 1,
+            "rowspan": 1,
+            "continuation": false,
+            "anchor": null,
+            "xml_sha256": "4016336ef8119f529a0174e3bdebb816e884ca41e4d9ba4b3051efc05fc4620a",
+            "references": [],
+            "formula": "",
+            "has_image": false,
+            "is_blank": false
+          }
+        ]
+      ],
+      "headers": [],
+      "footnotes": [],
+      "xml_sha256": "2b066dbc257a860990c555d50843812a1fbb3483eaf7d0dd8dff62b773714150"
+    }
+  ],
+  "categories": {},
+  "projections": [
+    {
+      "evidence": {
+        "test_item": {
+          "format": "docx",
+          "section": "ooxml:word/document.xml#1",
+          "row": 1,
+          "column": 1
+        },
+        "time_point": {
+          "format": "docx",
+          "section": "ooxml:word/document.xml#1",
+          "row": 1,
+          "column": 2
+        },
+        "result": {
+          "format": "docx",
+          "section": "ooxml:word/document.xml#1",
+          "row": 1,
+          "column": 3
+        },
+        "unit": {
+          "format": "docx",
+          "section": "ooxml:word/document.xml#1",
+          "row": 1,
+          "column": 4
+        }
+      },
+      "reason": "人工指定检测值映射"
+    }
+  ]
+}

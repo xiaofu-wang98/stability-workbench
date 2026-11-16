@@ -1,0 +1,2384 @@
+{
+  "$defs": {
+    "CandidateEdit": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_revision": {
+          "minimum": 1,
+          "title": "Candidate Revision",
+          "type": "integer"
+        },
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "fields": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "minProperties": 1,
+          "title": "Fields",
+          "type": "object"
+        },
+        "acknowledge_source_warning": {
+          "default": false,
+          "title": "Acknowledge Source Warning",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "candidate_revision",
+        "base_revision",
+        "idempotency_key",
+        "reason",
+        "fields"
+      ],
+      "title": "CandidateEdit",
+      "type": "object"
+    },
+    "CandidateMapping": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "candidate_ids": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 500,
+          "minItems": 1,
+          "title": "Candidate Ids",
+          "type": "array"
+        },
+        "item_id": {
+          "minLength": 1,
+          "title": "Item Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "reason",
+        "candidate_ids",
+        "item_id"
+      ],
+      "title": "CandidateMapping",
+      "type": "object"
+    },
+    "CandidateView": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        },
+        "raw_fields": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Raw Fields",
+          "type": "object"
+        },
+        "status": {
+          "enum": [
+            "new",
+            "same_value",
+            "empty",
+            "different_value",
+            "needs_review"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "record": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StabilityRecord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "existing_record": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StabilityRecord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "issue_code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Issue Code"
+        },
+        "detail": {
+          "title": "Detail",
+          "type": "string"
+        },
+        "comment": {
+          "default": "",
+          "title": "Comment",
+          "type": "string"
+        },
+        "inherited_fields": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Inherited Fields",
+          "type": "object"
+        },
+        "superseded_by": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Superseded By",
+          "type": "array"
+        },
+        "result_anchor": {
+          "additionalProperties": true,
+          "title": "Result Anchor",
+          "type": "object"
+        },
+        "mapping_source": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Mapping Source",
+          "type": "object"
+        },
+        "rule_history": {
+          "default": [],
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Rule History",
+          "type": "array"
+        },
+        "issues": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ReviewIssue"
+          },
+          "title": "Issues",
+          "type": "array"
+        },
+        "source_value": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Source Value",
+          "type": "object"
+        },
+        "logical_row": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Logical Row"
+        },
+        "source_span": {
+          "anyOf": [
+            {
+              "maxItems": 4,
+              "minItems": 4,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Span"
+        },
+        "reviewed": {
+          "default": false,
+          "title": "Reviewed",
+          "type": "boolean"
+        },
+        "row_signature": {
+          "default": "",
+          "title": "Row Signature",
+          "type": "string"
+        },
+        "revisions": {
+          "additionalProperties": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Revisions",
+          "type": "object"
+        },
+        "suggested_fields": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Suggested Fields",
+          "type": "object"
+        },
+        "can_receive": {
+          "default": false,
+          "title": "Can Receive",
+          "type": "boolean"
+        },
+        "received": {
+          "default": false,
+          "title": "Received",
+          "type": "boolean"
+        },
+        "candidate_revision": {
+          "title": "Candidate Revision",
+          "type": "integer"
+        },
+        "lifecycle": {
+          "enum": [
+            "draft",
+            "submitted",
+            "withdrawn"
+          ],
+          "title": "Lifecycle",
+          "type": "string"
+        },
+        "detection_id": {
+          "minLength": 1,
+          "title": "Detection Id",
+          "type": "string"
+        },
+        "source_number": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Number"
+        },
+        "existing_detection_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Existing Detection Id"
+        },
+        "adopted_detection_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Adopted Detection Id"
+        },
+        "test_date": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Test Date"
+        },
+        "evidence": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Location"
+          },
+          "title": "Evidence",
+          "type": "object"
+        },
+        "interpreted_fields": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Interpreted Fields",
+          "type": "object"
+        },
+        "applied_defaults": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Applied Defaults",
+          "type": "object"
+        },
+        "corrections": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Corrections",
+          "type": "object"
+        },
+        "allowed_actions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowed Actions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "location",
+        "raw_fields",
+        "status",
+        "detail",
+        "candidate_revision",
+        "lifecycle",
+        "detection_id",
+        "corrections",
+        "allowed_actions"
+      ],
+      "title": "CandidateView",
+      "type": "object"
+    },
+    "ConfigurationChange": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "item": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ItemDefinition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "sample_type": {
+          "anyOf": [
+            {
+              "enum": [
+                "DS",
+                "DP"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sample Type"
+        },
+        "presentation": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Presentation"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "reason"
+      ],
+      "title": "ConfigurationChange",
+      "type": "object"
+    },
+    "ConfigurationView": {
+      "additionalProperties": false,
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/ProjectConfig"
+        },
+        "base_revision": {
+          "title": "Base Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "config",
+        "base_revision"
+      ],
+      "title": "ConfigurationView",
+      "type": "object"
+    },
+    "ConfirmItem": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_id": {
+          "minLength": 1,
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "candidate_revision": {
+          "minimum": 1,
+          "title": "Candidate Revision",
+          "type": "integer"
+        },
+        "detection_id": {
+          "minLength": 1,
+          "title": "Detection Id",
+          "type": "string"
+        },
+        "identity_confirmed": {
+          "const": true,
+          "title": "Identity Confirmed",
+          "type": "boolean"
+        },
+        "intent": {
+          "enum": [
+            "initial",
+            "repeat_source",
+            "retest",
+            "correction"
+          ],
+          "title": "Intent",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "references": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ExternalReference"
+          },
+          "title": "References",
+          "type": "array"
+        }
+      },
+      "required": [
+        "candidate_id",
+        "candidate_revision",
+        "detection_id",
+        "identity_confirmed",
+        "intent",
+        "reason"
+      ],
+      "title": "ConfirmItem",
+      "type": "object"
+    },
+    "ConfirmRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/ConfirmItem"
+          },
+          "maxItems": 20000,
+          "minItems": 1,
+          "title": "Items",
+          "type": "array"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "items"
+      ],
+      "title": "ConfirmRequest",
+      "type": "object"
+    },
+    "ExportRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "axis_mode": {
+          "default": "overview",
+          "enum": [
+            "overview",
+            "detail",
+            "manual"
+          ],
+          "title": "Axis Mode",
+          "type": "string"
+        },
+        "axis_min": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Axis Min"
+        },
+        "axis_max": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Axis Max"
+        },
+        "format": {
+          "default": "detail",
+          "enum": [
+            "detail",
+            "stability_summary"
+          ],
+          "title": "Format",
+          "type": "string"
+        },
+        "slot_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Slot Ids",
+          "type": "array"
+        },
+        "include_png": {
+          "default": false,
+          "title": "Include Png",
+          "type": "boolean"
+        },
+        "project": {
+          "minLength": 1,
+          "title": "Project",
+          "type": "string"
+        },
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "filters": {
+          "$ref": "#/$defs/ResultFilter"
+        },
+        "orientation": {
+          "default": "items",
+          "enum": [
+            "items",
+            "batches"
+          ],
+          "title": "Orientation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project",
+        "base_revision"
+      ],
+      "title": "ExportRequest",
+      "type": "object"
+    },
+    "ExportResult": {
+      "additionalProperties": false,
+      "properties": {
+        "image_download_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Image Download Url"
+        },
+        "export_id": {
+          "minLength": 1,
+          "title": "Export Id",
+          "type": "string"
+        },
+        "project": {
+          "minLength": 1,
+          "title": "Project",
+          "type": "string"
+        },
+        "base_revision": {
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "state": {
+          "const": "verified",
+          "default": "verified",
+          "title": "State",
+          "type": "string"
+        },
+        "filename": {
+          "minLength": 1,
+          "title": "Filename",
+          "type": "string"
+        },
+        "download_url": {
+          "minLength": 1,
+          "title": "Download Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "export_id",
+        "project",
+        "base_revision",
+        "filename",
+        "download_url"
+      ],
+      "title": "ExportResult",
+      "type": "object"
+    },
+    "ExternalReference": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "CC",
+            "OOE",
+            "OOS",
+            "OTHER"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "number": {
+          "minLength": 1,
+          "title": "Number",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "number"
+      ],
+      "title": "ExternalReference",
+      "type": "object"
+    },
+    "ItemCreation": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "label": {
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "aliases": {
+          "default": [],
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Aliases",
+          "type": "array"
+        },
+        "unit": {
+          "default": "",
+          "title": "Unit",
+          "type": "string"
+        },
+        "result_type": {
+          "default": "numeric",
+          "enum": [
+            "numeric",
+            "qualitative"
+          ],
+          "title": "Result Type",
+          "type": "string"
+        },
+        "method": {
+          "minLength": 1,
+          "title": "Method",
+          "type": "string"
+        },
+        "method_version": {
+          "default": "not_reported",
+          "minLength": 1,
+          "title": "Method Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "method"
+      ],
+      "title": "ItemCreation",
+      "type": "object"
+    },
+    "ItemDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "aliases": {
+          "default": [],
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Aliases",
+          "type": "array"
+        },
+        "unit": {
+          "default": "",
+          "title": "Unit",
+          "type": "string"
+        },
+        "result_type": {
+          "default": "numeric",
+          "enum": [
+            "numeric",
+            "qualitative"
+          ],
+          "title": "Result Type",
+          "type": "string"
+        },
+        "method": {
+          "minLength": 1,
+          "title": "Method",
+          "type": "string"
+        },
+        "method_version": {
+          "default": "not_reported",
+          "minLength": 1,
+          "title": "Method Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "method"
+      ],
+      "title": "ItemDefinition",
+      "type": "object"
+    },
+    "LedgerDecision": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "candidate_ids": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 20000,
+          "minItems": 1,
+          "title": "Candidate Ids",
+          "type": "array"
+        },
+        "action": {
+          "enum": [
+            "review",
+            "exclude"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "reason": {
+          "default": "",
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "candidate_ids",
+        "action"
+      ],
+      "title": "LedgerDecision",
+      "type": "object"
+    },
+    "Location": {
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "enum": [
+            "xlsx",
+            "docx"
+          ],
+          "title": "Format",
+          "type": "string"
+        },
+        "section": {
+          "minLength": 1,
+          "title": "Section",
+          "type": "string"
+        },
+        "row": {
+          "minimum": 1,
+          "title": "Row",
+          "type": "integer"
+        },
+        "column": {
+          "minimum": 1,
+          "title": "Column",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "format",
+        "section",
+        "row",
+        "column"
+      ],
+      "title": "Location",
+      "type": "object"
+    },
+    "MutationResult": {
+      "additionalProperties": false,
+      "properties": {
+        "project": {
+          "minLength": 1,
+          "title": "Project",
+          "type": "string"
+        },
+        "base_revision": {
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "result_version_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Result Version Ids",
+          "type": "array"
+        },
+        "pending_confirmation_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Pending Confirmation Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "project",
+        "base_revision"
+      ],
+      "title": "MutationResult",
+      "type": "object"
+    },
+    "NewItems": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "items": {
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ItemDefinition"
+              },
+              {
+                "$ref": "#/$defs/ItemCreation"
+              }
+            ]
+          },
+          "maxItems": 500,
+          "minItems": 1,
+          "title": "Items",
+          "type": "array"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "reason",
+        "items"
+      ],
+      "title": "NewItems",
+      "type": "object"
+    },
+    "PreviewSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "preview_id": {
+          "minLength": 1,
+          "title": "Preview Id",
+          "type": "string"
+        },
+        "filename": {
+          "minLength": 1,
+          "title": "Filename",
+          "type": "string"
+        },
+        "uploaded_at": {
+          "minLength": 1,
+          "title": "Uploaded At",
+          "type": "string"
+        },
+        "uploaded_by": {
+          "minLength": 1,
+          "title": "Uploaded By",
+          "type": "string"
+        },
+        "total": {
+          "title": "Total",
+          "type": "integer"
+        },
+        "draft": {
+          "title": "Draft",
+          "type": "integer"
+        },
+        "submitted": {
+          "title": "Submitted",
+          "type": "integer"
+        },
+        "withdrawn": {
+          "title": "Withdrawn",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "preview_id",
+        "filename",
+        "uploaded_at",
+        "uploaded_by",
+        "total",
+        "draft",
+        "submitted",
+        "withdrawn"
+      ],
+      "title": "PreviewSummary",
+      "type": "object"
+    },
+    "ProjectConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "project": {
+          "minLength": 1,
+          "title": "Project",
+          "type": "string"
+        },
+        "name": {
+          "default": "",
+          "title": "Name",
+          "type": "string"
+        },
+        "items": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ItemDefinition"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "presentation_defaults": {
+          "additionalProperties": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "propertyNames": {
+            "enum": [
+              "DS",
+              "DP"
+            ]
+          },
+          "title": "Presentation Defaults",
+          "type": "object"
+        }
+      },
+      "required": [
+        "project"
+      ],
+      "title": "ProjectConfig",
+      "type": "object"
+    },
+    "ProjectCreation": {
+      "additionalProperties": false,
+      "properties": {
+        "project": {
+          "minLength": 1,
+          "title": "Project",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project",
+        "name"
+      ],
+      "title": "ProjectCreation",
+      "type": "object"
+    },
+    "ReceiveRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "defer_confirmation": {
+          "default": false,
+          "title": "Defer Confirmation",
+          "type": "boolean"
+        },
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "candidate_ids": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 20000,
+          "title": "Candidate Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "candidate_ids"
+      ],
+      "title": "ReceiveRequest",
+      "type": "object"
+    },
+    "RecordKey": {
+      "additionalProperties": false,
+      "properties": {
+        "project": {
+          "minLength": 1,
+          "title": "Project",
+          "type": "string"
+        },
+        "sample_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sample Id"
+        },
+        "sample_type": {
+          "enum": [
+            "DS",
+            "DP",
+            "placebo"
+          ],
+          "title": "Sample Type",
+          "type": "string"
+        },
+        "purpose": {
+          "default": "unknown",
+          "enum": [
+            "unknown",
+            "routine",
+            "reference"
+          ],
+          "title": "Purpose",
+          "type": "string"
+        },
+        "reporting_basis": {
+          "default": "",
+          "title": "Reporting Basis",
+          "type": "string"
+        },
+        "batch": {
+          "minLength": 1,
+          "title": "Batch",
+          "type": "string"
+        },
+        "presentation": {
+          "minLength": 1,
+          "title": "Presentation",
+          "type": "string"
+        },
+        "study": {
+          "enum": [
+            "release",
+            "long_term",
+            "accelerated",
+            "stress"
+          ],
+          "title": "Study",
+          "type": "string"
+        },
+        "study_id": {
+          "minLength": 1,
+          "title": "Study Id",
+          "type": "string"
+        },
+        "condition": {
+          "minLength": 1,
+          "title": "Condition",
+          "type": "string"
+        },
+        "month": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Month"
+        },
+        "day": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Day"
+        },
+        "item": {
+          "minLength": 1,
+          "title": "Item",
+          "type": "string"
+        },
+        "method": {
+          "minLength": 1,
+          "title": "Method",
+          "type": "string"
+        },
+        "method_version": {
+          "default": "not_reported",
+          "minLength": 1,
+          "title": "Method Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project",
+        "sample_type",
+        "batch",
+        "presentation",
+        "study",
+        "study_id",
+        "condition",
+        "item",
+        "method"
+      ],
+      "title": "RecordKey",
+      "type": "object"
+    },
+    "Result": {
+      "additionalProperties": false,
+      "properties": {
+        "interpretation": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Interpretation",
+          "type": "object"
+        },
+        "status": {
+          "enum": [
+            "numeric",
+            "na",
+            "nd",
+            "placeholder",
+            "blank",
+            "complies",
+            "text",
+            "not_reported"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "raw_text": {
+          "title": "Raw Text",
+          "type": "string"
+        },
+        "report_references": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Report References",
+          "type": "array"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        },
+        "comparator": {
+          "anyOf": [
+            {
+              "enum": [
+                "eq",
+                "lt",
+                "le",
+                "gt",
+                "ge"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Comparator"
+        },
+        "unit": {
+          "default": "",
+          "title": "Unit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "raw_text"
+      ],
+      "title": "Result",
+      "type": "object"
+    },
+    "ResultChange": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "result": {
+          "minLength": 1,
+          "title": "Result",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "references": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ExternalReference"
+          },
+          "title": "References",
+          "type": "array"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "result",
+        "reason"
+      ],
+      "title": "ResultChange",
+      "type": "object"
+    },
+    "ResultFilter": {
+      "additionalProperties": false,
+      "properties": {
+        "day": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Day"
+        },
+        "batch": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Batch"
+        },
+        "sample_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sample Id"
+        },
+        "reporting_basis": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reporting Basis"
+        },
+        "purpose": {
+          "anyOf": [
+            {
+              "enum": [
+                "unknown",
+                "routine",
+                "reference"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Purpose"
+        },
+        "sample_type": {
+          "anyOf": [
+            {
+              "enum": [
+                "DS",
+                "DP",
+                "placebo"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sample Type"
+        },
+        "presentation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Presentation"
+        },
+        "study": {
+          "anyOf": [
+            {
+              "enum": [
+                "release",
+                "long_term",
+                "accelerated",
+                "stress"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Study"
+        },
+        "study_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Study Id"
+        },
+        "condition": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Condition"
+        },
+        "month": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Month"
+        },
+        "item": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Item"
+        },
+        "method": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Method"
+        },
+        "method_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Method Version"
+        }
+      },
+      "title": "ResultFilter",
+      "type": "object"
+    },
+    "ResultPage": {
+      "additionalProperties": false,
+      "properties": {
+        "project": {
+          "minLength": 1,
+          "title": "Project",
+          "type": "string"
+        },
+        "base_revision": {
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "total": {
+          "title": "Total",
+          "type": "integer"
+        },
+        "offset": {
+          "title": "Offset",
+          "type": "integer"
+        },
+        "limit": {
+          "title": "Limit",
+          "type": "integer"
+        },
+        "cells": {
+          "items": {
+            "$ref": "#/$defs/WorkflowResultCell"
+          },
+          "title": "Cells",
+          "type": "array"
+        }
+      },
+      "required": [
+        "project",
+        "base_revision",
+        "total",
+        "offset",
+        "limit",
+        "cells"
+      ],
+      "title": "ResultPage",
+      "type": "object"
+    },
+    "ResultValue": {
+      "additionalProperties": false,
+      "properties": {
+        "result_version_id": {
+          "minLength": 1,
+          "title": "Result Version Id",
+          "type": "string"
+        },
+        "detection_id": {
+          "minLength": 1,
+          "title": "Detection Id",
+          "type": "string"
+        },
+        "text": {
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "pending_confirmation": {
+          "title": "Pending Confirmation",
+          "type": "boolean"
+        },
+        "source_ids": {
+          "default": [],
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Source Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "result_version_id",
+        "detection_id",
+        "text",
+        "pending_confirmation"
+      ],
+      "title": "ResultValue",
+      "type": "object"
+    },
+    "ReviewIssue": {
+      "additionalProperties": false,
+      "properties": {
+        "source_kind": {
+          "default": "extraction",
+          "enum": [
+            "original_comment",
+            "system_hint",
+            "source_revision",
+            "extraction"
+          ],
+          "title": "Source Kind",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "code": {
+          "minLength": 1,
+          "title": "Code",
+          "type": "string"
+        },
+        "candidate_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Candidate Ids",
+          "type": "array"
+        },
+        "region_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Region Ids",
+          "type": "array"
+        },
+        "fields": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Fields",
+          "type": "array"
+        },
+        "evidence": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Location"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "detail": {
+          "title": "Detail",
+          "type": "string"
+        },
+        "actions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Actions",
+          "type": "array"
+        },
+        "state": {
+          "default": "open",
+          "enum": [
+            "open",
+            "resolved"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "revision": {
+          "default": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "source_field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Field"
+        },
+        "revision_kind": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Revision Kind"
+        },
+        "proposal": {
+          "additionalProperties": true,
+          "title": "Proposal",
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "code",
+        "detail",
+        "actions"
+      ],
+      "title": "ReviewIssue",
+      "type": "object"
+    },
+    "ReviewRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "action": {
+          "enum": [
+            "confirm_fact",
+            "adopt",
+            "reject"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "action",
+        "reason"
+      ],
+      "title": "ReviewRequest",
+      "type": "object"
+    },
+    "RevisionResolution": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "candidate_ids": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 20000,
+          "minItems": 1,
+          "title": "Candidate Ids",
+          "type": "array"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        },
+        "method": {
+          "default": "",
+          "title": "Method",
+          "type": "string"
+        },
+        "remember_alias": {
+          "default": false,
+          "title": "Remember Alias",
+          "type": "boolean"
+        },
+        "reason": {
+          "default": "确认保留未划线内容，排除整项删除",
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "candidate_ids"
+      ],
+      "title": "RevisionResolution",
+      "type": "object"
+    },
+    "SharedEdit": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "candidate_ids": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 20000,
+          "minItems": 1,
+          "title": "Candidate Ids",
+          "type": "array"
+        },
+        "fields": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "minProperties": 1,
+          "title": "Fields",
+          "type": "object"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "reason",
+        "candidate_ids",
+        "fields"
+      ],
+      "title": "SharedEdit",
+      "type": "object"
+    },
+    "SheetConfirmRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "section": {
+          "minLength": 1,
+          "title": "Section",
+          "type": "string"
+        },
+        "reason": {
+          "default": "核对工作表有效内容后整表确认",
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "section"
+      ],
+      "title": "SheetConfirmRequest",
+      "type": "object"
+    },
+    "StabilityRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/RecordKey"
+        },
+        "result": {
+          "$ref": "#/$defs/Result"
+        },
+        "standards": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/StandardApplicability"
+          },
+          "title": "Standards",
+          "type": "array"
+        }
+      },
+      "required": [
+        "key",
+        "result"
+      ],
+      "title": "StabilityRecord",
+      "type": "object"
+    },
+    "StandardApplicability": {
+      "additionalProperties": false,
+      "properties": {
+        "basis": {
+          "default": "",
+          "title": "Basis",
+          "type": "string"
+        },
+        "criterion_text": {
+          "title": "Criterion Text",
+          "type": "string"
+        },
+        "version": {
+          "default": "",
+          "title": "Version",
+          "type": "string"
+        },
+        "effective_status": {
+          "const": "not_reported",
+          "default": "not_reported",
+          "title": "Effective Status",
+          "type": "string"
+        },
+        "applicability": {
+          "const": "source_reported",
+          "default": "source_reported",
+          "title": "Applicability",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/Location"
+        }
+      },
+      "required": [
+        "criterion_text",
+        "source"
+      ],
+      "title": "StandardApplicability",
+      "type": "object"
+    },
+    "UploadPreview": {
+      "additionalProperties": false,
+      "properties": {
+        "duplicate_source": {
+          "default": false,
+          "title": "Duplicate Source",
+          "type": "boolean"
+        },
+        "sheet_confirmation_required": {
+          "default": false,
+          "title": "Sheet Confirmation Required",
+          "type": "boolean"
+        },
+        "contract_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Contract Version",
+          "type": "string"
+        },
+        "contract_revision": {
+          "default": "2",
+          "enum": [
+            "2",
+            "5"
+          ],
+          "title": "Contract Revision",
+          "type": "string"
+        },
+        "preview_id": {
+          "minLength": 1,
+          "title": "Preview Id",
+          "type": "string"
+        },
+        "project": {
+          "minLength": 1,
+          "title": "Project",
+          "type": "string"
+        },
+        "filename": {
+          "minLength": 1,
+          "title": "Filename",
+          "type": "string"
+        },
+        "source_hash": {
+          "minLength": 1,
+          "title": "Source Hash",
+          "type": "string"
+        },
+        "upload_sequence": {
+          "title": "Upload Sequence",
+          "type": "integer"
+        },
+        "uploaded_by": {
+          "minLength": 1,
+          "title": "Uploaded By",
+          "type": "string"
+        },
+        "uploaded_at": {
+          "minLength": 1,
+          "title": "Uploaded At",
+          "type": "string"
+        },
+        "base_revision": {
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "state": {
+          "const": "preview_ready",
+          "default": "preview_ready",
+          "title": "State",
+          "type": "string"
+        },
+        "candidates": {
+          "items": {
+            "$ref": "#/$defs/CandidateView"
+          },
+          "title": "Candidates",
+          "type": "array"
+        },
+        "counts": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Counts",
+          "type": "object"
+        },
+        "can_commit": {
+          "title": "Can Commit",
+          "type": "boolean"
+        },
+        "parsing_summary": {
+          "default": [],
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Parsing Summary",
+          "type": "array"
+        }
+      },
+      "required": [
+        "preview_id",
+        "project",
+        "filename",
+        "source_hash",
+        "upload_sequence",
+        "uploaded_by",
+        "uploaded_at",
+        "base_revision",
+        "candidates",
+        "counts",
+        "can_commit"
+      ],
+      "title": "UploadPreview",
+      "type": "object"
+    },
+    "WithdrawRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "reason"
+      ],
+      "title": "WithdrawRequest",
+      "type": "object"
+    },
+    "WorkflowResultCell": {
+      "additionalProperties": false,
+      "properties": {
+        "slot_id": {
+          "minLength": 1,
+          "title": "Slot Id",
+          "type": "string"
+        },
+        "display": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResultValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "adopted": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResultValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "slot_key": {
+          "$ref": "#/$defs/RecordKey"
+        },
+        "display_status": {
+          "enum": [
+            "pending",
+            "confirmed",
+            "legacy"
+          ],
+          "title": "Display Status",
+          "type": "string"
+        },
+        "upload_sequence": {
+          "title": "Upload Sequence",
+          "type": "integer"
+        },
+        "worksheet_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Worksheet Id"
+        }
+      },
+      "required": [
+        "slot_id",
+        "display",
+        "adopted",
+        "slot_key",
+        "display_status",
+        "upload_sequence"
+      ],
+      "title": "WorkflowResultCell",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "ledger_decision": {
+      "$ref": "#/$defs/LedgerDecision"
+    },
+    "sheet_confirm": {
+      "$ref": "#/$defs/SheetConfirmRequest"
+    },
+    "revision_resolution": {
+      "$ref": "#/$defs/RevisionResolution"
+    },
+    "receive_request": {
+      "$ref": "#/$defs/ReceiveRequest"
+    },
+    "project_creation": {
+      "$ref": "#/$defs/ProjectCreation"
+    },
+    "new_items": {
+      "$ref": "#/$defs/NewItems"
+    },
+    "shared_edit": {
+      "$ref": "#/$defs/SharedEdit"
+    },
+    "result_change": {
+      "$ref": "#/$defs/ResultChange"
+    },
+    "configuration": {
+      "$ref": "#/$defs/ConfigurationView"
+    },
+    "configuration_change": {
+      "$ref": "#/$defs/ConfigurationChange"
+    },
+    "preview": {
+      "$ref": "#/$defs/UploadPreview"
+    },
+    "preview_summary": {
+      "$ref": "#/$defs/PreviewSummary"
+    },
+    "candidate_mapping": {
+      "$ref": "#/$defs/CandidateMapping"
+    },
+    "candidate_edit": {
+      "$ref": "#/$defs/CandidateEdit"
+    },
+    "confirmation": {
+      "$ref": "#/$defs/ConfirmRequest"
+    },
+    "review": {
+      "$ref": "#/$defs/ReviewRequest"
+    },
+    "withdrawal": {
+      "$ref": "#/$defs/WithdrawRequest"
+    },
+    "mutation_result": {
+      "$ref": "#/$defs/MutationResult"
+    },
+    "result_page": {
+      "$ref": "#/$defs/ResultPage"
+    },
+    "export_request": {
+      "$ref": "#/$defs/ExportRequest"
+    },
+    "export_result": {
+      "$ref": "#/$defs/ExportResult"
+    }
+  },
+  "required": [
+    "ledger_decision",
+    "sheet_confirm",
+    "revision_resolution",
+    "receive_request",
+    "project_creation",
+    "new_items",
+    "shared_edit",
+    "result_change",
+    "configuration",
+    "configuration_change",
+    "preview",
+    "preview_summary",
+    "candidate_mapping",
+    "candidate_edit",
+    "confirmation",
+    "review",
+    "withdrawal",
+    "mutation_result",
+    "result_page",
+    "export_request",
+    "export_result"
+  ],
+  "title": "WorkflowSchema",
+  "type": "object"
+}

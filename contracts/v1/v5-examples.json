@@ -1,0 +1,79 @@
+{
+  "first": {
+    "section": "Results",
+    "fingerprint": "synthetic-first",
+    "historical_count": 0,
+    "state": "ready",
+    "unresolved": [],
+    "review_required": [],
+    "base_revision": 3,
+    "can_commit": true,
+    "counts": {
+      "repeat_source": 0,
+      "correction": 0,
+      "retest": 0,
+      "initial": 1,
+      "keep_old": 0,
+      "exclude": 0
+    }
+  },
+  "mixed": {
+    "section": "Results",
+    "fingerprint": "synthetic-mixed",
+    "historical_count": 0,
+    "state": "needs_approval",
+    "unresolved": [],
+    "review_required": [
+      "correction-c1",
+      "retest-c2"
+    ],
+    "base_revision": 3,
+    "can_commit": false,
+    "counts": {
+      "repeat_source": 1,
+      "correction": 1,
+      "retest": 1,
+      "initial": 1,
+      "keep_old": 1,
+      "exclude": 1
+    }
+  },
+  "structure": {
+    "section": "Results",
+    "fingerprint": "synthetic-structure",
+    "historical_count": 0,
+    "state": "needs_review",
+    "unresolved": [
+      "issue-merged-C2:D2"
+    ],
+    "review_required": [],
+    "base_revision": 3,
+    "can_commit": false,
+    "counts": {
+      "repeat_source": 0,
+      "correction": 0,
+      "retest": 0,
+      "initial": 1,
+      "keep_old": 0,
+      "exclude": 0
+    }
+  },
+  "completed": {
+    "section": "Results",
+    "fingerprint": "synthetic-completed",
+    "historical_count": 1,
+    "state": "committed",
+    "unresolved": [],
+    "review_required": [],
+    "base_revision": 3,
+    "can_commit": true,
+    "counts": {
+      "repeat_source": 0,
+      "correction": 0,
+      "retest": 0,
+      "initial": 1,
+      "keep_old": 0,
+      "exclude": 0
+    }
+  }
+}

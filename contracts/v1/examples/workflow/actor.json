@@ -1,0 +1,10 @@
+{
+  "id": "example-tech",
+  "display_name": "示例实验员",
+  "capabilities": [
+    "confirm_fact",
+    "view",
+    "preview"
+  ],
+  "role": "technician"
+}

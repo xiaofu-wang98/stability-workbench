@@ -1,0 +1,45 @@
+{
+  "project": "EXAMPLE",
+  "base_revision": 4,
+  "total": 1,
+  "offset": 0,
+  "limit": 100,
+  "cells": [
+    {
+      "slot_id": "940f48c230661626d9815f7fecabf73655146a55d21f795d60f2977af1421147",
+      "display": {
+        "result_version_id": "result_e9848f43be764686ad2404b9d2c24aee",
+        "detection_id": "detection_c217888bec1b4763ae6616c4ce8f29dd",
+        "text": "99%",
+        "pending_confirmation": true,
+        "source_ids": [
+          "candidate_f99cf223f73d4d2e8c89330abbdf4b40"
+        ]
+      },
+      "adopted": {
+        "result_version_id": "result_448b85c051644017a773d1879added5a",
+        "detection_id": "detection_f34345c9cd434867b77d498ecbf5fa93",
+        "text": "98%",
+        "pending_confirmation": false,
+        "source_ids": [
+          "candidate_942b836893ab480a819f04a09ce8d26e"
+        ]
+      },
+      "slot_key": {
+        "project": "EXAMPLE",
+        "sample_type": "DP",
+        "batch": "EXAMPLE-B001",
+        "presentation": "1mg",
+        "study": "long_term",
+        "study_id": "EXAMPLE-STUDY",
+        "condition": "5C",
+        "month": 12,
+        "item": "purity",
+        "method": "SEC",
+        "method_version": "not_reported"
+      },
+      "display_status": "pending",
+      "upload_sequence": 2
+    }
+  ]
+}

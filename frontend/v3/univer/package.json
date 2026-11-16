@@ -1,0 +1,14 @@
+{
+  "name": "stability-workbench-sheet",
+  "private": true,
+  "scripts": {
+    "build": "esbuild editor.js --bundle --format=esm --minify --outdir=dist"
+  },
+  "dependencies": {
+    "@univerjs/preset-sheets-core": "1.4.0",
+    "@univerjs/presets": "1.4.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

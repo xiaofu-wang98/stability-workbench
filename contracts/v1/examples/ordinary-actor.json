@@ -1,0 +1,5 @@
+{
+  "id": "example-local-user",
+  "display_name": "本地试点操作者",
+  "capabilities": ["preview", "confirm_fact"]
+}

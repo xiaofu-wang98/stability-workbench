@@ -1,0 +1,11 @@
+{
+  "role": "stability_source",
+  "defaults": {
+    "sample_type": "DP",
+    "batch": "EXAMPLE-B001",
+    "presentation": "1mg",
+    "study": "long_term",
+    "study_id": "EXAMPLE-STUDY",
+    "condition": "5C"
+  }
+}

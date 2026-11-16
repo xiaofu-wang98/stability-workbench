@@ -1,0 +1,17 @@
+{
+  "slot_id": "example-slot",
+  "display": {
+    "result_version_id": "example-retest-version",
+    "detection_id": "example-retest",
+    "text": "98.8%",
+    "pending_confirmation": true,
+    "source_ids": ["example-document-2"]
+  },
+  "adopted": {
+    "result_version_id": "example-original-version",
+    "detection_id": "example-original",
+    "text": "98.1%",
+    "pending_confirmation": false,
+    "source_ids": ["example-document-1"]
+  }
+}

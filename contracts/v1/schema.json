@@ -1,0 +1,681 @@
+{
+  "$defs": {
+    "Actor": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "display_name": {
+          "minLength": 1,
+          "title": "Display Name",
+          "type": "string"
+        },
+        "capabilities": {
+          "items": {
+            "$ref": "#/$defs/Capability"
+          },
+          "title": "Capabilities",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "role": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Role"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id",
+        "display_name",
+        "capabilities"
+      ],
+      "title": "Actor",
+      "type": "object"
+    },
+    "ApiError": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "minLength": 1,
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        },
+        "details": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Details",
+          "type": "object"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "ApiError",
+      "type": "object"
+    },
+    "Candidate": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        },
+        "raw_fields": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Raw Fields",
+          "type": "object"
+        },
+        "status": {
+          "enum": [
+            "new",
+            "same_value",
+            "empty",
+            "different_value",
+            "needs_review"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "record": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StabilityRecord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "existing_record": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StabilityRecord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "issue_code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Issue Code"
+        },
+        "detail": {
+          "title": "Detail",
+          "type": "string"
+        },
+        "comment": {
+          "default": "",
+          "title": "Comment",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "location",
+        "raw_fields",
+        "status",
+        "detail"
+      ],
+      "title": "Candidate",
+      "type": "object"
+    },
+    "Capability": {
+      "enum": [
+        "view",
+        "preview",
+        "confirm_fact",
+        "adopt_result",
+        "correct_result",
+        "review_duplicate",
+        "export",
+        "manage"
+      ],
+      "title": "Capability",
+      "type": "string"
+    },
+    "Location": {
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "enum": [
+            "xlsx",
+            "docx"
+          ],
+          "title": "Format",
+          "type": "string"
+        },
+        "section": {
+          "minLength": 1,
+          "title": "Section",
+          "type": "string"
+        },
+        "row": {
+          "minimum": 1,
+          "title": "Row",
+          "type": "integer"
+        },
+        "column": {
+          "minimum": 1,
+          "title": "Column",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "format",
+        "section",
+        "row",
+        "column"
+      ],
+      "title": "Location",
+      "type": "object"
+    },
+    "Preview": {
+      "additionalProperties": false,
+      "properties": {
+        "contract_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Contract Version",
+          "type": "string"
+        },
+        "preview_id": {
+          "minLength": 1,
+          "title": "Preview Id",
+          "type": "string"
+        },
+        "project": {
+          "minLength": 1,
+          "title": "Project",
+          "type": "string"
+        },
+        "filename": {
+          "minLength": 1,
+          "title": "Filename",
+          "type": "string"
+        },
+        "source_hash": {
+          "minLength": 1,
+          "title": "Source Hash",
+          "type": "string"
+        },
+        "base_revision": {
+          "minLength": 1,
+          "title": "Base Revision",
+          "type": "string"
+        },
+        "state": {
+          "const": "preview_ready",
+          "default": "preview_ready",
+          "title": "State",
+          "type": "string"
+        },
+        "candidates": {
+          "items": {
+            "$ref": "#/$defs/Candidate"
+          },
+          "title": "Candidates",
+          "type": "array"
+        },
+        "counts": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "propertyNames": {
+            "enum": [
+              "new",
+              "same_value",
+              "empty",
+              "different_value",
+              "needs_review"
+            ]
+          },
+          "title": "Counts",
+          "type": "object"
+        },
+        "can_commit": {
+          "const": false,
+          "default": false,
+          "title": "Can Commit",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "preview_id",
+        "project",
+        "filename",
+        "source_hash",
+        "base_revision",
+        "candidates",
+        "counts"
+      ],
+      "title": "Preview",
+      "type": "object"
+    },
+    "RecordKey": {
+      "additionalProperties": false,
+      "properties": {
+        "project": {
+          "minLength": 1,
+          "title": "Project",
+          "type": "string"
+        },
+        "sample_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sample Id"
+        },
+        "sample_type": {
+          "enum": [
+            "DS",
+            "DP",
+            "placebo"
+          ],
+          "title": "Sample Type",
+          "type": "string"
+        },
+        "purpose": {
+          "default": "unknown",
+          "enum": [
+            "unknown",
+            "routine",
+            "reference"
+          ],
+          "title": "Purpose",
+          "type": "string"
+        },
+        "reporting_basis": {
+          "default": "",
+          "title": "Reporting Basis",
+          "type": "string"
+        },
+        "batch": {
+          "minLength": 1,
+          "title": "Batch",
+          "type": "string"
+        },
+        "presentation": {
+          "minLength": 1,
+          "title": "Presentation",
+          "type": "string"
+        },
+        "study": {
+          "enum": [
+            "release",
+            "long_term",
+            "accelerated",
+            "stress"
+          ],
+          "title": "Study",
+          "type": "string"
+        },
+        "study_id": {
+          "minLength": 1,
+          "title": "Study Id",
+          "type": "string"
+        },
+        "condition": {
+          "minLength": 1,
+          "title": "Condition",
+          "type": "string"
+        },
+        "month": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Month"
+        },
+        "day": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Day"
+        },
+        "item": {
+          "minLength": 1,
+          "title": "Item",
+          "type": "string"
+        },
+        "method": {
+          "minLength": 1,
+          "title": "Method",
+          "type": "string"
+        },
+        "method_version": {
+          "default": "not_reported",
+          "minLength": 1,
+          "title": "Method Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project",
+        "sample_type",
+        "batch",
+        "presentation",
+        "study",
+        "study_id",
+        "condition",
+        "item",
+        "method"
+      ],
+      "title": "RecordKey",
+      "type": "object"
+    },
+    "Result": {
+      "additionalProperties": false,
+      "properties": {
+        "interpretation": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Interpretation",
+          "type": "object"
+        },
+        "status": {
+          "enum": [
+            "numeric",
+            "na",
+            "nd",
+            "placeholder",
+            "blank",
+            "complies",
+            "text",
+            "not_reported"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "raw_text": {
+          "title": "Raw Text",
+          "type": "string"
+        },
+        "report_references": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Report References",
+          "type": "array"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        },
+        "comparator": {
+          "anyOf": [
+            {
+              "enum": [
+                "eq",
+                "lt",
+                "le",
+                "gt",
+                "ge"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Comparator"
+        },
+        "unit": {
+          "default": "",
+          "title": "Unit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "raw_text"
+      ],
+      "title": "Result",
+      "type": "object"
+    },
+    "ResultCell": {
+      "additionalProperties": false,
+      "description": "Display and formal adoption are separate; selection lives in result_queries.",
+      "properties": {
+        "slot_id": {
+          "minLength": 1,
+          "title": "Slot Id",
+          "type": "string"
+        },
+        "display": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResultValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "adopted": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResultValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "slot_id",
+        "display",
+        "adopted"
+      ],
+      "title": "ResultCell",
+      "type": "object"
+    },
+    "ResultValue": {
+      "additionalProperties": false,
+      "properties": {
+        "result_version_id": {
+          "minLength": 1,
+          "title": "Result Version Id",
+          "type": "string"
+        },
+        "detection_id": {
+          "minLength": 1,
+          "title": "Detection Id",
+          "type": "string"
+        },
+        "text": {
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "pending_confirmation": {
+          "title": "Pending Confirmation",
+          "type": "boolean"
+        },
+        "source_ids": {
+          "default": [],
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Source Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "result_version_id",
+        "detection_id",
+        "text",
+        "pending_confirmation"
+      ],
+      "title": "ResultValue",
+      "type": "object"
+    },
+    "Role": {
+      "enum": [
+        "technician",
+        "senior_technician",
+        "project_lead",
+        "admin"
+      ],
+      "title": "Role",
+      "type": "string"
+    },
+    "StabilityRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/RecordKey"
+        },
+        "result": {
+          "$ref": "#/$defs/Result"
+        },
+        "standards": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/StandardApplicability"
+          },
+          "title": "Standards",
+          "type": "array"
+        }
+      },
+      "required": [
+        "key",
+        "result"
+      ],
+      "title": "StabilityRecord",
+      "type": "object"
+    },
+    "StandardApplicability": {
+      "additionalProperties": false,
+      "properties": {
+        "basis": {
+          "default": "",
+          "title": "Basis",
+          "type": "string"
+        },
+        "criterion_text": {
+          "title": "Criterion Text",
+          "type": "string"
+        },
+        "version": {
+          "default": "",
+          "title": "Version",
+          "type": "string"
+        },
+        "effective_status": {
+          "const": "not_reported",
+          "default": "not_reported",
+          "title": "Effective Status",
+          "type": "string"
+        },
+        "applicability": {
+          "const": "source_reported",
+          "default": "source_reported",
+          "title": "Applicability",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/Location"
+        }
+      },
+      "required": [
+        "criterion_text",
+        "source"
+      ],
+      "title": "StandardApplicability",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Schema index only; not an HTTP response envelope.",
+  "properties": {
+    "actor": {
+      "$ref": "#/$defs/Actor"
+    },
+    "preview": {
+      "$ref": "#/$defs/Preview"
+    },
+    "result_cell": {
+      "$ref": "#/$defs/ResultCell"
+    },
+    "error": {
+      "$ref": "#/$defs/ApiError"
+    }
+  },
+  "required": [
+    "actor",
+    "preview",
+    "result_cell",
+    "error"
+  ],
+  "title": "ContractSchema",
+  "type": "object"
+}

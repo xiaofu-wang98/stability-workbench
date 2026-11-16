@@ -1,0 +1,17 @@
+{
+  "project": "EXAMPLE",
+  "base_revision": 4,
+  "filters": {
+    "batch": null,
+    "sample_type": null,
+    "presentation": null,
+    "study": null,
+    "study_id": null,
+    "condition": null,
+    "month": null,
+    "item": null,
+    "method": null,
+    "method_version": null
+  },
+  "orientation": "items"
+}

@@ -1,0 +1,2198 @@
+{
+  "$defs": {
+    "ActionGroup": {
+      "additionalProperties": false,
+      "properties": {
+        "group_id": {
+          "minLength": 1,
+          "title": "Group Id",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/TaskBatchScope"
+        },
+        "decision_count": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Decision Count",
+          "type": "integer"
+        },
+        "affected_result_count": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Affected Result Count",
+          "type": "integer"
+        },
+        "members": {
+          "default": [],
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Members",
+          "type": "array"
+        },
+        "exceptions": {
+          "default": [],
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Exceptions",
+          "type": "array"
+        },
+        "subplans": {
+          "default": [],
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Subplans",
+          "type": "array"
+        },
+        "base_revision": {
+          "title": "Base Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "group_id",
+        "title",
+        "reason",
+        "scope",
+        "base_revision"
+      ],
+      "title": "ActionGroup",
+      "type": "object"
+    },
+    "BulkApply": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "fingerprint": {
+          "minLength": 1,
+          "title": "Fingerprint",
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/BulkPreview"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "reason",
+        "fingerprint",
+        "scope"
+      ],
+      "title": "BulkApply",
+      "type": "object"
+    },
+    "BulkPreview": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_ids": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 20000,
+          "minItems": 1,
+          "title": "Candidate Ids",
+          "type": "array"
+        },
+        "fields": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "minProperties": 1,
+          "title": "Fields",
+          "type": "object"
+        }
+      },
+      "required": [
+        "candidate_ids",
+        "fields"
+      ],
+      "title": "BulkPreview",
+      "type": "object"
+    },
+    "CandidateReviewState": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_id": {
+          "minLength": 1,
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "normal_pending",
+            "pending",
+            "suggested",
+            "saved_draft",
+            "excluded",
+            "committed"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "modified": {
+          "default": false,
+          "title": "Modified",
+          "type": "boolean"
+        },
+        "has_unresolved": {
+          "default": false,
+          "title": "Has Unresolved",
+          "type": "boolean"
+        },
+        "task_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Task Ids",
+          "type": "array"
+        },
+        "suggestion_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Suggestion Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "candidate_id",
+        "state"
+      ],
+      "title": "CandidateReviewState",
+      "type": "object"
+    },
+    "DraftDecision": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "candidate_id": {
+          "minLength": 1,
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "candidate_revision": {
+          "minimum": 1,
+          "title": "Candidate Revision",
+          "type": "integer"
+        },
+        "action": {
+          "enum": [
+            "initial",
+            "repeat_source",
+            "keep_old",
+            "correction",
+            "retest",
+            "exclude",
+            "restore"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "previous_version_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Previous Version Id"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "reason",
+        "candidate_id",
+        "candidate_revision",
+        "action"
+      ],
+      "title": "DraftDecision",
+      "type": "object"
+    },
+    "DraftReview": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "candidate_id": {
+          "minLength": 1,
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "decision_fingerprint": {
+          "minLength": 1,
+          "title": "Decision Fingerprint",
+          "type": "string"
+        },
+        "action": {
+          "enum": [
+            "confirm_fact",
+            "adopt"
+          ],
+          "title": "Action",
+          "type": "string"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "reason",
+        "candidate_id",
+        "decision_fingerprint",
+        "action"
+      ],
+      "title": "DraftReview",
+      "type": "object"
+    },
+    "IdentityAssociationApply": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/IdentityAssociationScope"
+        },
+        "fingerprint": {
+          "minLength": 1,
+          "title": "Fingerprint",
+          "type": "string"
+        },
+        "adoptions": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Adoptions",
+          "type": "object"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "reason",
+        "scope",
+        "fingerprint",
+        "adoptions"
+      ],
+      "title": "IdentityAssociationApply",
+      "type": "object"
+    },
+    "IdentityAssociationScope": {
+      "additionalProperties": false,
+      "properties": {
+        "slot_ids": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 20000,
+          "minItems": 1,
+          "title": "Slot Ids",
+          "type": "array"
+        },
+        "fields": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "minProperties": 1,
+          "title": "Fields",
+          "type": "object"
+        }
+      },
+      "required": [
+        "slot_ids",
+        "fields"
+      ],
+      "title": "IdentityAssociationScope",
+      "type": "object"
+    },
+    "IdentityLink": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "item_id": {
+          "minLength": 1,
+          "title": "Item Id",
+          "type": "string"
+        },
+        "historical_item": {
+          "minLength": 1,
+          "title": "Historical Item",
+          "type": "string"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "reason",
+        "item_id",
+        "historical_item"
+      ],
+      "title": "IdentityLink",
+      "type": "object"
+    },
+    "IssueBatchApply": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "fingerprint": {
+          "minLength": 1,
+          "title": "Fingerprint",
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/IssueBatchPreview"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "reason",
+        "fingerprint",
+        "scope"
+      ],
+      "title": "IssueBatchApply",
+      "type": "object"
+    },
+    "IssueBatchPreview": {
+      "additionalProperties": false,
+      "properties": {
+        "issues": {
+          "items": {
+            "$ref": "#/$defs/IssueSelection"
+          },
+          "maxItems": 20000,
+          "minItems": 1,
+          "title": "Issues",
+          "type": "array"
+        }
+      },
+      "required": [
+        "issues"
+      ],
+      "title": "IssueBatchPreview",
+      "type": "object"
+    },
+    "IssueDecision": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "batch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Batch Id"
+        },
+        "candidate_id": {
+          "minLength": 1,
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "candidate_revision": {
+          "minimum": 1,
+          "title": "Candidate Revision",
+          "type": "integer"
+        },
+        "issue_id": {
+          "minLength": 1,
+          "title": "Issue Id",
+          "type": "string"
+        },
+        "action": {
+          "enum": [
+            "keep_body",
+            "keep_active",
+            "manual",
+            "exclude",
+            "keep_single"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "fields": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Fields",
+          "type": "object"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "reason",
+        "candidate_id",
+        "candidate_revision",
+        "issue_id",
+        "action"
+      ],
+      "title": "IssueDecision",
+      "type": "object"
+    },
+    "IssueSelection": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_id": {
+          "minLength": 1,
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "candidate_revision": {
+          "minimum": 1,
+          "title": "Candidate Revision",
+          "type": "integer"
+        },
+        "issue_id": {
+          "minLength": 1,
+          "title": "Issue Id",
+          "type": "string"
+        },
+        "action": {
+          "enum": [
+            "keep_body",
+            "keep_active",
+            "manual",
+            "exclude",
+            "keep_single"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "fields": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Fields",
+          "type": "object"
+        }
+      },
+      "required": [
+        "candidate_id",
+        "candidate_revision",
+        "issue_id",
+        "action"
+      ],
+      "title": "IssueSelection",
+      "type": "object"
+    },
+    "ItemDisplayName": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "label": {
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "reason",
+        "label"
+      ],
+      "title": "ItemDisplayName",
+      "type": "object"
+    },
+    "Location": {
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "enum": [
+            "xlsx",
+            "docx"
+          ],
+          "title": "Format",
+          "type": "string"
+        },
+        "section": {
+          "minLength": 1,
+          "title": "Section",
+          "type": "string"
+        },
+        "row": {
+          "minimum": 1,
+          "title": "Row",
+          "type": "integer"
+        },
+        "column": {
+          "minimum": 1,
+          "title": "Column",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "format",
+        "section",
+        "row",
+        "column"
+      ],
+      "title": "Location",
+      "type": "object"
+    },
+    "ManualResult": {
+      "additionalProperties": false,
+      "properties": {
+        "sources": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 100,
+          "minItems": 1,
+          "title": "Sources",
+          "type": "array"
+        },
+        "fields": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Fields",
+          "type": "object"
+        }
+      },
+      "required": [
+        "sources",
+        "fields"
+      ],
+      "title": "ManualResult",
+      "type": "object"
+    },
+    "ManualSheetApply": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/ManualSheetScope"
+        },
+        "fingerprint": {
+          "minLength": 1,
+          "title": "Fingerprint",
+          "type": "string"
+        },
+        "reviewed": {
+          "default": false,
+          "title": "Reviewed",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "reason",
+        "scope",
+        "fingerprint"
+      ],
+      "title": "ManualSheetApply",
+      "type": "object"
+    },
+    "ManualSheetScope": {
+      "additionalProperties": false,
+      "properties": {
+        "section": {
+          "minLength": 1,
+          "title": "Section",
+          "type": "string"
+        },
+        "cells": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "maxProperties": 4000,
+          "title": "Cells",
+          "type": "object"
+        },
+        "merges": {
+          "default": [],
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 1000,
+          "title": "Merges",
+          "type": "array"
+        },
+        "candidate_ids": {
+          "default": [],
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 1000,
+          "title": "Candidate Ids",
+          "type": "array"
+        },
+        "results": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ManualResult"
+          },
+          "maxItems": 1000,
+          "title": "Results",
+          "type": "array"
+        }
+      },
+      "required": [
+        "section"
+      ],
+      "title": "ManualSheetScope",
+      "type": "object"
+    },
+    "ManualSheetUndo": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "edit_id": {
+          "minLength": 1,
+          "title": "Edit Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "reason",
+        "edit_id"
+      ],
+      "title": "ManualSheetUndo",
+      "type": "object"
+    },
+    "ProjectRule": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "upload_id": {
+          "minLength": 1,
+          "title": "Upload Id",
+          "type": "string"
+        },
+        "candidate_id": {
+          "minLength": 1,
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "source_name": {
+          "minLength": 1,
+          "title": "Source Name",
+          "type": "string"
+        },
+        "method": {
+          "title": "Method",
+          "type": "string"
+        },
+        "method_version": {
+          "default": "",
+          "title": "Method Version",
+          "type": "string"
+        },
+        "unit": {
+          "title": "Unit",
+          "type": "string"
+        },
+        "subresult": {
+          "default": "",
+          "title": "Subresult",
+          "type": "string"
+        },
+        "item_id": {
+          "minLength": 1,
+          "title": "Item Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "reason",
+        "upload_id",
+        "candidate_id",
+        "source_name",
+        "method",
+        "unit",
+        "item_id"
+      ],
+      "title": "ProjectRule",
+      "type": "object"
+    },
+    "RegionDecision": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "region_id": {
+          "minLength": 1,
+          "title": "Region Id",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "identity",
+            "standard",
+            "note",
+            "auxiliary",
+            "excluded",
+            "unclassified"
+          ],
+          "title": "Role",
+          "type": "string"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "reason",
+        "region_id",
+        "role"
+      ],
+      "title": "RegionDecision",
+      "type": "object"
+    },
+    "RegionParseApply": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "fingerprint": {
+          "minLength": 1,
+          "title": "Fingerprint",
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/RegionParseScope"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "reason",
+        "fingerprint",
+        "scope"
+      ],
+      "title": "RegionParseApply",
+      "type": "object"
+    },
+    "RegionParseScope": {
+      "additionalProperties": false,
+      "properties": {
+        "section": {
+          "minLength": 1,
+          "title": "Section",
+          "type": "string"
+        },
+        "range_ref": {
+          "minLength": 1,
+          "title": "Range Ref",
+          "type": "string"
+        },
+        "header_row": {
+          "maximum": 1048576,
+          "minimum": 1,
+          "title": "Header Row",
+          "type": "integer"
+        },
+        "columns": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "minProperties": 1,
+          "title": "Columns",
+          "type": "object"
+        },
+        "common_fields": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Common Fields",
+          "type": "object"
+        }
+      },
+      "required": [
+        "section",
+        "range_ref",
+        "header_row",
+        "columns"
+      ],
+      "title": "RegionParseScope",
+      "type": "object"
+    },
+    "Reinterpret": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "fingerprint": {
+          "minLength": 1,
+          "title": "Fingerprint",
+          "type": "string"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "reason",
+        "fingerprint"
+      ],
+      "title": "Reinterpret",
+      "type": "object"
+    },
+    "ReviewBlock": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "minLength": 1,
+          "title": "Block Id",
+          "type": "string"
+        },
+        "section": {
+          "title": "Section",
+          "type": "string"
+        },
+        "range_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Range Refs",
+          "type": "array"
+        },
+        "role": {
+          "enum": [
+            "result",
+            "identity",
+            "standard",
+            "note",
+            "auxiliary",
+            "excluded",
+            "unclassified"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "evidence": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Location"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "candidate_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Candidate Ids",
+          "type": "array"
+        },
+        "task_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Task Ids",
+          "type": "array"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        },
+        "requires_human": {
+          "default": false,
+          "title": "Requires Human",
+          "type": "boolean"
+        },
+        "collapsed": {
+          "default": false,
+          "title": "Collapsed",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "block_id",
+        "section",
+        "range_refs",
+        "role",
+        "summary"
+      ],
+      "title": "ReviewBlock",
+      "type": "object"
+    },
+    "ReviewIssue": {
+      "additionalProperties": false,
+      "properties": {
+        "source_kind": {
+          "default": "extraction",
+          "enum": [
+            "original_comment",
+            "system_hint",
+            "source_revision",
+            "extraction"
+          ],
+          "title": "Source Kind",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "code": {
+          "minLength": 1,
+          "title": "Code",
+          "type": "string"
+        },
+        "candidate_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Candidate Ids",
+          "type": "array"
+        },
+        "region_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Region Ids",
+          "type": "array"
+        },
+        "fields": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Fields",
+          "type": "array"
+        },
+        "evidence": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Location"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "detail": {
+          "title": "Detail",
+          "type": "string"
+        },
+        "actions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Actions",
+          "type": "array"
+        },
+        "state": {
+          "default": "open",
+          "enum": [
+            "open",
+            "resolved"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "revision": {
+          "default": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "source_field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Field"
+        },
+        "revision_kind": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Revision Kind"
+        },
+        "proposal": {
+          "additionalProperties": true,
+          "title": "Proposal",
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "code",
+        "detail",
+        "actions"
+      ],
+      "title": "ReviewIssue",
+      "type": "object"
+    },
+    "ReviewProgress": {
+      "additionalProperties": false,
+      "properties": {
+        "section": {
+          "title": "Section",
+          "type": "string"
+        },
+        "pending_decision_count": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Pending Decision Count",
+          "type": "integer"
+        },
+        "resolved_decision_count": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Resolved Decision Count",
+          "type": "integer"
+        },
+        "affected_result_count": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Affected Result Count",
+          "type": "integer"
+        },
+        "can_commit": {
+          "title": "Can Commit",
+          "type": "boolean"
+        },
+        "state": {
+          "enum": [
+            "needs_review",
+            "needs_approval",
+            "ready",
+            "committed",
+            "historical_partial"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "blocker_reasons": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Blocker Reasons",
+          "type": "array"
+        }
+      },
+      "required": [
+        "section",
+        "can_commit",
+        "state"
+      ],
+      "title": "ReviewProgress",
+      "type": "object"
+    },
+    "ReviewTask": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "code": {
+          "minLength": 1,
+          "title": "Code",
+          "type": "string"
+        },
+        "section": {
+          "title": "Section",
+          "type": "string"
+        },
+        "fields": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Fields",
+          "type": "array"
+        },
+        "evidence": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Location"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "members": {
+          "default": [],
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Members",
+          "type": "array"
+        },
+        "detail": {
+          "title": "Detail",
+          "type": "string"
+        },
+        "actions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Actions",
+          "type": "array"
+        },
+        "proposal": {
+          "additionalProperties": true,
+          "title": "Proposal",
+          "type": "object"
+        },
+        "blockers": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Blockers",
+          "type": "array"
+        },
+        "base_revision": {
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "batch_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Batch Key"
+        },
+        "exception": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exception"
+        },
+        "diagnostics": {
+          "default": [],
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Diagnostics",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "code",
+        "section",
+        "detail",
+        "actions",
+        "base_revision"
+      ],
+      "title": "ReviewTask",
+      "type": "object"
+    },
+    "RuleRetirement": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "rule_version": {
+          "minLength": 1,
+          "title": "Rule Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "reason",
+        "rule_version"
+      ],
+      "title": "RuleRetirement",
+      "type": "object"
+    },
+    "SheetCommit": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "section": {
+          "minLength": 1,
+          "title": "Section",
+          "type": "string"
+        },
+        "fingerprint": {
+          "minLength": 1,
+          "title": "Fingerprint",
+          "type": "string"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "reason",
+        "section",
+        "fingerprint"
+      ],
+      "title": "SheetCommit",
+      "type": "object"
+    },
+    "SheetCommitResult": {
+      "additionalProperties": false,
+      "properties": {
+        "commit_id": {
+          "title": "Commit Id",
+          "type": "string"
+        },
+        "project": {
+          "title": "Project",
+          "type": "string"
+        },
+        "base_revision": {
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "section": {
+          "title": "Section",
+          "type": "string"
+        },
+        "counts": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Counts",
+          "type": "object"
+        },
+        "historical_count": {
+          "title": "Historical Count",
+          "type": "integer"
+        },
+        "result_version_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Result Version Ids",
+          "type": "array"
+        },
+        "state": {
+          "const": "committed",
+          "default": "committed",
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "commit_id",
+        "project",
+        "base_revision",
+        "section",
+        "counts",
+        "historical_count",
+        "result_version_ids"
+      ],
+      "title": "SheetCommitResult",
+      "type": "object"
+    },
+    "SheetPreflight": {
+      "additionalProperties": false,
+      "properties": {
+        "decision_fingerprints": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Decision Fingerprints",
+          "type": "object"
+        },
+        "previous_versions": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Previous Versions",
+          "type": "object"
+        },
+        "adopted_versions": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Adopted Versions",
+          "type": "object"
+        },
+        "section": {
+          "title": "Section",
+          "type": "string"
+        },
+        "fingerprint": {
+          "title": "Fingerprint",
+          "type": "string"
+        },
+        "base_revision": {
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "counts": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Counts",
+          "type": "object"
+        },
+        "unresolved": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unresolved",
+          "type": "array"
+        },
+        "review_required": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Review Required",
+          "type": "array"
+        },
+        "can_commit": {
+          "title": "Can Commit",
+          "type": "boolean"
+        },
+        "state": {
+          "enum": [
+            "needs_review",
+            "needs_approval",
+            "ready",
+            "committed",
+            "historical_partial"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "historical_count": {
+          "default": 0,
+          "title": "Historical Count",
+          "type": "integer"
+        },
+        "pending_decision_count": {
+          "default": 0,
+          "title": "Pending Decision Count",
+          "type": "integer"
+        },
+        "resolved_decision_count": {
+          "default": 0,
+          "title": "Resolved Decision Count",
+          "type": "integer"
+        },
+        "affected_result_count": {
+          "default": 0,
+          "title": "Affected Result Count",
+          "type": "integer"
+        },
+        "blocker_reasons": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Blocker Reasons",
+          "type": "array"
+        }
+      },
+      "required": [
+        "section",
+        "fingerprint",
+        "base_revision",
+        "counts",
+        "unresolved",
+        "review_required",
+        "can_commit",
+        "state"
+      ],
+      "title": "SheetPreflight",
+      "type": "object"
+    },
+    "SourceRegion": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "section": {
+          "title": "Section",
+          "type": "string"
+        },
+        "coordinates": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Coordinates",
+          "type": "array"
+        },
+        "hidden": {
+          "default": false,
+          "title": "Hidden",
+          "type": "boolean"
+        },
+        "role": {
+          "enum": [
+            "result",
+            "identity",
+            "standard",
+            "note",
+            "auxiliary",
+            "excluded",
+            "unclassified"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "source_hash": {
+          "default": "",
+          "title": "Source Hash",
+          "type": "string"
+        },
+        "basis": {
+          "title": "Basis",
+          "type": "string"
+        },
+        "revision": {
+          "default": 1,
+          "title": "Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "section",
+        "coordinates",
+        "role",
+        "basis"
+      ],
+      "title": "SourceRegion",
+      "type": "object"
+    },
+    "SourceStructureApply": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "fingerprint": {
+          "minLength": 1,
+          "title": "Fingerprint",
+          "type": "string"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "reason",
+        "fingerprint"
+      ],
+      "title": "SourceStructureApply",
+      "type": "object"
+    },
+    "StructuralDecision": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "candidate_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Candidate Id"
+        },
+        "candidate_revision": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Candidate Revision"
+        },
+        "section": {
+          "minLength": 1,
+          "title": "Section",
+          "type": "string"
+        },
+        "coordinate": {
+          "minLength": 1,
+          "title": "Coordinate",
+          "type": "string"
+        },
+        "hazard": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hazard"
+        },
+        "results": {
+          "items": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "maxItems": 100,
+          "minItems": 1,
+          "title": "Results",
+          "type": "array"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "reason",
+        "section",
+        "coordinate",
+        "results"
+      ],
+      "title": "StructuralDecision",
+      "type": "object"
+    },
+    "TaskBatchApply": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/TaskBatchScope"
+        },
+        "fingerprint": {
+          "minLength": 1,
+          "title": "Fingerprint",
+          "type": "string"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "reason",
+        "scope",
+        "fingerprint"
+      ],
+      "title": "TaskBatchApply",
+      "type": "object"
+    },
+    "TaskBatchScope": {
+      "additionalProperties": false,
+      "properties": {
+        "section": {
+          "minLength": 1,
+          "title": "Section",
+          "type": "string"
+        },
+        "task_ids": {
+          "default": [],
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 20000,
+          "title": "Task Ids",
+          "type": "array"
+        },
+        "candidate_ids": {
+          "default": [],
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 20000,
+          "title": "Candidate Ids",
+          "type": "array"
+        },
+        "include_sections": {
+          "default": [],
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Include Sections",
+          "type": "array"
+        },
+        "operation": {
+          "enum": [
+            "keep_active",
+            "manual",
+            "keep_body",
+            "exclude",
+            "suggested",
+            "exclude_selected",
+            "classify",
+            "keep_single"
+          ],
+          "title": "Operation",
+          "type": "string"
+        },
+        "fields": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Fields",
+          "type": "object"
+        },
+        "exclude_candidate_ids": {
+          "default": [],
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 20000,
+          "title": "Exclude Candidate Ids",
+          "type": "array"
+        },
+        "region_ids": {
+          "default": [],
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 20000,
+          "title": "Region Ids",
+          "type": "array"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Role"
+        }
+      },
+      "required": [
+        "section",
+        "operation"
+      ],
+      "title": "TaskBatchScope",
+      "type": "object"
+    },
+    "TaskBatchUndo": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "batch_id": {
+          "minLength": 1,
+          "title": "Batch Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "base_revision",
+        "idempotency_key",
+        "reason",
+        "batch_id"
+      ],
+      "title": "TaskBatchUndo",
+      "type": "object"
+    },
+    "WorksheetDraftState": {
+      "additionalProperties": false,
+      "properties": {
+        "base_revision": {
+          "minimum": 0,
+          "title": "Base Revision",
+          "type": "integer"
+        },
+        "decisions": {
+          "additionalProperties": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Decisions",
+          "type": "object"
+        }
+      },
+      "required": [
+        "base_revision",
+        "decisions"
+      ],
+      "title": "WorksheetDraftState",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "manual_scope": {
+      "$ref": "#/$defs/ManualSheetScope"
+    },
+    "manual_apply": {
+      "$ref": "#/$defs/ManualSheetApply"
+    },
+    "manual_undo": {
+      "$ref": "#/$defs/ManualSheetUndo"
+    },
+    "candidate_review_state": {
+      "$ref": "#/$defs/CandidateReviewState"
+    },
+    "source_structure_apply": {
+      "$ref": "#/$defs/SourceStructureApply"
+    },
+    "review_task": {
+      "$ref": "#/$defs/ReviewTask"
+    },
+    "task_batch_scope": {
+      "$ref": "#/$defs/TaskBatchScope"
+    },
+    "task_batch_apply": {
+      "$ref": "#/$defs/TaskBatchApply"
+    },
+    "task_batch_undo": {
+      "$ref": "#/$defs/TaskBatchUndo"
+    },
+    "worksheet_draft_state": {
+      "$ref": "#/$defs/WorksheetDraftState"
+    },
+    "item_display_name": {
+      "$ref": "#/$defs/ItemDisplayName"
+    },
+    "identity_association_scope": {
+      "$ref": "#/$defs/IdentityAssociationScope"
+    },
+    "identity_association_apply": {
+      "$ref": "#/$defs/IdentityAssociationApply"
+    },
+    "region_parse_scope": {
+      "$ref": "#/$defs/RegionParseScope"
+    },
+    "region_parse_apply": {
+      "$ref": "#/$defs/RegionParseApply"
+    },
+    "issue_batch_preview": {
+      "$ref": "#/$defs/IssueBatchPreview"
+    },
+    "issue_batch_apply": {
+      "$ref": "#/$defs/IssueBatchApply"
+    },
+    "retire_rule": {
+      "$ref": "#/$defs/RuleRetirement"
+    },
+    "project_rule": {
+      "$ref": "#/$defs/ProjectRule"
+    },
+    "reinterpret": {
+      "$ref": "#/$defs/Reinterpret"
+    },
+    "identity_link": {
+      "$ref": "#/$defs/IdentityLink"
+    },
+    "region": {
+      "$ref": "#/$defs/SourceRegion"
+    },
+    "issue": {
+      "$ref": "#/$defs/ReviewIssue"
+    },
+    "decision": {
+      "$ref": "#/$defs/DraftDecision"
+    },
+    "issue_decision": {
+      "$ref": "#/$defs/IssueDecision"
+    },
+    "region_decision": {
+      "$ref": "#/$defs/RegionDecision"
+    },
+    "structure": {
+      "$ref": "#/$defs/StructuralDecision"
+    },
+    "bulk_preview": {
+      "$ref": "#/$defs/BulkPreview"
+    },
+    "bulk_apply": {
+      "$ref": "#/$defs/BulkApply"
+    },
+    "review": {
+      "$ref": "#/$defs/DraftReview"
+    },
+    "preflight": {
+      "$ref": "#/$defs/SheetPreflight"
+    },
+    "commit": {
+      "$ref": "#/$defs/SheetCommit"
+    },
+    "commit_result": {
+      "$ref": "#/$defs/SheetCommitResult"
+    },
+    "review_block": {
+      "$ref": "#/$defs/ReviewBlock"
+    },
+    "action_group": {
+      "$ref": "#/$defs/ActionGroup"
+    },
+    "review_progress": {
+      "$ref": "#/$defs/ReviewProgress"
+    }
+  },
+  "required": [
+    "manual_scope",
+    "manual_apply",
+    "manual_undo",
+    "candidate_review_state",
+    "source_structure_apply",
+    "review_task",
+    "task_batch_scope",
+    "task_batch_apply",
+    "task_batch_undo",
+    "worksheet_draft_state",
+    "item_display_name",
+    "identity_association_scope",
+    "identity_association_apply",
+    "region_parse_scope",
+    "region_parse_apply",
+    "issue_batch_preview",
+    "issue_batch_apply",
+    "retire_rule",
+    "project_rule",
+    "reinterpret",
+    "identity_link",
+    "region",
+    "issue",
+    "decision",
+    "issue_decision",
+    "region_decision",
+    "structure",
+    "bulk_preview",
+    "bulk_apply",
+    "review",
+    "preflight",
+    "commit",
+    "commit_result",
+    "review_block",
+    "action_group",
+    "review_progress"
+  ],
+  "title": "V5Schema",
+  "type": "object"
+}

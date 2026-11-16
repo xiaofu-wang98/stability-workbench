@@ -1,0 +1,6 @@
+{
+  "base_revision": 4,
+  "idempotency_key": "example-review",
+  "action": "adopt",
+  "reason": "示例高级确认"
+}
