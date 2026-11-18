@@ -68,16 +68,21 @@ const sampleWorksheetsMap = computed(() => {
     if (item.sample_id && map.has(item.sample_id)) {
       map.get(item.sample_id)!.push(item);
     } else {
-      const found = samples.value.find(s => s.batch === item.batch);
-      if (found && map.has(found.id)) {
-        map.get(found.id)!.push(item);
-      } else {
-        unlinked.push(item);
-      }
+      unlinked.push(item);
     }
   }
   return { map, unlinked };
 });
+
+async function loadSamples(base: string, init: RequestInit) {
+  const limit = 100;
+  const entries: SampleEntry[] = [];
+  for (let offset = 0; ; offset += limit) {
+    const page = await api<SampleEntry[]>(base + '/samples?limit=' + limit + '&offset=' + offset, init);
+    entries.push(...page);
+    if (page.length < limit) return entries;
+  }
+}
 
 watch(() => route.fullPath, async (_, __, onCleanup) => {
   const controller = new AbortController();
@@ -98,7 +103,7 @@ watch(() => route.fullPath, async (_, __, onCleanup) => {
       const [sheetsData, draftsData, samplesData] = await Promise.all([
         api<WorksheetSummary[]>(base + '/worksheets', init),
         api<typeof worksheetDrafts.value>(base + '/worksheet-drafts', init),
-        api<SampleEntry[]>(base + '/samples', init).catch(() => [] as SampleEntry[]),
+        page.value === 'projects' ? loadSamples(base, init) : Promise.resolve([]),
       ]);
       sheets.value = sheetsData;
       worksheetDrafts.value = draftsData;

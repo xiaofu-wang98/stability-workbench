@@ -176,11 +176,24 @@ def run_acceptance():
                 )
                 assert study_res.ok, study_res.text()
                 sheet_id = study_res.json()['id']
+                second = page.request.post(url + '/api/v1/projects/PRJ-R2B/samples',
+                                           data={**sample_data, 'material_stage': '裸抗'})
+                assert second.ok, second.text()
+                unlinked = page.request.post(url + '/api/v1/projects/PRJ-R2B/worksheets', data={
+                    'name': '未绑定的历史研究表',
+                    'idempotency_key': 'unlinked-r2b',
+                    'identity': {'batch': 'BATCH-01', 'presentation': '100mg/瓶', 'sample_type': 'DS',
+                                 'study': 'accelerated', 'study_id': '历史', 'condition': '25℃'},
+                    'start_date': '2026-02-01',
+                    'items': item_ids,
+                    'points': [{'unit': 'M', 'amount': 0, 'required_items': item_ids}],
+                })
+                assert unlinked.ok, unlinked.text()
 
                 print("=== Step 3: 进入项目页面，默认查看样品卡片与研究表分组 ===")
                 page.goto(url + '/workbench/#/projects/PRJ-R2B')
                 # 验证不需要输入批号即可直接看到样品卡片
-                card = page.locator('.sample-card').first
+                card = page.locator('.sample-card').filter(has_text='材料类别：原液')
                 expect(card).to_be_visible()
                 expect(card).to_contain_text('批号：BATCH-01')
                 expect(card).to_contain_text('材料类别：原液')
@@ -193,6 +206,12 @@ def run_acceptance():
                 expect(card.get_by_role('link', name='进入研究表')).to_be_visible()
                 expect(card.get_by_role('link', name='COA')).to_be_visible()
                 expect(card.get_by_role('link', name='上传数据')).to_be_visible()
+                expect(page.locator('.unlinked-section')).to_contain_text('未绑定的历史研究表')
+                expect(page.locator('.sample-worksheets-box').get_by_text('未绑定的历史研究表')).to_have_count(0)
+                card.get_by_role('link', name='COA').click()
+                expect(page.get_by_text('当前样品 BATCH-01 · 原液', exact=False)).to_be_visible()
+                expect(page.get_by_text('COA 版本 1', exact=False)).to_be_visible()
+                page.goto(url + '/workbench/#/projects/PRJ-R2B')
                 print("  [PASS] 项目页面默认展示样品卡片，完整展示材料类别、批号、规格、包装、用途与分组研究表，提供快捷入口。")
 
                 print("=== Step 4: 进入研究表，演示 R2-A 0M 批量复制接口接入 ===")
@@ -207,6 +226,13 @@ def run_acceptance():
                 page.get_by_role('button', name='从 COA 复制到 0M').click()
                 release_panel = page.locator('.release-panel')
                 expect(release_panel).to_be_visible()
+                completed = release_panel.locator('.date-label input')
+                refresh_preview = release_panel.get_by_role('button', name='刷新匹配预览')
+                expect(completed).to_have_value('')
+                expect(refresh_preview).to_be_disabled()
+                expect(release_panel.locator('.batch-table')).to_have_count(0)
+                completed.fill('2026-01-15')
+                refresh_preview.click()
                 expect(release_panel.locator('.batch-table')).to_be_visible()
                 expect(release_panel.get_by_text('匹配待复制')).to_have_count(3)
                 expect(release_panel).to_contain_text('98.50%')
@@ -214,21 +240,28 @@ def run_acceptance():
                 expect(release_panel).to_contain_text('94.00%')
 
                 # 测试错误路径：录入超前日期
-                release_panel.locator('.date-label input').fill('2026-03-01')
-                release_panel.get_by_role('button', name='刷新匹配预览').click()
+                completed.fill('2026-03-01')
+                expect(release_panel.locator('.batch-table')).to_have_count(0)
+                refresh_preview.click()
                 expect(release_panel.get_by_role('alert')).to_contain_text('放行完成日期')
 
                 # 恢复正确日期
-                release_panel.locator('.date-label input').fill('2026-01-15')
-                release_panel.get_by_role('button', name='刷新匹配预览').click()
+                completed.fill('2026-01-15')
+                refresh_preview.click()
                 expect(release_panel.locator('.row-matched')).to_have_count(3)
 
                 # 一次确认批量复制 (原子操作)
-                release_panel.get_by_role('button', name=re.compile('一次确认批量复制')).click()
+                confirm_copy = release_panel.get_by_role('button', name=re.compile('一次确认批量复制'))
+                expect(confirm_copy).to_be_disabled()
+                release_panel.locator('thead').get_by_role('checkbox').click()
+                expect(confirm_copy).to_be_disabled()
+                release_panel.get_by_placeholder('请说明本次批量复制依据').fill('已核对实际放行日期及适用条款')
+                confirm_copy.click()
                 expect(page.get_by_role('status')).to_have_text('已批量复制 COA 结果到 0M。')
                 print("  [PASS] 成功接入 R2-A COA 批量 0M 预览与原子确认接口，完成匹配、原值、新值展示与一次批量复制。")
 
                 print("=== Step 5: 演示 Excel 粘贴含 N/A 的非应检列与冲突坐标拦截 ===")
+                expect(page.get_by_role('button', name='结束编辑')).to_be_enabled()
                 canvas = page.locator('canvas[id^="univer-sheet-main-canvas"]')
                 expect(canvas).to_be_visible()
                 box = canvas.bounding_box()

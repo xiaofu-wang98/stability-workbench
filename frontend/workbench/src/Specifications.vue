@@ -28,15 +28,19 @@ async function run(action: () => Promise<void>) {
 }
 async function refresh() {
   list.value = await api('/specifications');
-  if (route.query.specification) {
-    await open(String(route.query.specification));
-  } else if (!selected.value && list.value.length) {
-    await open(list.value[0].id);
-  }
 }
-onMounted(() => run(refresh));
+onMounted(() => run(async () => {
+  await refresh();
+  const requested = String(route.query.specification || '');
+  const onlyStandard = list.value.length === 1 ? list.value[0].id : '';
+  const id = requested || (route.query.sample ? onlyStandard : list.value[0]?.id);
+  if (id) await readSpecification(id);
+}));
+async function readSpecification(id: string) {
+  selected.value = await api('/specifications/' + encodeURIComponent(id));
+}
 function open(id: string) {
-  return run(async () => { selected.value = await api('/specifications/' + encodeURIComponent(id)); });
+  return run(() => readSpecification(id));
 }
 function makeCurrent(project: string) {
   return run(async () => {

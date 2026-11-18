@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { NAlert, NButton, NCheckbox, NInput, NSelect, NSpace, NTabPane, NTabs, NTag } from 'naive-ui';
 import { api, type CoaZeroBatchPreview, type Worksheet } from './api';
 
@@ -14,17 +14,22 @@ const emit = defineEmits<{
 const activeTab = ref<'batch' | 'single'>('batch');
 
 // --- Batch 0M State ---
-const batchDate = ref(props.sheet.start_date || new Date().toISOString().slice(0, 10));
-const batchBasis = ref('核对 COA 原件与放行日期，批量录入 0M');
+const batchDate = ref('');
+const batchBasis = ref('');
 const batchBasisOptions = [
   '核对 COA 原件与放行日期，批量录入 0M',
-  '放行全项检验合格，批量引用 COA 数据',
   '复核放行检验报告后批量确认采用',
 ];
 const batchPreview = ref<CoaZeroBatchPreview>();
 const previewLoading = ref(false);
 const previewError = ref('');
 const selectedRowIds = ref<string[]>([]);
+
+function clearBatchPreview() {
+  batchPreview.value = undefined;
+  selectedRowIds.value = [];
+  previewError.value = '';
+}
 
 const reasonLabels: Record<string, string> = {
   release_reference_exists: '已设置放行引用',
@@ -39,9 +44,9 @@ const reasonLabels: Record<string, string> = {
 };
 
 async function loadBatchPreview() {
-  if (previewLoading.value) return;
+  if (previewLoading.value || !batchDate.value) return;
+  clearBatchPreview();
   previewLoading.value = true;
-  previewError.value = '';
   try {
     const res = await api<CoaZeroBatchPreview>(
       '/worksheets/' + encodeURIComponent(props.sheet.id) + '/copy-coa-to-0m/batch/preview',
@@ -52,8 +57,6 @@ async function loadBatchPreview() {
       }
     );
     batchPreview.value = res;
-    // Default select all matched rows
-    selectedRowIds.value = res.rows.filter(r => r.status === 'matched').map(r => r.row_id);
   } catch (e) {
     previewError.value = (e as Error).message;
   } finally {
@@ -61,9 +64,7 @@ async function loadBatchPreview() {
   }
 }
 
-onMounted(() => {
-  void loadBatchPreview();
-});
+watch(batchDate, clearBatchPreview);
 
 const matchedRows = computed(() => batchPreview.value?.rows.filter(r => r.status === 'matched') || []);
 const existingRows = computed(() => batchPreview.value?.rows.filter(r => r.status === 'existing') || []);
@@ -88,7 +89,7 @@ function toggleRow(rowId: string) {
 }
 
 function confirmBatchCopy() {
-  if (!batchPreview.value || !selectedRowIds.value.length || !batchBasis.value.trim()) return;
+  if (batchPreview.value?.release_completed !== batchDate.value || !selectedRowIds.value.length || !batchBasis.value.trim()) return;
   emit('batch-copy', {
     release_completed: batchDate.value,
     preview_fingerprint: batchPreview.value.preview_fingerprint,
@@ -183,7 +184,7 @@ function saveSingle(remove = false) {
             放行检测完成日期
             <input v-model="batchDate" type="date" :max="sheet.start_date" :disabled="busy || previewLoading" />
           </label>
-          <NButton :loading="previewLoading" :disabled="busy" @click="loadBatchPreview">
+          <NButton :loading="previewLoading" :disabled="busy || !batchDate" @click="loadBatchPreview">
             刷新匹配预览
           </NButton>
         </div>

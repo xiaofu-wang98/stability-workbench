@@ -57,11 +57,7 @@ onMounted(() => run(async () => {
     batch.value = props.initialBatch;
   }
   if (project.value && batch.value) {
-    await search();
-    if (props.initialSampleId) {
-      const target = samples.value.find(s => s.id === props.initialSampleId);
-      if (target) await open(target);
-    }
+    await searchSamples(props.initialSampleId);
   }
 }));
 function removeSample(sample: Sample) {
@@ -85,14 +81,18 @@ function reset() {
   searched.value = false;
   samples.value = [];
 }
+async function searchSamples(sampleId?: string) {
+  if (!project.value || !batch.value.trim()) throw new Error('请先选择项目并填写样品批号。');
+  reset();
+  samples.value = await api(samplePath() + '?batch=' + encodeURIComponent(batch.value.trim()));
+  searched.value = true;
+  const target = sampleId ? samples.value.find(sample => sample.id === sampleId)
+    : samples.value.length === 1 ? samples.value[0] : undefined;
+  if (target) await open(target);
+  else if (sampleId) throw new Error('快捷入口指定的样品不在该项目和批号下，请核对样品。');
+}
 function search() {
-  return run(async () => {
-    if (!project.value || !batch.value.trim()) throw new Error('请先选择项目并填写样品批号。');
-    reset();
-    samples.value = await api(samplePath() + '?batch=' + encodeURIComponent(batch.value.trim()));
-    searched.value = true;
-    if (samples.value.length === 1) await open(samples.value[0]);
-  });
+  return run(() => searchSamples());
 }
 async function open(sample: Sample) {
   selected.value = sample;
