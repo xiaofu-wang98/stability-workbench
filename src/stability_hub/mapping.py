@@ -159,7 +159,14 @@ def map_corrected(raw, context, config, changes, acknowledge_warning=False, *, s
     ))
     acknowledged = acknowledge_warning and "result" in changes
     effective = retained_fields(raw) if raw.revisions else raw.fields
-    interpreted = interpreted_fields if interpreted_fields is not None else interpret_raw(raw, effective) if raw.adapter == "stability_matrix" else effective
+    interpreted = interpreted_fields
+    if interpreted is None:
+        if raw.adapter == "stability_matrix":
+            # A corrected method or subresult can change the derived item name.
+            matrix_fields = {**effective, **changes} if changes.keys() & {'method', 'criterion', 'subresult'} else effective
+            interpreted = interpret_raw(raw, matrix_fields)
+        else:
+            interpreted = effective
     if raw.subresult_hint:
         interpreted = {**interpreted, 'test_item': interpreted.get('test_item', '') + ' · ' + raw.subresult_hint}
     if source_facts:

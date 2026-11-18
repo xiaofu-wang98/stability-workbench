@@ -3,7 +3,7 @@ import re
 import calendar
 from datetime import date, datetime
 
-from .matrix_fields import compact, item_text, month_token, purity_subresults
+from .matrix_fields import compact, item_text, month_token, purity_subresults, timepoint_token
 from .models import Location, RawObservation
 from .normalize import is_not_reported
 from .merge_layout import MERGE_HAZARD, vertical_padding
@@ -63,7 +63,8 @@ def parse_matrix_sheet(sheet):
     for row, values in sorted(by_row.items()):
         item = [col for col, c in values.items() if header_label(c) in ITEM_HEADERS or
                 ('Test Item' in text(c) and ('检验项目' in text(c) or '检测项目' in text(c)))]
-        times = [col for col, c in values.items() if ('月' in text(c) or 'month' in text(c).casefold())
+        times = [col for col, c in values.items() if ('月' in text(c) or '天' in text(c)
+                 or re.search(r'\b(?:months?|days?)\b', text(c), re.I))
                  and ('时间' in text(c) or 'timepoint' in text(c).casefold())
                  or '考察时段' in text(c) or 'survey period' in text(c).casefold()]
         if item and times:
@@ -94,10 +95,10 @@ def parse_matrix_sheet(sheet):
         months = {}
         for col in range(time_col, last_col+1):
             c = cells.get((header+1, col))
-            if c is not None and month_token(text(c)) is not None:
+            if c is not None and timepoint_token(text(c)) is not None:
                 months[col] = c
         if not months:
-            raise ValueError(f'{sheet.title} 第{header+1}行未识别出月龄列，请核对表头。')
+            raise ValueError(f'{sheet.title} 第{header+1}行未识别出时间点列，请核对表头。')
         first_result = min(months)
         if last_col-first_result > 512:
             raise ValueError(f'{sheet.title} 时间区域超过512列，请核对合并表头。')

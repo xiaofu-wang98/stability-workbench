@@ -153,7 +153,7 @@ def test_scenario_b_ip501_protocol_scope_and_tbd(tmp_path):
     t_mat.rows[1].cells[2].text = ""
     t_mat.rows[1].cells[3].text = ""
 
-    t_mat.rows[2].cells[0].text = "纯度（SEC-HPLC法）"
+    t_mat.rows[2].cells[0].text = "纯度（SEC-HPLC法）\nPurity (SEC-HPLC Method)"
     t_mat.rows[2].cells[1].text = "引用放行数据"
     t_mat.rows[2].cells[2].text = "√"
     t_mat.rows[2].cells[3].text = "√"
@@ -173,6 +173,7 @@ def test_scenario_b_ip501_protocol_scope_and_tbd(tmp_path):
     })
     assert seed_resp.status_code == 200
     seed_data = seed_resp.json()
+    assert seed_data["matrix"]["items"][-1]["label"] == "纯度（SEC-HPLC法）\nPurity (SEC-HPLC Method)"
 
     # 验证 TBD 批号被置空
     assert seed_data["identity"]["batch"] == ""
@@ -482,4 +483,3 @@ def test_scenario_e_ip501_full_domain_dictionary_and_auto_confirm(tmp_path):
         print("REG RESP FAILED:", reg_resp.status_code, reg_resp.json())
     assert reg_resp.status_code == 200
     assert len(reg_resp.json()["links"]) == len(rows)
-

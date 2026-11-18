@@ -44,6 +44,23 @@ class CoaSave(BaseModel):
     upload_id: Label = ''
 
 
+def ensure_sample(conn, project, command, actor):
+    fields = tuple(command.model_dump().values())
+    matches = conn.execute("""SELECT * FROM sample_entities WHERE project=? AND batch=? AND material_stage=?
+                              AND sample_type=? AND presentation=? AND packaging=? AND purpose=? AND deleted_at IS NULL""",
+                           (project, *fields)).fetchall()
+    if len(matches) > 1:
+        raise WorkflowError('sample_ambiguous', '存在多个相同属性的样品，请选择已有样品。', 409)
+    if matches:
+        return dict(matches[0])
+    sample_id = uid('sample')
+    conn.execute("""INSERT INTO sample_entities(id,project,batch,material_stage,sample_type,presentation,packaging,purpose,source)
+                    VALUES (?,?,?,?,?,?,?,?,'manual')""", (sample_id, project, *fields))
+    bump(conn, project)
+    event(conn, project, sample_id, 'sample_create', actor, '登记样品', command.model_dump())
+    return dict(conn.execute('SELECT * FROM sample_entities WHERE id=?', (sample_id,)).fetchone())
+
+
 def _key(row):
     return f"{row['table']}:{row['row']}"
 
@@ -245,7 +262,7 @@ def router_for(store, actor_dependency, project_dependency):
     router = APIRouter(prefix='/api/v1')
 
     def sample_for(conn, sample_id):
-        sample = conn.execute('SELECT * FROM sample_entities WHERE id=?', (sample_id,)).fetchone()
+        sample = conn.execute('SELECT * FROM sample_entities WHERE id=? AND deleted_at IS NULL', (sample_id,)).fetchone()
         if sample is None:
             raise WorkflowError('not_found', '样品不存在。', 404)
         return sample
@@ -262,28 +279,15 @@ def router_for(store, actor_dependency, project_dependency):
         with store.read() as conn:
             project_row(conn, project)
             return [dict(row) for row in conn.execute(
-                'SELECT * FROM sample_entities WHERE project=? AND batch=? ORDER BY created_at,id', (project, batch.strip()))]
+                'SELECT * FROM sample_entities WHERE project=? AND batch=? AND deleted_at IS NULL ORDER BY created_at,id', (project, batch.strip()))]
 
     @router.post('/projects/{project}/samples', status_code=201)
     def add_sample(project: project_dependency, command: SampleInput, operator: actor_dependency):
         require(operator, Capability.CONFIRM_FACT)
-        fields = tuple(command.model_dump().values())
         with store.connect() as conn:
             conn.execute('BEGIN IMMEDIATE')
             project_row(conn, project)
-            matches = conn.execute('''SELECT * FROM sample_entities WHERE project=? AND batch=? AND material_stage=?
-                                      AND sample_type=? AND presentation=? AND packaging=? AND purpose=?''',
-                                   (project, *fields)).fetchall()
-            if len(matches) > 1:
-                raise WorkflowError('sample_ambiguous', '存在多个相同属性的样品，请选择已有样品。', 409)
-            if matches:
-                return dict(matches[0])
-            sample_id = uid('sample')
-            conn.execute('''INSERT INTO sample_entities(id,project,batch,material_stage,sample_type,presentation,packaging,purpose,source)
-                            VALUES (?,?,?,?,?,?,?,?,'manual')''', (sample_id, project, *fields))
-            bump(conn, project)
-            event(conn, project, sample_id, 'sample_create', operator, '登记样品', command.model_dump())
-            return dict(sample_for(conn, sample_id))
+            return ensure_sample(conn, project, command, operator)
 
     route = '/samples/{sample_id}/coa/{specification_id}'
 

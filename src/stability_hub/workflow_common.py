@@ -28,10 +28,12 @@ def next_result_sequence(conn):
     ).fetchone()[0]
 
 
-def ensure_worksheet_slot_unlocked(conn, slot_id):
+def ensure_worksheet_slot_unlocked(conn, slot_id, *, except_sheet_id=None):
     if conn.execute("""SELECT 1 FROM business_worksheet_slots s
                        JOIN business_worksheet_leases l ON l.sheet_id=s.sheet_id
-                       WHERE s.slot_id=? AND l.expires_at>?""", (slot_id, int(time.time()))).fetchone():
+                       WHERE s.slot_id=? AND l.expires_at>?
+                         AND (? IS NULL OR s.sheet_id<>?)""",
+                    (slot_id, int(time.time()), except_sheet_id, except_sheet_id)).fetchone():
         raise WorkflowError("worksheet_occupied", "此结果所在的研究工作表正在编辑，请待占用释放后再提交。", 409)
 
 
@@ -87,11 +89,30 @@ def unique_project_code(conn, project):
         SELECT canonical_project FROM project_aliases WHERE UPPER(alias) IN (?,?)
     """, (code, counterpart, code, counterpart))}
     if len(candidates) > 1:
+        # A recorded reconciliation can keep the old project and its immutable audit history.
+        resolved = {row[0] for row in conn.execute("""
+            SELECT canonical_project FROM project_aliases
+            WHERE UPPER(alias) IN (?,?) AND UPPER(alias) != UPPER(canonical_project)
+        """, (code, counterpart))}
+        if len(resolved) == 1:
+            canonical = next(iter(resolved))
+            if len(candidates) == 2 and {candidate.upper() for candidate in candidates} == {code, counterpart} and canonical in candidates:
+                return canonical
         codes = "、".join(sorted(candidates))
         raise WorkflowError("project_identity_conflict", f"项目编号匹配多个既有项目（{codes}）。请先核对归属，再使用该项目。", 409)
     if candidates:
         return next(iter(candidates))
     return project_row(conn, project)["project"]
+
+
+def active_project_code(conn, project):
+    """Keep unreconciled projects visible and omit explicitly superseded codes."""
+    try:
+        return unique_project_code(conn, project) == project
+    except WorkflowError as exc:
+        if exc.code != "project_identity_conflict":
+            raise
+        return True
 
 
 def check_revision(conn, project, expected):
@@ -111,14 +132,16 @@ def event(conn, project, subject, action, actor, reason, detail):
     )
 
 
-def replay(conn, project, actor, key, payload):
+def replay(conn, project, actor, key, payload, *, legacy_payload=None):
     request_hash = digest(payload)
     row = conn.execute(
         "SELECT * FROM workflow_requests WHERE project=? AND actor_id=? AND client_key=?",
         (project, actor.id, key),
     ).fetchone()
     if row:
-        if row["request_hash"] != request_hash:
+        if row["request_hash"] != request_hash and (
+            legacy_payload is None or row["request_hash"] != digest(legacy_payload)
+        ):
             raise WorkflowError("idempotency_conflict", "同一幂等键不能提交不同内容。", 409)
         return json.loads(row["response_json"])
     return None

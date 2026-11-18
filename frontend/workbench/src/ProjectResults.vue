@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import { NAlert, NButton, NInput, NSpin } from 'naive-ui';
-import { api } from './api';
+import { api, type StandardAssessment } from './api';
 
 type Value = { text: string; result_version_id: string; source_ids: string[] };
 type Cell = { slot_id: string; slot_key: { batch: string; item: string; method: string; condition: string;
   study: string; study_id: string; presentation: string; reporting_basis?: string; month: number | null; day: number | null };
-  display: Value | null; adopted: Value | null; worksheet_id?: string | null };
+  display: Value | null; adopted: Value | null; worksheet_id?: string | null; standard_assessment?: StandardAssessment | null };
 const props = defineProps<{ project: string }>();
 const cells = ref<Cell[]>([]);
 const labels = ref<Record<string, string>>({});
@@ -218,7 +218,12 @@ function search() {
           <td>{{ studies[cell.slot_key.study] || cell.slot_key.study }} · {{ cell.slot_key.condition }}<br>{{ cell.slot_key.study_id }}<template v-if="cell.slot_key.reporting_basis"> · {{ cell.slot_key.reporting_basis }}</template></td>
           <td>{{ labels[cell.slot_key.item] || cell.slot_key.item }}<br>{{ cell.slot_key.method }}</td>
           <td>{{ cell.slot_key.day != null ? cell.slot_key.day + 'D' : cell.slot_key.month != null ? cell.slot_key.month + 'M' : '放行' }}</td>
-          <td>{{ cell.adopted?.text ?? '尚无采用值' }}
+          <td><span :class="{ 'outside-limit': cell.standard_assessment?.status === 'outside' }"
+            :title="[cell.standard_assessment?.criterion, cell.standard_assessment?.version].filter(Boolean).join(' · ')">
+            {{ cell.adopted?.text ?? '尚无采用值' }}
+            <small v-if="cell.standard_assessment?.status === 'outside'"> 超出标准</small>
+            <small v-if="cell.standard_assessment?.status === 'undetermined'"> 待判断</small>
+          </span>
             <NButton v-if="cell.adopted" text :disabled="voidBusy" @click="startVoid(cell.adopted.result_version_id)">留痕作废</NButton>
           </td>
           <td>{{ cell.display?.result_version_id !== cell.adopted?.result_version_id ? cell.display?.text : '—' }}</td>
@@ -239,6 +244,7 @@ function search() {
 </template>
 
 <style scoped>
+.outside-limit { color: #9d2424; background: #fde8e8; font-weight: 700; }
 .result-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 10px 0; }
 .result-controls .n-input { width: min(100%, 260px); }
 </style>

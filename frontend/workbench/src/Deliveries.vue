@@ -14,7 +14,7 @@ const batch = ref(String(route.query.batch || ''));
 const study = ref<string | null>(typeof route.query.study === 'string' ? route.query.study : null);
 const studyId = ref('');
 const condition = ref('');
-const kind = ref<'summary' | 'xlsx'  | 'docx' | 'stability' | 'confirmation' | 'quick'>(route.query.format === 'confirmation' ? 'confirmation' : 'xlsx');
+const kind = ref<'summary' | 'xlsx' | 'docx' | 'stability' | 'confirmation' | 'quick' | 'controlled'>(route.query.format === 'confirmation' ? 'confirmation' : 'xlsx');
 type Sample = { id: string; batch: string; presentation: string; sample_type: string; purpose: string };
 type SampleRole = 'selected' | 'before' | 'after';
 type AlignmentField = 'presentation' | 'study_id';
@@ -45,6 +45,7 @@ const quickSlotIds = computed(() => [...new Set(quickGroups.value.filter(group =
   .flatMap(group => group.slot_ids))]);
 const sheetId = ref<string | null>(null);
 const sheets = ref<WorksheetSummary[]>([]);
+const controlledIds = ref<string[]>([]);
 const matchingSheets = computed(() => sheets.value.filter(sheet => !batch.value.trim() ||
   sheet.batch?.toLowerCase().includes(batch.value.trim().toLowerCase())));
 const loadingSheets = ref(false);
@@ -105,7 +106,7 @@ const filters = computed(() => Object.fromEntries(Object.entries({
   condition: kind.value === 'summary' ? condition.value.trim() : '',
 }).filter(([, value]) => value)));
 
-watch([project, batch, study, kind, sheetId, sampleIds, studyId, condition], () => {
+watch([project, batch, study, kind, sheetId, sampleIds, studyId, condition, controlledIds], () => {
   scope.value = undefined;
   confirmation.value = undefined;
   output.value = undefined;
@@ -147,9 +148,10 @@ watch([project, kind], async ([id, format], _, cleanup) => {
   const request = new AbortController();
   cleanup(() => request.abort());
   sheetId.value = null;
+  controlledIds.value = [];
   sheets.value = [];
   loadingSheets.value = false;
-  if (!id || format !== 'confirmation') return;
+  if (!id || !['confirmation', 'controlled'].includes(format)) return;
   error.value = '';
   loadingSheets.value = true;
   try {
@@ -178,6 +180,13 @@ function preview() {
     scope.value = undefined;
     confirmation.value = undefined;
     output.value = undefined;
+    if (kind.value === 'controlled') {
+      if (!controlledIds.value.length) return;
+      const config = await api<{ base_revision: number }>(
+        '/projects/' + encodeURIComponent(project.value) + '/configuration');
+      scope.value = { revision: config.base_revision, count: controlledIds.value.length, filters: {} };
+      return;
+    }
     if (kind.value === 'confirmation') {
       if (!sheetId.value) return;
       const sheet = await api<Worksheet>('/worksheets/' + encodeURIComponent(sheetId.value));
@@ -235,6 +244,15 @@ function generate() {
     });
   }
   if (!selection?.count) return;
+  if (kind.value === 'controlled') {
+    return run(async () => {
+      output.value = await api('/projects/' + encodeURIComponent(project.value) + '/controlled-workbook', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base_revision: selection.revision, sheet_ids: controlledIds.value }),
+      });
+      await history();
+    });
+  }
   if (kind.value === 'quick' && !quickSlotIds.value.length) return;
   return run(async () => {
     output.value = undefined;
@@ -254,6 +272,7 @@ const studies = [
   { label: '强力破坏', value: 'stress' }, { label: '放行', value: 'release' },
 ];
 const formats = [{ label: '稳定性汇总 Excel', value: 'summary' }, { label: '结果汇总 Excel', value: 'xlsx' }, { label: '检测结果 Word', value: 'docx' },
+  { label: '常熟受控版式 Excel', value: 'controlled' },
   { label: '稳定性考察报告 Word', value: 'stability' }, { label: '稳定性确认表 Excel', value: 'confirmation' },
   { label: '跨批对比 Word', value: 'quick' }];
 const reportFields = [
@@ -276,6 +295,9 @@ function href(item: Delivery) {
     <label>文件类型<NSelect v-model:value="kind" :disabled="busy" :options="formats" /></label>
     <label v-if="kind === 'summary'">方案编号<NInput v-model:value="studyId" :disabled="busy" /></label>
     <label v-if="kind === 'summary'">考察条件<NInput v-model:value="condition" :disabled="busy" /></label>
+    <label v-if="kind === 'controlled'">研究表<NSelect v-model:value="controlledIds" multiple filterable
+      :loading="loadingSheets" :disabled="busy || !project"
+      :options="sheets.map(sheet => ({ label: [sheet.batch, sheet.condition, sheet.name].filter(Boolean).join(' · '), value: sheet.id }))" /></label>
     <label v-if="kind === 'quick'" class="quick-samples">参与对比的样品<NSelect v-model:value="sampleIds" multiple filterable
       :disabled="busy || !project" :loading="loadingSamples" placeholder="选择至少两个不同批次"
       :options="availableSamples.map(sample => ({ value: sample.id, label: [sample.batch, sample.sample_type, sample.presentation, sample.purpose].join(' · ') }))" /></label>
@@ -309,10 +331,10 @@ function href(item: Delivery) {
       </label>
     </fieldset>
     <div class="delivery-actions">
-      <NButton :disabled="!project || busy || (kind === 'confirmation' && !sheetId) || (kind === 'quick' && (selectedBatchCount < 2 || (alignedFields.length > 0 && !alignmentReason.trim())))" @click="preview">预览范围</NButton>
+      <NButton :disabled="!project || busy || (kind === 'confirmation' && !sheetId) || (kind === 'controlled' && !controlledIds.length) || (kind === 'quick' && (selectedBatchCount < 2 || (alignedFields.length > 0 && !alignmentReason.trim())))" @click="preview">预览范围</NButton>
       <NButton type="primary" :disabled="busy || (kind === 'confirmation' ? !confirmation || !pointIds.length : !scope?.count || (kind === 'stability' && study === 'release') || (kind === 'quick' && !quickSlotIds.length))" @click="generate">生成文件</NButton>
     </div>
-    <p v-if="scope" role="status">范围内 {{ kind === 'quick' ? quickSlotIds.length : scope.count }} 条结果 · 数据版本 {{ scope.revision }}</p>
+    <p v-if="scope" role="status">范围内 {{ kind === 'quick' ? quickSlotIds.length : scope.count }} {{ kind === 'controlled' ? '张研究表' : '条结果' }} · 数据版本 {{ scope.revision }}</p>
     <details v-if="kind === 'quick' && alignmentCandidates.length" class="quick-groups">
       <summary>本次比较的字段对齐（可选）</summary>
       <ul><li v-for="option in alignmentCandidates" :key="option.field"><label>

@@ -2078,6 +2078,35 @@
       "title": "StandardApplicability",
       "type": "object"
     },
+    "StandardAssessment": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": [
+            "within",
+            "outside",
+            "undetermined"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "criterion": {
+          "default": "",
+          "title": "Criterion",
+          "type": "string"
+        },
+        "version": {
+          "default": "",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "StandardAssessment",
+      "type": "object"
+    },
     "UploadPreview": {
       "additionalProperties": false,
       "properties": {
@@ -2276,6 +2305,17 @@
           ],
           "default": null,
           "title": "Worksheet Id"
+        },
+        "standard_assessment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StandardAssessment"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [

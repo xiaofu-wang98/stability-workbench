@@ -14,6 +14,7 @@ type Candidate = { id: string; lifecycle: string; received: boolean; detail: str
   logical_row?: number | null; source_span?: [number, number, number, number] | null;
   raw_fields: Record<string, string>; record?: Result; existing_record?: Result; allowed_actions: string[]; candidate_revision: number; detection_id: string };
 type Preview = { preview_id: string; project: string; filename: string; base_revision: number; duplicate_source?: boolean; sheet_confirmation_required: boolean; candidates: Candidate[] };
+type WorkspacePreview = { preview: Preview; sections: string[]; section: string | null; preflight: Preflight | null };
 type Preflight = { section: string; base_revision: number; fingerprint: string; can_commit: boolean; state: string; blocker_reasons: string[];
   unresolved: string[]; review_required: string[];
   counts: Record<string, number>; historical_count: number;
@@ -40,10 +41,13 @@ const section = ref<string | null>(null);
 const sections = ref<string[]>([]);
 const preflight = ref<Preflight>();
 const linkedSheets = ref<{ id: string; name: string }[]>([]);
+type WorksheetSync = { slot_id: string; batch: string; condition: string; status: string; reason?: string };
+const worksheetSync = ref<WorksheetSync[]>([]);
 const suggestions = ref<string[]>([]);
 const error = ref('');
 const status = ref('');
 const busy = ref(false);
+const uploadStatus = ref('');
 const reviewLimit = ref(100);
 const onlyReview = ref(false);
 const reviewSources = ref(false);
@@ -156,7 +160,7 @@ async function createProject(event: Event) {
     await list();
   });
 }
-async function selectSection(value: string | null) {
+async function selectSection(value: string | null, loaded?: WorkspacePreview) {
   section.value = value;
   preflight.value = undefined;
   resolving.value = undefined;
@@ -167,23 +171,26 @@ async function selectSection(value: string | null) {
   linkedSheets.value = [];
   if (value) {
     const query = new URLSearchParams({ section: value });
-    preflight.value = await api(path.value + '/v5/preflight?' + query);
+    const view = loaded ?? await api<WorkspacePreview>(path.value + '/workspace?' + query);
+    preview.value = view.preview;
+    preflight.value = view.preflight ?? undefined;
     if (candidates.value.some(candidate => candidate.lifecycle === 'submitted')) {
       linkedSheets.value = await api(path.value + '/worksheets?' + query);
     }
   }
 }
 async function open(id: string, selected?: string) {
-  preview.value = await api('/previews/' + encodeURIComponent(id));
+  worksheetSync.value = [];
+  const view = await api<WorkspacePreview>('/previews/' + encodeURIComponent(id) + '/workspace'
+    + (selected ? '?section=' + encodeURIComponent(selected) : ''));
+  preview.value = view.preview;
   section.value = null;
   preflight.value = undefined;
   linkedSheets.value = [];
   reviewLimit.value = 100;
   if (preview.value?.sheet_confirmation_required) {
-    const sheets = await api<{ section: string }[]>(path.value + '/v5/sheets');
-    sections.value = sheets.map(sheet => sheet.section);
-    if (selected && !sections.value.includes(selected)) throw new Error('链接中的工作表已无法定位，请重新选择工作表。');
-    await selectSection(selected || sections.value[0] || null);
+    sections.value = view.sections;
+    await selectSection(view.section, view);
   } else if (candidates.value.some(candidate => candidate.lifecycle === 'submitted')) {
     linkedSheets.value = await api(path.value + '/worksheets');
   }
@@ -203,11 +210,34 @@ function upload() {
   ) }));
   uploadKey ||= crypto.randomUUID();
   return run(async () => {
-    const result = await api<Preview>(projectPath() + '/previews', {
-      method: 'POST', headers: { 'Idempotency-Key': uploadKey }, body: form,
-    });
-    await open(result.preview_id);
-    status.value = result.duplicate_source ? '该原件已归档，已打开原有导入记录。' : '已归档原件并生成候选记录。请核对每张工作表的状态。';
+    const endpoint = projectPath();
+    const progressId = crypto.randomUUID();
+    const controller = new AbortController();
+    uploadStatus.value = '正在上传或读取文件…';
+    const timer = window.setInterval(async () => {
+      try {
+        const progress = await api<{ phase: string; completed: number; total: number; candidates: number; section: string }>(
+          endpoint + '/preview-progress/' + progressId, { signal: controller.signal });
+        if (controller.signal.aborted) return;
+        if (progress.phase === 'parsing') {
+          uploadStatus.value = `已解析 ${progress.completed}/${progress.total} 张表，正在读取「${progress.section}」，已发现 ${progress.candidates} 条候选。`;
+        } else if (progress.phase === 'archiving') {
+          uploadStatus.value = `已识别 ${progress.candidates} 条候选，正在归档和生成核对结果…`;
+        }
+      } catch { /* The upload response reports any actual processing error. */ }
+    }, 900);
+    try {
+      const result = await api<Preview>(endpoint + '/previews?compact=true', {
+        method: 'POST', headers: { 'Idempotency-Key': uploadKey, 'Upload-Progress-Id': progressId }, body: form,
+      });
+      uploadStatus.value = '正在打开核对记录…';
+      await open(result.preview_id);
+      status.value = result.duplicate_source ? '该原件已归档，已打开原有导入记录。' : '已归档原件并生成候选记录。请核对每张工作表的状态。';
+    } finally {
+      window.clearInterval(timer);
+      controller.abort();
+      uploadStatus.value = '';
+    }
   });
 }
 function parseProtocol() {
@@ -256,10 +286,24 @@ async function commit() {
         identity_confirmed: true, intent: 'initial', reason,
       })),
     };
-    const result = await submit<{ result_version_ids: string[] }>(source.preview_id, check ? '/v5/commit' : '/confirm', command);
+    const result = await submit<{ result_version_ids: string[]; worksheet_sync?: WorksheetSync[] }>(
+      source.preview_id, check ? '/v5/commit' : '/confirm', command);
     try { await open(source.preview_id, check?.section); }
     catch { status.value = '已写入结果。请重新打开此导入记录读取最新状态。'; return; }
     status.value = `本次写入 ${result.result_version_ids.length} 条结果版本。`;
+    worksheetSync.value = result.worksheet_sync ?? [];
+  });
+}
+function syncWorksheets() {
+  return run(async () => {
+    if (!preview.value) return;
+    const source = preview.value.preview_id;
+    const section = preflight.value?.section;
+    const result = await api<{ worksheet_sync: WorksheetSync[] }>(
+      path.value + '/sync-worksheets' + (section ? '?section=' + encodeURIComponent(section) : ''), { method: 'POST' });
+    await open(source, section);
+    worksheetSync.value = result.worksheet_sync;
+    status.value = `已生成 ${worksheetSync.value.filter(item => item.status === 'created').length} 张研究表。`;
   });
 }
 function submit<T = unknown>(id: string, suffix: string, command: object) {
@@ -369,7 +413,7 @@ function time(record?: Result) {
         <label>考察类型 <select v-model="defaults.study" :disabled="busy"><option value="">沿用原件</option><option value="long_term">长期</option><option value="accelerated">加速</option><option value="stress">强力破坏</option></select></label>
       </div>
     </details>
-    <p role="status">{{ busy ? "正在读取文件，请稍候…" : !file ? "选择来源文件。" : !role ? "请选择文件用途。" : role !== "protocol" && !project ? "请选择目标项目，或根据原件查找项目。" : "文件已准备好，可以开始解析。" }}</p>
+    <p role="status">{{ uploadStatus || (busy ? "正在读取文件，请稍候…" : !file ? "选择来源文件。" : !role ? "请选择文件用途。" : role !== "protocol" && !project ? "请选择目标项目，或根据原件查找项目。" : "文件已准备好，可以开始解析。") }}</p>
     <div class="entry-actions">
       <NButton v-if="role === 'protocol'" type="primary" :loading="busy" :disabled="busy || !file" @click="parseProtocol">解析方案</NButton>
       <template v-else-if="role">
@@ -438,6 +482,12 @@ function time(record?: Result) {
         <a :href="'/legacy?view=ledger&project=' + encodeURIComponent(preview.project)">更多来源处理工具</a>
       </NAlert>
       <p v-if="preflight?.state === 'committed'">此工作表已写入。</p>
+      <ul v-if="worksheetSync.some(item => item.status === 'needs_input')">
+        <li v-for="item in worksheetSync.filter(entry => entry.status === 'needs_input')" :key="item.slot_id">
+          {{ item.batch }} · {{ item.condition }} · {{ item.reason }}
+          <RouterLink :to="{ path: '/new', query: { project, batch: item.batch, slot: item.slot_id } }">补齐并建表</RouterLink>
+        </li>
+      </ul>
       <p v-if="preflight && (preflight.state === 'ready' || preflight.state === 'committed') && preflightCounts.length">
         {{ preflight.state === 'ready' ? '待提交范围' : '已提交范围' }}：{{ preflightCounts.join(' · ') }}
       </p>
@@ -451,6 +501,7 @@ function time(record?: Result) {
           @click="commit">{{ preview.sheet_confirmation_required ? '核对无误，写入本工作表' : '核对无误，写入 ' + initial.length + ' 条首次结果' }}</NButton>
         <RouterLink :to="'/projects/' + encodeURIComponent(preview.project)">打开项目数据</RouterLink>
         <RouterLink v-for="sheet in linkedSheets" :key="sheet.id" :to="'/worksheets/' + encodeURIComponent(sheet.id)">打开研究表 {{ sheet.name }}</RouterLink>
+        <NButton v-if="preflight?.state === 'committed'" :loading="busy" @click="syncWorksheets">同步研究表</NButton>
       </div>
     </section>
     <div v-if="reviewSources && section" ref="sourceReviewPanel">

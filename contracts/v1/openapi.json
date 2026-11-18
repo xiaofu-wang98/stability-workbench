@@ -588,6 +588,53 @@
         }
       }
     },
+    "/api/v1/projects/{project}/controlled-workbook": {
+      "post": {
+        "summary": "Export Controlled",
+        "operationId": "export_controlled_api_v1_projects__project__controlled_workbook_post",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ControlledWorkbook"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/study-workbooks/preview": {
       "post": {
         "summary": "Preview",
@@ -817,6 +864,209 @@
         }
       }
     },
+    "/api/v1/worksheets/{sheet_id}/archive-impact": {
+      "get": {
+        "summary": "Worksheet Archive Impact",
+        "operationId": "worksheet_archive_impact_api_v1_worksheets__sheet_id__archive_impact_get",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worksheets/{sheet_id}": {
+      "delete": {
+        "summary": "Archive Worksheet",
+        "operationId": "archive_worksheet_api_v1_worksheets__sheet_id__delete",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveStudyObject"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Read Worksheet",
+        "operationId": "read_worksheet_api_v1_worksheets__sheet_id__get",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/samples/{sample_id}/archive-impact": {
+      "get": {
+        "summary": "Sample Archive Impact",
+        "operationId": "sample_archive_impact_api_v1_samples__sample_id__archive_impact_get",
+        "parameters": [
+          {
+            "name": "sample_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sample Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/samples/{sample_id}": {
+      "delete": {
+        "summary": "Archive Sample",
+        "operationId": "archive_sample_api_v1_samples__sample_id__delete",
+        "parameters": [
+          {
+            "name": "sample_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sample Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveStudyObject"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/projects/{project}/worksheets": {
       "get": {
         "summary": "List Worksheets",
@@ -879,43 +1129,6 @@
         },
         "responses": {
           "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/worksheets/{sheet_id}": {
-      "get": {
-        "summary": "Read Worksheet",
-        "operationId": "read_worksheet_api_v1_worksheets__sheet_id__get",
-        "parameters": [
-          {
-            "name": "sheet_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Sheet Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
@@ -1114,6 +1327,53 @@
         }
       }
     },
+    "/api/v1/worksheets/{sheet_id}/point-metadata": {
+      "post": {
+        "summary": "Edit Worksheet Point",
+        "operationId": "edit_worksheet_point_api_v1_worksheets__sheet_id__point_metadata_post",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditPointMetadata"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/worksheets/{sheet_id}/plan": {
       "post": {
         "summary": "Extend Worksheet",
@@ -1209,6 +1469,50 @@
       }
     },
     "/api/v1/worksheets/{sheet_id}/remove-row": {
+      "get": {
+        "summary": "Preview Remove Worksheet Row",
+        "operationId": "preview_remove_worksheet_row_api_v1_worksheets__sheet_id__remove_row_get",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          },
+          {
+            "name": "row_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Row Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
         "summary": "Remove Worksheet Row",
         "operationId": "remove_worksheet_row_api_v1_worksheets__sheet_id__remove_row_post",
@@ -1417,6 +1721,53 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/SetReleaseReference"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worksheets/{sheet_id}/copy-coa-to-0m": {
+      "post": {
+        "summary": "Copy Coa To Zero",
+        "operationId": "copy_coa_to_zero_api_v1_worksheets__sheet_id__copy_coa_to_0m_post",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CopyCoaToZero"
               }
             }
           }
@@ -4517,6 +4868,88 @@
         }
       }
     },
+    "/api/v1/projects/{project}/current-specifications": {
+      "get": {
+        "summary": "Current Specifications",
+        "operationId": "current_specifications_api_v1_projects__project__current_specifications_get",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Set Current Specification",
+        "operationId": "set_current_specification_api_v1_projects__project__current_specifications_post",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CurrentSpecification"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/specifications/{specification_id}": {
       "get": {
         "summary": "Get Specification",
@@ -5200,6 +5633,16 @@
             }
           },
           {
+            "name": "compact",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Compact"
+            }
+          },
+          {
             "name": "Idempotency-Key",
             "in": "header",
             "required": true,
@@ -5208,6 +5651,23 @@
               "minLength": 1,
               "maxLength": 200,
               "title": "Idempotency-Key"
+            }
+          },
+          {
+            "name": "Upload-Progress-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 80
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Upload-Progress-Id"
             }
           }
         ],
@@ -5229,6 +5689,52 @@
                 "schema": {
                   "$ref": "#/components/schemas/UploadPreview"
                 }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/preview-progress/{progress_id}": {
+      "get": {
+        "summary": "Read Upload Progress",
+        "operationId": "read_upload_progress_api_v1_projects__project__preview_progress__progress_id__get",
+        "parameters": [
+          {
+            "name": "progress_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Progress Id"
+            }
+          },
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -5268,6 +5774,114 @@
                 "schema": {
                   "$ref": "#/components/schemas/UploadPreview"
                 }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/previews/{preview_id}/workspace": {
+      "get": {
+        "summary": "Preview Workspace",
+        "operationId": "preview_workspace_api_v1_previews__preview_id__workspace_get",
+        "parameters": [
+          {
+            "name": "preview_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Preview Id"
+            }
+          },
+          {
+            "name": "section",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Section"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspacePreview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/previews/{preview_id}/sync-worksheets": {
+      "post": {
+        "summary": "Sync Confirmed Worksheets",
+        "operationId": "sync_confirmed_worksheets_api_v1_previews__preview_id__sync_worksheets_post",
+        "parameters": [
+          {
+            "name": "preview_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Preview Id"
+            }
+          },
+          {
+            "name": "section",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Section"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -7949,6 +8563,33 @@
         ],
         "title": "ArchiveInfo"
       },
+      "ArchiveStudyObject": {
+        "properties": {
+          "basis": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Basis"
+          },
+          "fingerprint": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Fingerprint"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Idempotency Key"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "basis",
+          "fingerprint",
+          "idempotency_key"
+        ],
+        "title": "ArchiveStudyObject"
+      },
       "ArchiveSummary": {
         "properties": {
           "total_tables": {
@@ -8913,7 +9554,6 @@
           "value": {
             "type": "string",
             "maxLength": 8000,
-            "minLength": 1,
             "title": "Value"
           },
           "intent": {
@@ -9189,6 +9829,98 @@
         ],
         "title": "ConfirmRequest"
       },
+      "ControlledWorkbook": {
+        "properties": {
+          "base_revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Base Revision"
+          },
+          "sheet_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 120,
+            "minItems": 1,
+            "title": "Sheet Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "base_revision",
+          "sheet_ids"
+        ],
+        "title": "ControlledWorkbook"
+      },
+      "CopyCoaToZero": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Token"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision"
+          },
+          "row_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Row Id"
+          },
+          "coa_fingerprint": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Coa Fingerprint"
+          },
+          "expected_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Version Id"
+          },
+          "intent": {
+            "type": "string",
+            "enum": [
+              "initial",
+              "correction",
+              "retest",
+              "keep"
+            ],
+            "title": "Intent"
+          },
+          "basis": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Basis",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token",
+          "idempotency_key",
+          "revision",
+          "row_id",
+          "coa_fingerprint",
+          "intent"
+        ],
+        "title": "CopyCoaToZero"
+      },
       "CreateWorksheet": {
         "properties": {
           "custom_items": {
@@ -9343,6 +10075,18 @@
             ],
             "title": "Sample Id"
           },
+          "material_stage": {
+            "type": "string",
+            "maxLength": 250,
+            "title": "Material Stage",
+            "default": ""
+          },
+          "packaging": {
+            "type": "string",
+            "maxLength": 250,
+            "title": "Packaging",
+            "default": ""
+          },
           "item_standards": {
             "additionalProperties": {
               "items": {
@@ -9386,6 +10130,32 @@
           "points"
         ],
         "title": "CreateWorksheet"
+      },
+      "CurrentSpecification": {
+        "properties": {
+          "specification_id": {
+            "type": "string",
+            "title": "Specification Id"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Revision"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Idempotency Key"
+          }
+        },
+        "type": "object",
+        "required": [
+          "specification_id",
+          "revision",
+          "idempotency_key"
+        ],
+        "title": "CurrentSpecification"
       },
       "CustomWorksheetItem": {
         "properties": {
@@ -9640,6 +10410,55 @@
           "label"
         ],
         "title": "DraftWorksheetItem"
+      },
+      "EditPointMetadata": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Token"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision"
+          },
+          "point_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Point Id"
+          },
+          "planned_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Planned Date"
+          },
+          "signed_status": {
+            "type": "string",
+            "enum": [
+              "",
+              "已签",
+              "已签报告"
+            ],
+            "title": "Signed Status",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token",
+          "idempotency_key",
+          "revision",
+          "point_id",
+          "planned_date"
+        ],
+        "title": "EditPointMetadata"
       },
       "ExportRequest": {
         "properties": {
@@ -10860,6 +11679,16 @@
             ],
             "title": "Planned Date"
           },
+          "signed_status": {
+            "type": "string",
+            "enum": [
+              "",
+              "已签",
+              "已签报告"
+            ],
+            "title": "Signed Status",
+            "default": ""
+          },
           "required_items": {
             "items": {
               "type": "string",
@@ -11555,6 +12384,11 @@
             "type": "string",
             "minLength": 1,
             "title": "Basis"
+          },
+          "fingerprint": {
+            "type": "string",
+            "title": "Fingerprint",
+            "default": ""
           }
         },
         "additionalProperties": false,
@@ -12879,6 +13713,17 @@
             "const": "committed",
             "title": "State",
             "default": "committed"
+          },
+          "worksheet_sync": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Worksheet Sync",
+            "default": []
           }
         },
         "additionalProperties": false,
@@ -13298,6 +14143,35 @@
         ],
         "title": "StandardApplicability"
       },
+      "StandardAssessment": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "within",
+              "outside",
+              "undetermined"
+            ],
+            "title": "Status"
+          },
+          "criterion": {
+            "type": "string",
+            "title": "Criterion",
+            "default": ""
+          },
+          "version": {
+            "type": "string",
+            "title": "Version",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "StandardAssessment"
+      },
       "StopWorksheetChecks": {
         "properties": {
           "token": {
@@ -13324,6 +14198,11 @@
             "type": "string",
             "minLength": 1,
             "title": "Basis"
+          },
+          "fingerprint": {
+            "type": "string",
+            "title": "Fingerprint",
+            "default": ""
           },
           "point_ids": {
             "items": {
@@ -13968,12 +14847,29 @@
               "type": "string",
               "enum": [
                 "keep",
-                "correct"
+                "correct",
+                "retest"
               ]
             },
             "type": "object",
             "maxProperties": 5000,
             "title": "Decisions"
+          },
+          "coordinates": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "maxItems": 5000,
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coordinates"
           }
         },
         "additionalProperties": false,
@@ -14040,6 +14936,16 @@
               }
             ],
             "title": "Worksheet Id"
+          },
+          "standard_assessment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StandardAssessment"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -14215,6 +15121,51 @@
         "additionalProperties": false,
         "type": "object",
         "title": "WorksheetLayout"
+      },
+      "WorkspacePreview": {
+        "properties": {
+          "preview": {
+            "$ref": "#/components/schemas/UploadPreview"
+          },
+          "sections": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sections"
+          },
+          "section": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section"
+          },
+          "preflight": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preflight"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "preview",
+          "sections",
+          "section"
+        ],
+        "title": "WorkspacePreview"
       }
     }
   }

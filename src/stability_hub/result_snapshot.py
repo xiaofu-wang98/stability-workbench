@@ -77,11 +77,28 @@ def create_snapshot(flow,conn,request):
             if unresolved:
                 pending_regions.append({'upload_id':upload['id'],'filename':upload['filename'],'section':sheet['section'],
                     'scope':'unassigned','regions':unresolved})
+    # Published result versions retain their original provenance. Resolve the
+    # current storage location when freezing a new export after a home is copied.
+    source_paths = dict(conn.execute('SELECT sha256, stored_path FROM documents'))
+
+    def snapshot_version(row):
+        version = dict(row)
+        sources = json.loads(version['source_json'])
+        changed = False
+        for source in sources:
+            path = source_paths.get(source.get('document_hash'))
+            if path and 'stored_path' in source and path != source['stored_path']:
+                source['stored_path'] = path
+                changed = True
+        if changed:
+            version['source_json'] = json.dumps(sources, ensure_ascii=False, sort_keys=True)
+        return version
+
     snapshot = {'project':request.project,'revision':request.base_revision,'orientation':request.orientation,
                 'item_labels':{i.id:i.label for i in linked_config(conn,ProjectConfig.model_validate_json(
                     project_row(conn,request.project)['config_json'])).items},
                 'filters':request.filters.model_dump(),'selected_slot_ids':list(request.slot_ids),
-                'entries':[{'display':dict(a),'adopted':dict(b) if b else None} for a,b in pairs],
+                'entries':[{'display':snapshot_version(a),'adopted':snapshot_version(b) if b else None} for a,b in pairs],
                 'drafts':drafts,'pending_source_regions':pending_regions}
     from .trend_export import freeze_plot_limits
     if limits := freeze_plot_limits(conn, snapshot):

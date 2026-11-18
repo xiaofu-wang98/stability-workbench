@@ -1,5 +1,6 @@
 """IP281-style business summary from the frozen adopted-result scope."""
 import json
+import re
 from datetime import date
 
 from openpyxl import Workbook, load_workbook
@@ -19,12 +20,15 @@ TEMPLATE_VERSION = "stability-study-table-1"
 
 def freeze_worksheet_table(sheet, project_name, *, filled, invalidated_positions=None):
     identity = sheet["identity"]
+    units = {point["unit"] for point in sheet["points"]}
     cells = {(cell["row_id"], cell["point_id"]): cell for cell in sheet["cells"]}
     body, metadata = [], []
     for row in sheet["rows"]:
         basis = row.get("reporting_basis", identity["reporting_basis"])
         criteria = list(dict.fromkeys(filter(None, [row.get("criteria_text"),
                        *(standard["criterion"] for standard in row.get("standards", []))])))
+        if not criteria:
+            criteria = row.get("source_criteria", [])
         label = "\n".join(filter(None, (row["label"], visible(row["method"]), visible(row["method_version"]),
                                         basis, row["unit"])))
         values, positions = [], []
@@ -53,8 +57,9 @@ def freeze_worksheet_table(sheet, project_name, *, filled, invalidated_positions
             ["考察条件", StudyIdentity.model_validate(identity).record_condition(),
              "稳定性开展地点", sheet.get("location", ""), "材料类别", identity["sample_type"]],
         ],
-        "time_unit": sheet["points"][0]["unit"],
-        "points": ["\n".join(filter(None, (point["label"], point["planned_date"]))) for point in sheet["points"]],
+        "time_unit": next(iter(units)) if len(units) == 1 else "mixed",
+        "points": ["\n".join(filter(None, (point["label"], point["planned_date"], point.get("signed_status"))))
+                   for point in sheet["points"]],
         "body": body,
         "contract": {"version": TEMPLATE_VERSION, "sheet_id": sheet["id"], "plan_version": sheet["plan_version"],
                      "identity": identity, "rows": metadata, "filled": filled},
@@ -78,7 +83,7 @@ def freeze_summary(flow, conn, snapshot, actor):
     key = records[0].key
     plan = {}
     worksheets = BusinessWorksheets(flow, ResultVersions(flow))
-    for row in conn.execute("SELECT id, identity_json FROM business_worksheets WHERE project=?", (key.project,)):
+    for row in conn.execute("SELECT id, identity_json FROM business_worksheets WHERE project=? AND deleted_at IS NULL", (key.project,)):
         identity = StudyIdentity.model_validate_json(row["identity_json"])
         if all((identity.record_condition() if field == "condition" else getattr(identity, field))
                == getattr(key, field) for field in SCOPE):
@@ -152,30 +157,32 @@ def freeze_summary(flow, conn, snapshot, actor):
             ["考察条件", key.condition, "稳定性开展地点", plan.get("location", ""), "材料类别", key.sample_type],
         ],
         "time_unit": points[0][-1],
-        "points": ["\n".join(filter(None, (label, plan_points.get(label, {}).get("planned_date")))) for label in points],
+        "points": ["\n".join(filter(None, (label, plan_points.get(label, {}).get("planned_date"),
+                                           plan_points.get(label, {}).get("signed_status")))) for label in points],
         "body": body,
     }
 
 
 def visible_rows(summary):
+    time_caption = {"M": "月", "D": "天", "mixed": "天／月"}[summary["time_unit"]]
     return [*summary["header"], ["检验项目\nTest Item", "可接受标准\nAcceptable Criteria",
-                                f"考察时间（{'月' if summary['time_unit'] == 'M' else '天'}） / Study timepoints"],
+                                f"考察时间（{time_caption}） / Study timepoints"],
             ["", "", *summary["points"]], *summary["body"]]
 
 
-def write_summary(path, summary):
-    book = Workbook()
-    sheet = book.active
-    sheet.title = TITLE
+def _write_block(sheet, summary, offset=0):
     rows = visible_rows(summary)
-    width = max(8, 2 + len(summary["points"]))
+    controlled = "condition" in summary
+    width = max(10 if controlled else 8, 2 + len(summary["points"]))
     edge = Side(style="thin", color="BECFDD")
     for index, row in enumerate(rows, 1):
         for column in range(1, width + 1):
             value = row[column - 1] if column <= len(row) else ""
-            cell = sheet.cell(index, column)
+            cell = sheet.cell(offset + index, column)
             _put_text(cell, value)
             fixed = index == 4 or (index <= 3 and column <= len(row) and column % 2 == 1)
+            if controlled and index == 3:
+                fixed = column in {1, 8}
             option = (index == 5 and column >= 3) or (index >= 6 and column <= 2) or (index <= 3 and (index, column) in {(1, 2), (1, 4), (2, 6), (2, 8), (3, 2), (3, 4), (3, 6)})
             if fixed or option:
                 cell.fill = PatternFill("solid", fgColor="9EC4E2" if fixed else "D5E7F4")
@@ -183,16 +190,116 @@ def write_summary(path, summary):
             cell.alignment = Alignment(vertical="center", wrap_text=True)
             cell.border = Border(left=edge, right=edge, top=edge, bottom=edge)
         wrap = max(sum(max(1, (len(line) + 14) // 15) for line in value.split("\n")) for value in row)
-        sheet.row_dimensions[index].height = min(220, max(27, wrap * 15))
+        sheet.row_dimensions[offset + index].height = min(220, max(27, wrap * 15))
     for index, row in enumerate(summary["header"], 1):
         if len(row) < width:
-            sheet.merge_cells(start_row=index, start_column=len(row), end_row=index, end_column=width)
-    sheet.merge_cells("A4:A5")
-    sheet.merge_cells("B4:B5")
+            sheet.merge_cells(start_row=offset + index, start_column=len(row), end_row=offset + index, end_column=width)
+    if controlled:
+        for first, last in ((1, 2), (3, 7), (8, 9)):
+            sheet.merge_cells(start_row=offset + 3, start_column=first, end_row=offset + 3, end_column=last)
+    sheet.merge_cells(start_row=offset + 4, start_column=1, end_row=offset + 5, end_column=1)
+    sheet.merge_cells(start_row=offset + 4, start_column=2, end_row=offset + 5, end_column=2)
     if len(summary["points"]) > 1:
-        sheet.merge_cells(start_row=4, start_column=3, end_row=4, end_column=2 + len(summary["points"]))
+        sheet.merge_cells(start_row=offset + 4, start_column=3, end_row=offset + 4, end_column=2 + len(summary["points"]))
     for col in range(1, width + 1):
         sheet.column_dimensions[get_column_letter(col)].width = 30 if col <= 2 else 21
+    return rows, width
+
+
+def controlled_block(sheet, project_name):
+    summary = freeze_worksheet_table(sheet, project_name, filled=True)
+    summary.pop("contract")
+    identity = StudyIdentity.model_validate(sheet["identity"])
+    condition = identity.record_condition()
+    for row, labels in zip(summary["header"], (
+        ("Project No.", "Product Name", "Product Batch No.", "Specification"),
+        ("Starting Date", "Stability Chamber/Temperature Control Equipment Name and No.",
+         "Stability Study Protocol No.", "Stability Type"),
+        ("Study Condition", "Stability Location", "Material Type"),
+    ), strict=True):
+        for index, label in enumerate(labels):
+            row[index * 2] += "\n" + label
+    summary["header"][1][-1] = "\n".join(
+        ("☑" if value == identity.study else "□") + label
+        for value, label in (("accelerated", "加速试验 Accelerated study"),
+                             ("long_term", "长期试验 Long-term study"),
+                             ("stress", "强力破坏 Stress study")))
+    location = sheet.get("location", "")
+    condition_label, _, location_label, *_ = summary["header"][2]
+    summary["header"][2] = [condition_label, "", controlled_conditions(condition, identity.orientation),
+                            "", "", "", "", location_label, "",
+                            ("☑ " if location else "□ ") + (location or "未填写 / Unspecified")]
+    summary["condition"] = condition
+    summary["points"] = ["\n".join(filter(None, (
+        point["label"].removesuffix("M") if summary["time_unit"] == "M" else point["label"],
+        point["planned_date"].replace("-", "."), point.get("signed_status"),
+    ))) for point in sheet["points"]]
+    rows = {row["id"]: row["label"] for row in sheet["rows"]}
+    points = {point["id"]: idx for idx, point in enumerate(sheet["points"], 2)}
+    remark = ["备注 / Remark", "", *([""] * len(points))]
+    for item in sheet.get("events", []):
+        column = points.get(item.get("point_id"), 1)
+        note = " · ".join(filter(None, (item.get("category"), rows.get(item.get("row_id")),
+                                       item.get("reference"), item.get("description"), item.get("scan_id"))))
+        if note:
+            remark[column] = "\n".join(filter(None, (remark[column], note)))
+    summary["body"].append(remark)
+    return summary
+
+
+def controlled_conditions(condition, orientation):
+    """Expose recorded selections without assigning undocumented conditions."""
+    parts = [part.strip() for part in condition.split("·") if part.strip()]
+    temperatures = ("-80℃±10℃", "-40℃±10℃", "-40℃±5℃", "5℃±3℃", "25℃±2℃")
+    placements = {"正置": "正置 Upright", "倒置": "倒置 Inverted", "平放": "平放 Horizontal"}
+    if not orientation:
+        recorded = placements.keys() & set(parts)
+        orientation = next(iter(recorded)) if len(recorded) == 1 else ""
+    humidity = [part for part in parts if re.fullmatch(r"\d+(?:\.\d+)?%RH(?:±\d+(?:\.\d+)?%(?:RH)?)?", part, re.I)]
+    extra = [part for part in parts if part not in temperatures and part not in humidity and part != orientation]
+    checked = lambda selected: "☑" if selected else "□"
+    temperature_line = "  ".join(checked(value in parts) + value for value in temperatures)
+    humidity_line = "  ".join(checked(value in humidity) + value for value in dict.fromkeys(["60%RH±5%RH", *humidity]))
+    placement_line = "  ".join(checked(value == orientation) + text for value, text in placements.items())
+    other_line = checked(bool(extra)) + "其他 Others" + (" · " + " · ".join(extra) if extra else "")
+    return "\n".join(("温度 Temperature · " + temperature_line, "相对湿度 Relative humidity · " + humidity_line,
+                      "放置方式 Placement method · " + placement_line, other_line))
+
+
+def write_controlled_workbook(path, groups):
+    book = Workbook()
+    book.remove(book.active)
+    checks = []
+    for index, group in enumerate(groups, 1):
+        sheet = book.create_sheet(f"{index:02d} {group['sample_type']}")
+        offset = 0
+        for block in group["blocks"]:
+            rows, width = _write_block(sheet, block, offset)
+            checks.append((sheet.title, offset, rows, width))
+            offset += len(rows) + 2
+        sheet.sheet_properties.pageSetUpPr.fitToPage = True
+        sheet.page_setup.orientation = "landscape"
+        sheet.page_setup.fitToWidth = 1
+    book.save(path)
+    book.close()
+    restored = load_workbook(path, read_only=True)
+    try:
+        for title, offset, rows, width in checks:
+            actual = list(restored[title].iter_rows(min_row=offset + 1, max_row=offset + len(rows),
+                                                   max_col=width, values_only=True))
+            expected = [tuple(value or None for value in row) + (None,) * (width - len(row)) for row in rows]
+            if actual != expected:
+                return ["受控汇总表反读不一致"]
+        return []
+    finally:
+        restored.close()
+
+
+def write_summary(path, summary):
+    book = Workbook()
+    sheet = book.active
+    sheet.title = TITLE
+    rows, width = _write_block(sheet, summary)
     sheet.freeze_panes = "C6"
     sheet.sheet_properties.pageSetUpPr.fitToPage = True
     sheet.page_setup.orientation = "landscape"

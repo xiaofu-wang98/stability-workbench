@@ -184,6 +184,13 @@ class UploadPreview(Model):
     parsing_summary: tuple[dict, ...] = ()
 
 
+class WorkspacePreview(Model):
+    preview: UploadPreview
+    sections: tuple[str, ...]
+    section: str | None
+    preflight: dict | None = None
+
+
 class ExternalReference(Model):
     kind: Literal["CC", "OOE", "OOS", "OTHER"]
     number: Text
@@ -248,11 +255,18 @@ class MutationResult(Model):
     pending_confirmation_ids: tuple[str, ...] = ()
 
 
+class StandardAssessment(Model):
+    status: Literal["within", "outside", "undetermined"]
+    criterion: str = ""
+    version: str = ""
+
+
 class WorkflowResultCell(ResultCell):
     slot_key: RecordKey
     display_status: Literal["pending", "confirmed", "legacy"]
     upload_sequence: int
     worksheet_id: str | None = None
+    standard_assessment: StandardAssessment | None = None
 
 
 class ResultPage(Model):

@@ -50,6 +50,14 @@ def month_token(text):
     return int(match[1]) if match and int(match[1]) <= 240 else None
 
 
+def timepoint_token(text):
+    day = re.match(r'^\s*(\d{1,4})\s*(?:天|[Dd]|days?)(?=\s|[（(]|$)', str(text), re.I)
+    if day and int(day[1]) <= 3650:
+        return f'{int(day[1])}D'
+    month = month_token(text)
+    return f'{month}M' if month is not None else None
+
+
 def purity_subresults(criterion):
     return [name for pattern, name in [(r'单体|\bMonomer\b', 'Monomer'),
             (r'聚合体|高分子量|\bHMW\b', 'HMW'), (r'低分子量|\bLMW\b', 'LMW')]
@@ -287,8 +295,7 @@ def interpret_matrix_fields(source, section, *, reference_rules=True, explicit_p
     if time is None and source.get('sample_info'):
         times = re.findall(r'(?<![\d.])(\d{1,3})\s*M\b', source['sample_info'], re.I)
         time = int(times[0]) if len(times) == 1 else None
-    day = re.fullmatch(r'\s*(\d+)\s*(?:天|[Dd]|days?)\s*', source.get('time_point', ''), re.I)
-    fields['time_point'] = f'{int(day[1])}D' if day else f'{time}M' if time is not None else ''
+    fields['time_point'] = timepoint_token(source.get('time_point', '')) or (f'{time}M' if time is not None else '')
     method_source = source.get('method', '') or source.get('test_item', '')
     method = explicit_method(source['method']) if source.get('method') else method_text(method_source, embedded=True)
     fields['method'] = method

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { NAlert, NButton, NSelect } from 'naive-ui';
-import { api, type Project } from './api';
+import { api, archiveStudyObject, type Project } from './api';
 
 type Row = { table: number; row: number; category: string; item: string; method: string; sop: string; criterion: string };
 type Sample = { id: string; batch: string; material_stage: string; sample_type: string; presentation: string;
@@ -37,6 +37,19 @@ async function run(action: () => Promise<void>) {
   finally { busy.value = false; }
 }
 onMounted(() => run(async () => { projects.value = await api('/projects'); }));
+function removeSample(sample: Sample) {
+  return run(async () => {
+    if (!await archiveStudyObject('/samples/' + encodeURIComponent(sample.id), '样品')) return;
+    samples.value = samples.value.filter(item => item.id !== sample.id);
+    if (selected.value?.id === sample.id) {
+      selected.value = undefined;
+      state.value = undefined;
+      upload.value = undefined;
+      edits.value = {};
+    }
+    message.value = '已删除样品并保留历史。';
+  });
+}
 function reset() {
   selected.value = undefined;
   state.value = undefined;
@@ -127,6 +140,7 @@ function save() {
           <NButton text :disabled="busy" @click="run(() => open(sample))">
             {{ [sample.batch, sample.material_stage, sample.sample_type, sample.presentation, sample.packaging, sample.purpose].filter(Boolean).join(' · ') }}
           </NButton>
+          <NButton text type="error" :disabled="busy" @click="removeSample(sample)">删除样品</NButton>
         </li>
       </ul>
       <NButton v-if="!creating" :disabled="busy" @click="creating = true">另建样品对象</NButton>

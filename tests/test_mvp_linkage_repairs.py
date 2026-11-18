@@ -17,7 +17,8 @@ from stability_hub.workflow_common import WorkflowError
 from test_business_worksheets import create_sheet
 
 
-def test_plan_edits_preserve_history_and_block_removing_results(tmp_path, config, context):
+@pytest.mark.parametrize("remove_with_results", [False, True])
+def test_plan_edits_preserve_history_and_require_impact_confirmation(tmp_path, config, context, remove_with_results):
     store = Store(tmp_path / 'store')
     app = create_app(store, [config], actor_for_role('local', '验收', Role.ADMIN))
     with TestClient(app) as client:
@@ -57,14 +58,24 @@ def test_plan_edits_preserve_history_and_block_removing_results(tmp_path, config
         assert client.post(path + '/save', json=change).status_code == 200
         remove = dict(token=token, revision=3, idempotency_key='remove', row_id=row, basis='删错行')
         assert client.post(path + '/remove-row', json=remove).status_code == 409
-        remove['row_id'] = other
+        if remove_with_results:
+            preview = client.get(path + '/remove-row', params={'row_id': row}).json()
+            assert [result['value'] for result in preview['results']] == ['98%']
+            remove['fingerprint'] = preview['fingerprint']
+        else:
+            remove['row_id'] = other
         response = client.post(path + '/remove-row', json=remove)
         assert response.status_code == 200, response.text
         assert client.post(path + '/remove-row', json=remove).json() == response.json()
         view = client.get(path).json()
-        assert len(view['rows']) == 1 and len(view['cells']) == 1
-        assert view['cells'][0]['adopted']['text'] == '98%'
-        assert view['protocol_row_items'] == {"2": ["purity"], "3": []}
+        assert len(view['rows']) == 1
+        if remove_with_results:
+            assert view['cells'] == []
+            assert view['protocol_row_items'] == {"2": [], "3": ["appearance"]}
+            assert response.json()['invalidated_version_ids'] == [preview['results'][0]['id']]
+        else:
+            assert len(view['cells']) == 1 and view['cells'][0]['adopted']['text'] == '98%'
+            assert view['protocol_row_items'] == {"2": ["purity"], "3": []}
         with store.read() as conn:
             old = json.loads(conn.execute('SELECT plan_json FROM business_worksheet_plans WHERE sheet_id=? AND version=1',
                                          (sheet['id'],)).fetchone()[0])

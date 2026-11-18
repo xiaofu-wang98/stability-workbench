@@ -25,7 +25,8 @@ def main():
     args = parser.parse_args()
     configs = [ProjectConfig.model_validate_json(path.read_text(encoding="utf-8-sig")) for path in args.config]
     app = create_app(Store(args.home), configs, actor_for_role(args.actor_id, args.actor_name, Role(args.role)),
-                     api_token=os.environ.get("STABILITY_HUB_API_TOKEN"), frontend=args.frontend, origins=args.allow_origin)
+                     api_token=os.environ.get("STABILITY_HUB_API_TOKEN"), frontend=args.frontend, origins=args.allow_origin,
+                     enforce_formal_sample_binding=True)
     uvicorn.run(app, host="127.0.0.1", port=args.port)
 
 

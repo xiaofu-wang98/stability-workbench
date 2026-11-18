@@ -29,6 +29,7 @@ const confirmDiscard = ref(false);
 const plan = ref(false);
 const standards = ref(false);
 const releaseForm = ref(false);
+const pointEditor = ref<Worksheet['points'][number]>();
 const protocolForm = ref(false);
 const eventForm = ref(false);
 const planItems = ref<string[]>([]);
@@ -123,7 +124,7 @@ async function mount(restore = false) {
   const existing = new Map(latest.cells.map(cell => [cell.row_id + ':' + cell.point_id, cell]));
   const values = [
     [latest.name, ...latest.points.map(() => '')],
-    ['检验项目 / Test Item', ...latest.points.map(point => point.label + '\n' + point.planned_date)],
+    ['检验项目 / Test Item', ...latest.points.map(point => [point.label, point.planned_date, point.signed_status].filter(Boolean).join('\n'))],
     ...latest.rows.map(row => [
       [row.label, row.method, row.reporting_basis ?? latest.identity.reporting_basis, row.unit].filter(Boolean).join('\n'),
       ...latest.points.map(point => existing.get(row.id + ':' + point.id)?.raw ??
@@ -235,7 +236,6 @@ async function save() {
       if (value === baseline.rows[r][c]) return;
       const item = current.rows[r - 2], point = current.points[c - 1];
       if (!item || !point?.required_row_ids.includes(item.id)) throw new Error('请还原标题、日期、检项或非应检单元格中的改动。');
-      if (!value.trim()) throw new Error('已有结果不能通过清空撤销，请还原该单元格。');
       const previous = existing.get(item.id + ':' + point.id);
       changes.push({ row_id: item.id, point_id: point.id, value,
         intent: previous ? 'correction' : 'initial', expected_version_id: previous?.adopted?.result_version_id ?? null });
@@ -243,7 +243,7 @@ async function save() {
     if (JSON.stringify(snapshot) === JSON.stringify(baseline)) {
       status.value = '没有待保存的改动。';
       dirty.value = false;
-      forgetRecovery();
+      if (recovery.value?.selection === current.selection_id) forgetRecovery();
       return;
     }
     requiresReason.value = changes.some(change => change.intent === 'correction');
@@ -400,7 +400,31 @@ function openEvent() {
   } catch (e) { error.value = (e as Error).message; }
 }
 
-async function submitExtra(input: Event | object, kind: 'stop-checks' | 'remove-row' | 'plan' | 'retest' | 'standards' | 'protocol-standards' | 'release-reference' | 'protocol' | 'events') {
+async function confirmRowRemoval(input: { row_id: string; basis: string }) {
+  try {
+    assertClean();
+    const impact = await api<{ label: string; fingerprint: string; release_reference: unknown;
+      events: unknown[]; results: { value: string; studies: { name: string }[] }[] }>(
+      '/worksheets/' + encodeURIComponent(current.id) + '/remove-row?row_id=' + encodeURIComponent(input.row_id));
+    const entries = impact.results.map(result =>
+      [result.value, ...result.studies.map(study => study.name)].join(' · '));
+    const lines = [`移除检项「${impact.label}」？`, `将作废 ${entries.length} 个正式结果。`, ...entries];
+    if (impact.release_reference) lines.push('此检项的放行引用将解除。');
+    if (impact.events.length) lines.push(`${impact.events.length} 条关联事件将保存在旧计划中。`);
+    if (window.confirm(lines.join('\n'))) {
+      await submitExtra({ ...input, fingerprint: impact.fingerprint }, 'remove-row');
+    }
+  } catch (e) {
+    error.value = (e as Error).message;
+  }
+}
+
+function choosePoint(event: Event) {
+  const point = current.points.find(item => item.id === (event.target as HTMLSelectElement).value);
+  if (point) pointEditor.value = { ...point };
+}
+
+async function submitExtra(input: Event | object, kind: 'stop-checks' | 'remove-row' | 'plan' | 'retest' | 'standards' | 'protocol-standards' | 'release-reference' | 'copy-coa-to-0m' | 'protocol' | 'events' | 'point-metadata') {
   if (busy.value || expired.value) return;
   busy.value = true;
   error.value = '';
@@ -408,7 +432,7 @@ async function submitExtra(input: Event | object, kind: 'stop-checks' | 'remove-
     assertClean();
     editor?.setEditable(false);
     let payload;
-    if (kind === 'stop-checks' || kind === 'remove-row' || kind === 'standards' || kind === 'protocol-standards' || kind === 'release-reference' || kind === 'protocol' || kind === 'events') {
+    if (kind === 'stop-checks' || kind === 'remove-row' || kind === 'standards' || kind === 'protocol-standards' || kind === 'release-reference' || kind === 'copy-coa-to-0m' || kind === 'protocol' || kind === 'events' || kind === 'point-metadata') {
       payload = input;
     } else {
       const form = new FormData((input as Event).target as HTMLFormElement);
@@ -435,13 +459,14 @@ async function submitExtra(input: Event | object, kind: 'stop-checks' | 'remove-
     const signature = JSON.stringify([kind, body]);
     if (retry?.signature !== signature) retry = { signature, key: crypto.randomUUID() };
     await post(kind === 'retest' ? '/save' : '/' + kind, { ...body, idempotency_key: retry.key });
+    pointEditor.value = undefined;
     plan.value = false;
     standards.value = false;
     releaseForm.value = false;
     protocolForm.value = false;
     eventForm.value = false;
     retest.value = undefined;
-    status.value = kind === 'stop-checks' ? '已停检所选时间点，历史结果和计划已保留。' : kind === 'remove-row' ? '已移除检项，旧计划仍保留。' : kind === 'events' ? '已保存研究事件。' : kind === 'protocol' ? '已关联研究方案。' : kind === 'release-reference' ? '已保存放行引用设置。' : ['standards', 'protocol-standards'].includes(kind) ? '已保存标准关联。' :
+    status.value = kind === 'stop-checks' ? '已停检所选时间点，历史结果和计划已保留。' : kind === 'remove-row' ? '已移除检项，旧计划仍保留。' : kind === 'events' ? '已保存研究事件。' : kind === 'protocol' ? '已关联研究方案。' : kind === 'copy-coa-to-0m' ? '已处理 COA 复制。' : kind === 'release-reference' ? '已保存放行引用设置。' : ['standards', 'protocol-standards'].includes(kind) ? '已保存标准关联。' :
       kind === 'plan' ? '已保存新计划版本。' : '已保存独立复测，当前采用结果保持原值。';
     try { await mount(); }
     catch {
@@ -495,10 +520,11 @@ onBeforeUnmount(() => {
       <NButton :disabled="busy || expired" @click="toggleTitle">合并或拆分标题</NButton>
       <NButton :disabled="busy || expired" @click="openRetest">新增复测</NButton>
       <NButton :disabled="busy || expired" @click="openPlan">增加计划时间点</NButton>
+      <NButton v-if="current.points.length" :disabled="busy || expired" @click="pointEditor = { ...current.points[0] }">日期与签署状态</NButton>
       <NButton :disabled="busy || expired" @click="openStandards">标准与检项维护</NButton>
       <NButton :disabled="busy || expired" @click="openProtocol">后补研究方案</NButton>
       <NButton :disabled="busy || expired" @click="openEvent">记录研究事件</NButton>
-      <NButton v-if="sheet.points.some(point => point.label === '0M')" :disabled="busy || expired" @click="openRelease">0M 引用放行</NButton>
+      <NButton v-if="sheet.points.some(point => point.label === '0M')" :disabled="busy || expired" @click="openRelease">从 COA 复制到 0M</NButton>
       <NButton :disabled="busy" @click="end">{{ confirmDiscard ? '放弃未保存内容并结束' : '结束编辑' }}</NButton>
       <NButton v-if="confirmDiscard" @click="confirmDiscard = false">继续编辑</NButton>
     </template>
@@ -520,10 +546,23 @@ onBeforeUnmount(() => {
     <NButton attr-type="submit" type="primary" :loading="busy" :disabled="expired">保存计划</NButton>
     <NButton :disabled="busy" @click="plan = false">取消</NButton>
   </form>
+  <form v-if="editing && pointEditor" class="extra-form" @submit.prevent="submitExtra({
+    point_id: pointEditor.id, planned_date: pointEditor.planned_date, signed_status: pointEditor.signed_status || ''
+  }, 'point-metadata')">
+    <label>时间点 <select :value="pointEditor.id" :disabled="busy" @change="choosePoint">
+      <option v-for="point in current.points" :key="point.id" :value="point.id">{{ point.label }}</option>
+    </select></label>
+    <label>计划取样日期 <input v-model="pointEditor.planned_date" type="date" required :disabled="busy"></label>
+    <label>签署状态 <select v-model="pointEditor.signed_status" :disabled="busy">
+      <option value="">未标记</option><option>已签</option><option>已签报告</option>
+    </select></label>
+    <NButton attr-type="submit" type="primary" :disabled="busy || expired">保存时间点</NButton>
+    <NButton :disabled="busy" @click="pointEditor = undefined">取消</NButton>
+  </form>
   <WorksheetStandards v-if="editing && standards" :sheet="current" :busy="busy || expired"
-    @stop="value => submitExtra(value, 'stop-checks')" @remove="value => submitExtra(value, 'remove-row')" @save="value => submitExtra(value, 'standards')" @confirm-protocol="value => submitExtra(value, 'protocol-standards')" @cancel="standards = false" />
+    @stop="value => submitExtra(value, 'stop-checks')" @remove="confirmRowRemoval" @save="value => submitExtra(value, 'standards')" @confirm-protocol="value => submitExtra(value, 'protocol-standards')" @cancel="standards = false" />
   <WorksheetRelease v-if="editing && releaseForm" :sheet="current" :busy="busy || expired"
-    @save="value => submitExtra(value, 'release-reference')" @cancel="releaseForm = false" />
+    @copy="value => submitExtra(value, 'copy-coa-to-0m')" @save="value => submitExtra(value, 'release-reference')" @cancel="releaseForm = false" />
   <WorksheetProtocol v-if="editing && protocolForm" :sheet="current" :busy="busy || expired"
     @save="value => submitExtra(value, 'protocol')" @cancel="protocolForm = false" />
   <WorksheetEvents v-if="editing && eventForm" :sheet="current" :busy="busy || expired"
@@ -547,4 +586,3 @@ onBeforeUnmount(() => {
 .extra-form label { display: grid; gap: 4px; }
 .extra-form input, .extra-form textarea { font: inherit; padding: 6px; border: 1px solid #aabdb8; border-radius: 5px; }
 </style>
-

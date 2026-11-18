@@ -103,6 +103,8 @@ def specification_material_scope(filename, preview):
 
 def matching_standards(conn, project, numbers, required_scope="unspecified"):
     found = []
+    current = {row["specification_id"] for row in conn.execute(
+        "SELECT specification_id FROM current_specifications WHERE project=?", (project,))}
     for source in conn.execute("SELECT id,filename,preview_json FROM specifications ORDER BY id"):
         preview = json.loads(source["preview_json"])
         if preview.get("project") and preview["project"] != project:
@@ -128,6 +130,7 @@ def matching_standards(conn, project, numbers, required_scope="unspecified"):
                 link["method"] = row.get("method", "")
             pages = {row["page"] for row in preview.get("rows", []) if row.get("page")}
             found.append({"number": number, "id": source["id"], "filename": source["filename"], "links": links,
+                          "current": source["id"] in current, "exact_version": number in candidates and split_number(number) != number,
                           "material_scope": mat_scope, "scan_id": preview.get("scan_id"),
                           "page": next(iter(pages)) if len(pages) == 1 else None})
     return found
@@ -136,6 +139,17 @@ def matching_standards(conn, project, numbers, required_scope="unspecified"):
 def unambiguous_standard_sources(sources):
     if len(sources) < 2:
         return sources
+    selected = [source for source in sources if source.get("exact_version")]
+    if not selected:
+        selected = [source for source in sources if source.get("current")]
+    if len(selected) == 1:
+        source = selected[0]
+        if not source.get("scan_id"):
+            return selected
+        sources = [entry for entry in sources if entry.get("scan_id") == source["scan_id"]
+                   and entry["material_scope"] == source["material_scope"]]
+        if len(sources) == 1:
+            return sources
     scan_ids = {source["scan_id"] for source in sources}
     scopes = {source["material_scope"] for source in sources}
     pages = {source["page"] for source in sources}

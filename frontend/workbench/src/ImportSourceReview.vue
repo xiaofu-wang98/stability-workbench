@@ -8,7 +8,9 @@ const emit = defineEmits<{ saved: []; cancel: [] }>();
 type Group = { group_id: string; title: string; reason: string; scope: object; decision_count: number };
 type ManualTask = { id: string; detail: string; fields: string[]; affected_results: number;
   evidence: { section: string; row: number; column: number }[];
-  identity_options?: Record<string, string> };
+  identity_options?: Record<string, string>;
+  guidance?: { question: string; help: string; suggestion_notice?: string;
+    name_options?: { value: string; evidence: { location: { row: number; column: number }; time_point: string; result: string }[] }[] } | null };
 type Change = { task_id: string; section: string; operation: string; explanation: string; affected_results: number;
   evidence: { section: string; row: number; column: number }[];
   fields: Record<string, { before: unknown; after: unknown }> };
@@ -142,6 +144,18 @@ function renewRequestKey() { key = crypto.randomUUID(); }
     <form v-if="manual" class="review-actions" @submit.prevent="inspectManual" @input="plan = undefined" @change="plan = undefined">
       <p>{{ describeTask(manual.detail) }}</p>
       <p>{{ manual.evidence.map(e => e.section + ' · 行 ' + e.row + ' 列 ' + e.column).join('；') }} · 影响 {{ manual.affected_results }} 条</p>
+      <div v-if="manual.guidance">
+        <p>{{ manual.guidance.question }} {{ manual.guidance.help }}</p>
+        <p v-if="manual.guidance.suggestion_notice">{{ manual.guidance.suggestion_notice }}</p>
+        <template v-for="option in manual.guidance.name_options" :key="option.value">
+          <NButton :disabled="busy" @click="manualValues.test_item = option.value; plan = undefined">
+            采用同一原表行的检项 · {{ option.value }}
+          </NButton>
+          <ul><li v-for="item in option.evidence" :key="item.location.row + ':' + item.location.column">
+            {{ item.time_point }} · 行 {{ item.location.row }} 列 {{ item.location.column }} · {{ item.result }}
+          </li></ul>
+        </template>
+      </div>
       <div v-if="manual.fields.length === 1 && (manual.identity_options?.chinese || manual.identity_options?.english)">
         <p>请对照原件或检测记录，选择有依据的解释。</p>
         <NButton v-if="manual.identity_options?.chinese" :disabled="busy"

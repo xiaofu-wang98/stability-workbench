@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field, StringConstraints, ValidationError
 from lxml.etree import XMLSyntaxError
 
 from .source_tables import SourceTables
-from .business_worksheets import LinkWorksheetSample, RemoveWorksheetRow, StopWorksheetChecks
+from .business_worksheets import ArchiveStudyObject, EditPointMetadata, LinkWorksheetSample, RemoveWorksheetRow, StopWorksheetChecks
 from .assay_catalog import RegisterComponents, catalog, register_components
 from .source_contracts import ArchiveInfo, ArchiveView, ArchiveTablePage, SourcePackage, SourcePreviewRequest
 from .models import ImportContext
@@ -27,13 +27,13 @@ from .parsing import parse_source
 from .permissions import Actor, Capability, require
 from .result_versions import ResultVersions
 from .workflow import Workflow
-from .business_worksheets import AddWorksheetEvent, AttachProtocol, BusinessWorksheets, ConfirmProtocolStandards, CreateWorksheet, ExtendPlan, IncludeHistoricalRows, LeaseToken, SaveWorksheet, SetWorksheetStandards, SetReleaseReference, CustomWorksheetItem, WorksheetCriteria
-from .workflow_common import WorkflowError, unique_project_code
+from .business_worksheets import AddWorksheetEvent, AttachProtocol, BusinessWorksheets, ConfirmProtocolStandards, CopyCoaToZero, CreateWorksheet, ExtendPlan, IncludeHistoricalRows, LeaseToken, SaveWorksheet, SetWorksheetStandards, SetReleaseReference, CustomWorksheetItem, WorksheetCriteria
+from .workflow_common import WorkflowError, active_project_code, unique_project_code
 from .workflow_contracts import (
     InvalidateRequest,
     ConfigurationChange, ConfigurationView, CandidateEdit, CandidateMapping, ConfirmRequest, ExportRequest, ExportResult, MutationResult, ResultFilter,
     ProjectCreation, NewItems, SharedEdit, ResultChange,
-    PreviewSummary, ResultPage, ResultQuery, ReviewRequest, UploadPreview, WithdrawRequest,
+    PreviewSummary, ResultPage, ResultQuery, ReviewRequest, UploadPreview, WithdrawRequest, WorkspacePreview,
 )
 from .workflow_excel import ExcelExports
 from .ledger_review import LedgerReview
@@ -74,6 +74,12 @@ class ScanSpecification(BaseModel):
     rows: list[ScanCriterion] = Field(min_length=1, max_length=100)
 
 
+class CurrentSpecification(BaseModel):
+    specification_id: str
+    revision: int = Field(ge=0)
+    idempotency_key: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+
+
 class DraftWorksheetItem(CustomWorksheetItem):
     method: str = Field(default="", max_length=4000)
 
@@ -90,7 +96,8 @@ class WorksheetDraftInput(BaseModel):
     copy_source: str = Field(default='', max_length=100)
 
 
-def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, workbench=None, origins=()):
+def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, workbench=None, origins=(),
+               enforce_formal_sample_binding=False):
     from . import __version__
 
     @asynccontextmanager
@@ -112,7 +119,7 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
     for config in configs:
         workflow.configure(config)
     versions, exports = ResultVersions(workflow), ExcelExports(workflow)
-    worksheets = BusinessWorksheets(workflow, versions)
+    worksheets = BusinessWorksheets(workflow, versions, enforce_formal_sample_binding=enforce_formal_sample_binding)
     from .pdf_ocr import PdfOcr
     ocr = PdfOcr(store.home, code_root)
     app.state.actor, app.state.api_token, app.state.workflow = actor, api_token, workflow
@@ -204,11 +211,11 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
         with store.read() as conn:
             project_row(conn, project)
             samples = [dict(row) for row in conn.execute(
-                "SELECT * FROM sample_entities WHERE project=? AND batch=? ORDER BY id", (project, batch))]
+                "SELECT * FROM sample_entities WHERE project=? AND batch=? AND deleted_at IS NULL ORDER BY id", (project, batch))]
             studies = [dict(row) for row in conn.execute("""
                 SELECT w.id,w.name,w.sample_id,w.plan_version,w.identity_json,p.plan_json
                 FROM business_worksheets w JOIN business_worksheet_plans p ON p.sheet_id=w.id AND p.version=w.plan_version
-                WHERE w.project=? AND json_extract(w.identity_json,'$.batch')=? ORDER BY w.name,w.id
+                WHERE w.project=? AND w.deleted_at IS NULL AND json_extract(w.identity_json,'$.batch')=? ORDER BY w.name,w.id
             """, (project, batch))]
             for study in studies:
                 study["identity"] = json.loads(study.pop("identity_json"))
@@ -218,6 +225,22 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
                 study["standards"] = list({link["specification_id"]: link["filename"]
                                            for row in plan["rows"] for link in row.get("standards", [])}.items())
             return {"batch": batch, "samples": samples, "studies": studies}
+
+    @app.get("/api/v1/worksheets/{sheet_id}/archive-impact")
+    def worksheet_archive_impact(sheet_id: str, operator: ActorDependency):
+        return worksheets.archive_object(sheet_id, "worksheet", operator)
+
+    @app.delete("/api/v1/worksheets/{sheet_id}")
+    def archive_worksheet(sheet_id: str, command: ArchiveStudyObject, operator: ActorDependency):
+        return worksheets.archive_object(sheet_id, "worksheet", operator, command)
+
+    @app.get("/api/v1/samples/{sample_id}/archive-impact")
+    def sample_archive_impact(sample_id: str, operator: ActorDependency):
+        return worksheets.archive_object(sample_id, "sample", operator)
+
+    @app.delete("/api/v1/samples/{sample_id}")
+    def archive_sample(sample_id: str, command: ArchiveStudyObject, operator: ActorDependency):
+        return worksheets.archive_object(sample_id, "sample", operator, command)
 
     @app.get("/api/v1/projects/{project}/worksheets")
     def list_worksheets(project: ProjectDependency, operator: ActorDependency):
@@ -247,6 +270,10 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
     def save_worksheet(sheet_id: str, command: SaveWorksheet, operator: ActorDependency):
         return worksheets.save(sheet_id, command, operator)
 
+    @app.post("/api/v1/worksheets/{sheet_id}/point-metadata")
+    def edit_worksheet_point(sheet_id: str, command: EditPointMetadata, operator: ActorDependency):
+        return worksheets.edit_point_metadata(sheet_id, command, operator)
+
     @app.post("/api/v1/worksheets/{sheet_id}/plan")
     def extend_worksheet(sheet_id: str, command: ExtendPlan, operator: ActorDependency):
         return worksheets.extend(sheet_id, command, operator)
@@ -254,6 +281,10 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
     @app.post("/api/v1/worksheets/{sheet_id}/standards")
     def set_worksheet_standards(sheet_id: str, command: SetWorksheetStandards, operator: ActorDependency):
         return worksheets.set_standards(sheet_id, command, operator)
+
+    @app.get("/api/v1/worksheets/{sheet_id}/remove-row")
+    def preview_remove_worksheet_row(sheet_id: str, row_id: str, operator: ActorDependency):
+        return worksheets.preview_remove_row(sheet_id, row_id, operator)
 
     @app.post("/api/v1/worksheets/{sheet_id}/remove-row")
     def remove_worksheet_row(sheet_id: str, command: RemoveWorksheetRow, operator: ActorDependency):
@@ -274,6 +305,10 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
     @app.post("/api/v1/worksheets/{sheet_id}/release-reference")
     def set_release_reference(sheet_id: str, command: SetReleaseReference, operator: ActorDependency):
         return worksheets.set_release_reference(sheet_id, command, operator)
+
+    @app.post("/api/v1/worksheets/{sheet_id}/copy-coa-to-0m")
+    def copy_coa_to_zero(sheet_id: str, command: CopyCoaToZero, operator: ActorDependency):
+        return worksheets.copy_coa_to_zero(sheet_id, command, operator)
 
     @app.get("/api/v1/worksheets/{sheet_id}/coa-release-options")
     def coa_release_options(sheet_id: str, row_id: str, operator: ActorDependency):
@@ -346,7 +381,8 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
             manual = [
                 {'id': task.id, 'detail': task.detail, 'fields': task.fields, 'evidence': task.evidence,
                  'affected_results': len(task.members),
-                 'identity_options': task.proposal.get('identity_options', {})}
+                 'identity_options': task.proposal.get('identity_options', {}),
+                 'guidance': task.proposal.get('guidance')}
                 for task in tasks if task.section == section and task.fields and task.members
                 and (task.code == 'identity' or ('manual' in task.actions
                      and all('issue_id' in member for member in task.members)))
@@ -631,9 +667,10 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
     def projects(operator: ActorDependency):
         require(operator, Capability.VIEW)
         with store.connect() as conn:
-            return [{'project': row['project'], 'revision': row['revision'],
+            return [{'project': row['project'], 'revision': row['revision'], 'purpose': row['purpose'],
                      'name': json.loads(row['config_json']).get('name', '')} for row in
-                    conn.execute("SELECT project,revision,config_json FROM workflow_projects ORDER BY project")]
+                    conn.execute("SELECT project,revision,config_json,purpose FROM workflow_projects ORDER BY project")
+                    if active_project_code(conn, row['project'])]
 
     @app.post('/api/v1/projects', response_model=ConfigurationView)
     def create_project(command: ProjectCreation, operator: ActorDependency):
@@ -764,6 +801,44 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
         finally:
             file.file.close()
 
+    @app.get("/api/v1/projects/{project}/current-specifications")
+    def current_specifications(project: ProjectDependency, operator: ActorDependency):
+        require(operator, Capability.VIEW)
+        with store.read() as conn:
+            return [dict(row) for row in conn.execute("""SELECT c.material_scope,c.specification_id,s.filename
+                FROM current_specifications c JOIN specifications s ON s.id=c.specification_id
+                WHERE c.project=? ORDER BY c.material_scope""", (project,))]
+
+    @app.post("/api/v1/projects/{project}/current-specifications")
+    def set_current_specification(project: ProjectDependency, command: CurrentSpecification, operator: ActorDependency):
+        require(operator, Capability.CONFIRM_FACT)
+        from .specification_preview import specification_material_scope
+        from .workflow_common import bump, check_revision, event, remember, replay
+        with store.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            payload = {"current_specification": command.model_dump()}
+            prior = replay(conn, project, operator, command.idempotency_key, payload)
+            if prior is not None:
+                return prior
+            check_revision(conn, project, command.revision)
+            source = conn.execute("""SELECT filename,preview_json FROM specifications s WHERE s.id=? AND EXISTS (
+                SELECT 1 FROM specification_assay_components a WHERE a.specification_id=s.id AND a.project=?)""",
+                (command.specification_id, project)).fetchone()
+            if source is None:
+                raise WorkflowError("specification_scope", "请先核对并登记此项目的标准条款。", 409)
+            scope = specification_material_scope(source["filename"], json.loads(source["preview_json"]))
+            if scope not in {"DS", "DP", "placebo", "reference"}:
+                raise WorkflowError("specification_scope", "标准原件的适用材料尚未明确。", 409)
+            previous = conn.execute("SELECT specification_id FROM current_specifications WHERE project=? AND material_scope=?",
+                                    (project, scope)).fetchone()
+            conn.execute("""INSERT INTO current_specifications VALUES (?,?,?) ON CONFLICT(project,material_scope)
+                DO UPDATE SET specification_id=excluded.specification_id""", (project, scope, command.specification_id))
+            event(conn, project, command.specification_id, "current_specification", operator, "确认当前适用标准",
+                  {"material_scope": scope, "previous": previous[0] if previous else None})
+            result = {"material_scope": scope, "specification_id": command.specification_id, "revision": bump(conn, project)}
+            remember(conn, project, operator, command.idempotency_key, payload, result)
+            return result
+
     @app.get('/api/v1/specifications')
     def specifications(operator: ActorDependency):
         require(operator, Capability.VIEW)
@@ -809,8 +884,11 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
                 pass
         with store.read() as conn:
             linked_projects = [dict(entry) for entry in conn.execute(
-                'SELECT project,COUNT(*) AS count FROM specification_assay_components WHERE specification_id=? GROUP BY project',
-                (specification_id,))]
+                """SELECT a.project,COUNT(*) AS count, EXISTS (
+                       SELECT 1 FROM current_specifications c
+                       WHERE c.project=a.project AND c.specification_id=a.specification_id) AS is_current
+                   FROM specification_assay_components a WHERE a.specification_id=? GROUP BY a.project""",
+                (specification_id,)) if active_project_code(conn, entry['project'])]
         from .specification_preview import specification_material_scope
         return {'id': row['id'], 'filename': row['filename'], **preview, 'linked_projects': linked_projects,
                 'material_scope': specification_material_scope(row['filename'], preview)}
@@ -976,23 +1054,89 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
                  limit: int = Query(20, ge=1, le=100)):
         return workflow.list_previews(project, offset, limit, actor=operator)
 
+    from threading import Lock
+    upload_progress = {}
+    upload_progress_lock = Lock()
+
+    @app.get("/api/v1/projects/{project}/preview-progress/{progress_id}")
+    def read_upload_progress(project: ProjectDependency, progress_id: str, operator: ActorDependency):
+        require(operator, Capability.PREVIEW)
+        with upload_progress_lock:
+            return upload_progress.get((project, operator.id, progress_id), {"phase": "waiting"})
+
     @app.post("/api/v1/projects/{project}/previews", response_model=UploadPreview)
     def upload(project: ProjectDependency, operator: ActorDependency, file: Annotated[UploadFile, File()],
                idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=200)],
-               context: Annotated[str, Form()] = "{}"):
+               context: Annotated[str, Form()] = "{}",
+               progress_id: Annotated[str | None, Header(alias="Upload-Progress-Id", max_length=80)] = None,
+               compact: bool = False):
         require(operator, Capability.PREVIEW)
+        key = (project, operator.id, progress_id)
+
+        def update(phase, completed=None, total=None, candidates=None, section=None):
+            with upload_progress_lock:
+                upload_progress[key] = {"phase": phase, "completed": completed, "total": total,
+                                        "candidates": candidates, "section": section}
+
+        if progress_id:
+            with upload_progress_lock:
+                if key in upload_progress:
+                    raise WorkflowError("upload_in_progress", "此上传仍在处理，请等待。", 409)
+                upload_progress[key] = {"phase": "reading"}
         try:
             ctx = ImportContext.model_validate_json(context)
             data = file.file.read(20 * 1024 * 1024 + 1)
-            return workflow.upload(project, file.filename or "input", data, ctx, idempotency_key, actor=operator, deduplicate=True)
+            result = workflow.upload(project, file.filename or "input", data, ctx, idempotency_key,
+                                     actor=operator, deduplicate=True, progress=update if progress_id else None)
+            return result.model_copy(update={"candidates": ()}) if compact else result
         except (BadZipFile, KeyError, ValidationError) as exc:
             raise WorkflowError("invalid_document", "文件结构或上传上下文不符合支持格式。") from exc
         finally:
             file.file.close()
+            if progress_id:
+                with upload_progress_lock:
+                    upload_progress.pop(key, None)
 
     @app.get("/api/v1/previews/{preview_id}", response_model=UploadPreview)
     def preview(preview_id: str, operator: ActorDependency):
         return workflow.preview(preview_id, actor=operator)
+
+    @app.get("/api/v1/previews/{preview_id}/workspace", response_model=WorkspacePreview)
+    def preview_workspace(preview_id: str, operator: ActorDependency, section: str | None = None):
+        require(operator, Capability.VIEW)
+        with store.read() as conn:
+            upload = workflow._upload(conn, preview_id)
+            result = workflow._preview(conn, upload, operator, fresh=True)
+            physical = coverage(conn, upload) if result.sheet_confirmation_required else []
+            sections = [sheet["section"] for sheet in physical]
+            if section is not None and section not in sections:
+                raise WorkflowError("unknown_sheet", "链接中的工作表已无法定位，请重新选择工作表。", 404)
+            selected = section if section is not None else next(iter(sections), None)
+            view = None
+            if selected is not None:
+                from .review_tasks import enrich_sheet_preflight
+                view = preflight(workflow, conn, upload, selected, operator, preview=result, sheets=physical)[0]
+                view = enrich_sheet_preflight(conn, upload, result, view, physical_sheets=physical)
+            if result.sheet_confirmation_required:
+                result = result.model_copy(update={"candidates": tuple(
+                    candidate for candidate in result.candidates if candidate.location.section == selected)})
+            return {"preview": result, "sections": sections, "section": selected,
+                    "preflight": view.model_dump(mode="json") if view else None}
+
+    @app.post('/api/v1/previews/{preview_id}/sync-worksheets')
+    def sync_confirmed_worksheets(preview_id: str, operator: ActorDependency, section: str | None = None):
+        require(operator, Capability.CONFIRM_FACT)
+        from .worksheet_seed import provision_from_results
+        with store.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            upload = workflow._upload(conn, preview_id)
+            rows = conn.execute("""SELECT detail_json FROM workflow_events
+                WHERE project=? AND subject_id=? AND action='confirm_sheet'
+                  AND (? IS NULL OR json_extract(detail_json,'$.section')=?)""",
+                (upload["project"], preview_id, section, section))
+            ids = [version_id for row in rows for version_id in
+                   json.loads(row["detail_json"]).get("result_version_ids", [])]
+            return {"worksheet_sync": provision_from_results(conn, worksheets, upload["project"], ids, operator)}
 
     @app.get('/api/v1/previews/{preview_id}/worksheets')
     def worksheets_for_import(preview_id: str, operator: ActorDependency, section: str | None = None):

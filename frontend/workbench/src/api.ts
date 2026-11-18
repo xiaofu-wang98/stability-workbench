@@ -9,10 +9,26 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json();
 }
 
+export async function archiveStudyObject(path: string, label: string): Promise<boolean> {
+  const impact = await api<{ fingerprint: string; worksheets: { name: string }[];
+    results: { value: string; studies: { name: string }[] }[] }>(path + '/archive-impact');
+  const lines = [`删除${label}？`, `涉及 ${impact.worksheets.length} 张研究表，将作废 ${impact.results.length} 个正式结果。`,
+    ...impact.worksheets.map(sheet => sheet.name),
+    ...impact.results.map(result => [result.value, ...result.studies.map(study => study.name)].join(' · '))];
+  const basis = window.prompt(lines.join('\n') + '\n请输入删除原因');
+  if (!basis?.trim()) return false;
+  await api(path, { method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ basis: basis.trim(), fingerprint: impact.fingerprint, idempotency_key: crypto.randomUUID() }) });
+  return true;
+}
+
+export type StandardAssessment = { status: 'within' | 'outside' | 'undetermined'; criterion?: string; version?: string };
+
 export interface Project {
   project: string;
   name: string;
   revision: number;
+  purpose?: 'formal' | 'sandbox';
 }
 
 export interface WorksheetSummary {
@@ -31,10 +47,11 @@ export interface Worksheet extends WorksheetSummary {
   rows: { id: string; item_id: string; label: string; method: string; unit: string;
     plan_key?: string; reporting_basis?: string;
     criteria_text?: string;
+    source_criteria?: string[];
     standards?: { specification_id: string; filename: string; table: number; row: number; criterion: string;
       plot_limits?: { lower: number | null; upper: number | null; unit: string } }[] }[];
-  points: { id: string; label: string; planned_date: string; required_row_ids: string[] }[];
-  cells: { row_id: string; point_id: string; raw: string; release_reference?: { current: boolean };
+  points: { id: string; label: string; planned_date: string; signed_status?: '' | '已签' | '已签报告'; required_row_ids: string[] }[];
+  cells: { row_id: string; point_id: string; raw: string; release_reference?: { current: boolean }; standard_assessment?: StandardAssessment;
     adopted: { text: string; result_version_id: string } | null; display: { text: string; result_version_id: string } }[];
   start_date: string;
   equipment?: string;

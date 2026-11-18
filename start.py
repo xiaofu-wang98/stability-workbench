@@ -35,7 +35,7 @@ def main():
         port = listener.getsockname()[1]
         configs = [ProjectConfig.model_validate_json(p.read_text(encoding='utf-8-sig')) for p in args.config]
         app = create_app(Store(args.home), configs, actor_for_role('local-user', '本地操作员', Role(args.role)),
-                         frontend=ROOT/'app.html', workbench=workbench)
+                         frontend=ROOT/'app.html', workbench=workbench, enforce_formal_sample_binding=True)
         url = f'http://127.0.0.1:{port}'
         print(f'Stability Data Hub {app.version}\nhome={args.home.resolve()}\n{url}/docs', flush=True)
         if not args.no_browser:

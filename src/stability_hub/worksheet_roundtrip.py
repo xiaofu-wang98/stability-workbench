@@ -15,16 +15,23 @@ from lxml.etree import XMLSyntaxError
 from pydantic import Field
 
 from .business_worksheets import CellChange, SaveWorksheet, WorksheetMutation
-from .models import digest
+from .models import Model, digest
 from .permissions import Capability, require
-from .stability_summary import TEMPLATE_VERSION, TITLE, freeze_worksheet_table, visible_rows, write_summary
+from .stability_summary import (TEMPLATE_VERSION, TITLE, controlled_block, freeze_worksheet_table, visible_rows,
+                                write_controlled_workbook, write_summary)
 from .workflow_common import WorkflowError, encoded, project_row, remember, replay, uid
 
 
 class WorkbookCommit(WorksheetMutation):
     fingerprint: str
     reason: str = Field(max_length=2000)
-    decisions: dict[str, Literal["keep", "correct"]] = Field(default_factory=dict, max_length=5000)
+    decisions: dict[str, Literal["keep", "correct", "retest"]] = Field(default_factory=dict, max_length=5000)
+    coordinates: tuple[str, ...] | None = Field(default=None, min_length=1, max_length=5000)
+
+
+class ControlledWorkbook(Model):
+    base_revision: int = Field(ge=0)
+    sheet_ids: tuple[str, ...] = Field(min_length=1, max_length=120)
 
 
 def identify_book(book):
@@ -109,6 +116,7 @@ def diff_values(sheet, summary, values, *, verified_baseline, invalidated):
         cell = cells.get(target, {})
         adopted = (cell.get("adopted") or {}).get("result_version_id")
         latest = (cell.get("display") or {}).get("result_version_id") if not cell.get("release_reference") else None
+        voided_since_export = invalidated.get(target, []) != position.get("invalidated", [])
         if (verified_baseline and value == position["visible"]) or (adopted and value == cell.get("raw")):
             status = "unchanged"
         elif (not position["required"] or cell.get("release_reference") or (latest and not adopted)
@@ -118,13 +126,15 @@ def diff_values(sheet, summary, values, *, verified_baseline, invalidated):
               ))):
             status = "blocked"
         elif (not verified_baseline and latest or adopted != position["adopted"] or latest != position["latest"]
-              or invalidated.get(target, []) != position.get("invalidated", [])):
+              or voided_since_export):
             status = "conflict"
         else:
             status = "correction" if adopted else "new"
         changes.append({"coordinate": f"{get_column_letter(c + 3)}{r + 6}", "row_id": target[0], "point_id": target[1],
                         "item": rows[target[0]]["label"], "timepoint": points[target[1]]["label"],
-                        "current": cell.get("raw", ""), "value": value, "status": status, "expected_version_id": adopted})
+                        "current": cell.get("raw", ""), "value": value, "status": status,
+                        "expected_version_id": adopted, "latest_version_id": latest,
+                        **({"voided_since_export": True} if status == "conflict" and voided_since_export else {})})
     return changes
 
 
@@ -190,6 +200,43 @@ def router_for(store, worksheets, actor_dependency):
                          (export_id, sheet["project"], revision, str(path), sha, encoded(snapshot), operator.id))
         return {"download_url": "/api/v1/exports/" + export_id + "/file"}
 
+    @router.post("/projects/{project}/controlled-workbook")
+    def export_controlled(project: str, command: ControlledWorkbook, operator: actor_dependency):
+        require(operator, Capability.EXPORT)
+        if len(set(command.sheet_ids)) != len(command.sheet_ids):
+            raise WorkflowError("controlled_scope", "请选择不重复的研究表。")
+        with store.read() as conn:
+            config = project_row(conn, project)
+            if config["revision"] != command.base_revision:
+                raise WorkflowError("controlled_scope_changed", "项目数据已更新，请重新预览导出范围。", 409)
+            name = json.loads(config["config_json"]).get("name", "")
+            groups = {}
+            for sheet_id in command.sheet_ids:
+                sheet = worksheets.get(sheet_id, operator, _conn=conn)
+                if sheet["project"] != config["project"]:
+                    raise WorkflowError("controlled_scope", "所选研究表不属于当前项目。")
+                identity = sheet["identity"]
+                condition = controlled_block(sheet, name)
+                key = (identity["sample_type"], identity["purpose"], condition["condition"])
+                group = groups.setdefault(key, {"sample_type": identity["sample_type"], "condition": key[2], "blocks": []})
+                group["blocks"].append(condition)
+            project = config["project"]
+        export_id = uid("export")
+        snapshot = {"project": project, "revision": command.base_revision, "format": "controlled_workbook",
+                    "worksheet_ids": command.sheet_ids, "groups": list(groups.values())}
+        snapshot["snapshot_id"] = digest(snapshot)
+        folder = store.home / "workflow-exports" / export_id
+        folder.mkdir(parents=True)
+        path = folder / "controlled-workbook.xlsx"
+        if write_controlled_workbook(path, snapshot["groups"]):
+            raise WorkflowError("verification_failed", "受控汇总表反读失败。", 409)
+        (folder / "snapshot.json").write_text(encoded(snapshot), encoding="utf-8")
+        sha = hashlib.sha256(path.read_bytes()).hexdigest()
+        with store.connect() as conn:
+            conn.execute("INSERT INTO workflow_exports(id,project,revision,path,sha256,snapshot_json,created_by) VALUES (?,?,?,?,?,?,?)",
+                         (export_id, project, command.base_revision, str(path), sha, encoded(snapshot), operator.id))
+        return {"download_url": "/api/v1/exports/" + export_id + "/file"}
+
     def inspect(conn, data, actor, expected_sheet=None):
         book = open_book(data)
         try:
@@ -241,8 +288,10 @@ def router_for(store, worksheets, actor_dependency):
         with store.connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
             sheet = worksheets._sheet(conn, sheet_id)
-            payload = {"worksheet_return": [sheet_id, source_id], **command.model_dump(mode="json")}
-            if (prior := replay(conn, sheet["project"], operator, command.idempotency_key, payload)) is not None:
+            excluded = {"token"} | ({"coordinates"} if command.coordinates is None else set())
+            payload = {"worksheet_return": [sheet_id, source_id], **command.model_dump(mode="json", exclude=excluded)}
+            if (prior := replay(conn, sheet["project"], operator, command.idempotency_key, payload,
+                                legacy_payload={**payload, "token": command.token})) is not None:
                 return prior
             worksheets._check_mutation(conn, sheet, command, operator)
             source = conn.execute("SELECT * FROM worksheet_return_sources WHERE id=?", (source_id,)).fetchone()
@@ -252,20 +301,34 @@ def router_for(store, worksheets, actor_dependency):
             if view["fingerprint"] != command.fingerprint:
                 raise WorkflowError("worksheet_file_changed", "结果已变化，请重新预览回传差异。", 409)
             changes, provenance = [], {}
+            available = {cell["coordinate"] for cell in view["changes"]}
+            selected = set(command.coordinates) if command.coordinates is not None else available
+            if (not selected <= available or not set(command.decisions) <= selected
+                    or (command.coordinates is not None and len(selected) != len(command.coordinates))):
+                raise WorkflowError("worksheet_file_scope", "提交范围与当前回传预览不一致。", 409)
             for cell in view["changes"]:
+                if cell["coordinate"] not in selected:
+                    continue
                 status = cell["status"]
                 choice = command.decisions.get(cell["coordinate"])
                 if status == "blocked" or (status == "conflict" and not choice):
                     raise WorkflowError("worksheet_file_conflict", f"请先核对 {cell['coordinate']} 的回传冲突。", 409)
-                if status == "unchanged" or (status == "conflict" and choice == "keep"):
+                if status == "unchanged" or (status in {"conflict", "correction"} and choice == "keep"):
                     continue
+                if cell.get("voided_since_export"):
+                    raise WorkflowError("worksheet_file_voided", f"{cell['coordinate']} 在导出后已作废，请保留当前状态或重新下载模板。", 409)
                 if status == "conflict" and not command.reason.strip():
                     raise WorkflowError("worksheet_file_conflict", f"请填写提交 {cell['coordinate']} 冲突值的原因。", 409)
+                intent = "correction" if cell["expected_version_id"] else "initial"
                 expected = cell["expected_version_id"]
+                if choice == "retest":
+                    if not expected or not command.reason.strip():
+                        raise WorkflowError("worksheet_file_retest", "复测需有已采用的原结果并填写说明。", 409)
+                    intent, expected = "retest", cell["latest_version_id"]
                 if expected:
                     require(operator, Capability.CORRECT_RESULT)
                 changes.append(CellChange(row_id=cell["row_id"], point_id=cell["point_id"], value=cell["value"],
-                                          expected_version_id=expected, intent="correction" if expected else "initial"))
+                                          expected_version_id=expected, intent=intent))
                 provenance[cell["row_id"], cell["point_id"]] = {
                     "kind": "worksheet_return", "archive_id": source_id, "filename": source["filename"],
                     "section": TITLE, "coordinate": cell["coordinate"],
@@ -275,6 +338,10 @@ def router_for(store, worksheets, actor_dependency):
                 result = worksheets.save(sheet_id, SaveWorksheet(token=command.token, revision=command.revision,
                                          reason=command.reason, changes=tuple(changes), idempotency_key=uid("return_write")),
                                          operator, _conn=conn, file_source=provenance)
+            result["resolved_coordinates"] = sorted(selected)
+            result["remaining_coordinates"] = sorted(
+                cell["coordinate"] for cell in view["changes"]
+                if cell["coordinate"] not in selected and cell["status"] != "unchanged")
             remember(conn, sheet["project"], operator, command.idempotency_key, payload, result)
             return result
 

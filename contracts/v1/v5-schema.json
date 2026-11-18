@@ -1539,6 +1539,17 @@
           "default": "committed",
           "title": "State",
           "type": "string"
+        },
+        "worksheet_sync": {
+          "default": [],
+          "items": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "title": "Worksheet Sync",
+          "type": "array"
         }
       },
       "required": [

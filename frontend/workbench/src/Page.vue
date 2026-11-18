@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { NAlert, NButton, NInput, NSelect, NSpin } from 'naive-ui';
-import { api, type Project, type WorksheetSummary, type Worksheet } from './api';
+import { api, archiveStudyObject, type Project, type WorksheetSummary, type Worksheet } from './api';
 import StudyTemplateHeader from './StudyTemplateHeader.vue';
 import StudyWorkbook from './StudyWorkbook.vue';
 import HistoricalRows from './HistoricalRows.vue';
@@ -17,6 +17,7 @@ const ProjectResults = defineAsyncComponent(() => import('./ProjectResults.vue')
 const WorksheetEditor = defineAsyncComponent(() => import('./WorksheetEditor.vue'));
 
 const route = useRoute();
+const router = useRouter();
 const page = computed(() => route.path.split('/')[1] || 'home');
 const project = computed(() => String(route.params.project || ''));
 const projects = ref<Project[]>([]);
@@ -29,6 +30,20 @@ const sheetSearch = ref('');
 const error = ref('');
 const busy = ref(false);
 const operating = ref(false);
+async function removeSheet() {
+  if (!sheet.value || editingSheet.value || operating.value) return;
+  operating.value = true;
+  error.value = '';
+  try {
+    if (await archiveStudyObject('/worksheets/' + encodeURIComponent(sheet.value.id), '研究表')) {
+      await router.push('/projects/' + encodeURIComponent(sheet.value.project));
+    }
+  } catch (e) {
+    error.value = (e as Error).message;
+  } finally {
+    operating.value = false;
+  }
+}
 const download = ref('');
 const activeProject = ref('');
 const filtered = computed(() => projects.value.filter(p =>
@@ -152,6 +167,7 @@ async function refreshSheet() {
       <p v-if="sheet.protocol_draft_id"><a :href="'/api/v1/plan-drafts/' + sheet.protocol_draft_id + '/file'">下载原方案<template v-if="sheet.protocol_table"> · 表 {{ sheet.protocol_table }}</template></a></p>
       <p class="subtitle"><RouterLink :to="'/projects/' + encodeURIComponent(sheet.project)">{{ sheet.project }}</RouterLink> · {{ sheet.identity.batch }} · {{ sheet.identity.condition }} {{ sheet.identity.orientation }}</p>
       <NButton :disabled="editingSheet" :loading="operating" @click="confirmation">生成确认表 Excel</NButton>
+      <NButton type="error" :disabled="editingSheet || operating" @click="removeSheet">删除研究表</NButton>
       <a v-if="download" :href="download"> 下载确认表</a>
       <StudyWorkbook :key="sheet.id" :sheet-id="sheet.id" :disabled="editingSheet"
         @saved="refreshSheet" />
@@ -170,19 +186,29 @@ async function refreshSheet() {
       <section v-if="!editingSheet" class="panel matrix worksheet-matrix" aria-label="研究结果矩阵" tabindex="0">
         <table :style="{ minWidth: Math.max(1240, 430 + sheet.points.length * 140) + 'px' }">
           <thead><tr><th rowspan="2">检验项目<br>Test Item</th><th rowspan="2">可接受标准<br>Acceptable Criteria</th><th :colspan="sheet.points.length">考察时间 / Study timepoints</th></tr>
-            <tr><th v-for="point in sheet.points" :key="point.id" class="template-option">{{ point.label }}<br>{{ point.planned_date }}</th></tr></thead>
+            <tr><th v-for="point in sheet.points" :key="point.id" class="template-option">{{ point.label }}<br>{{ point.planned_date }}<template v-if="point.signed_status"><br>{{ point.signed_status }}</template></th></tr></thead>
           <tbody>
             <tr v-for="row in sheet.rows" :key="row.id">
               <th scope="row" class="template-option">{{ row.label }}<p class="worksheet-criterion">{{ [row.method, row.reporting_basis ?? sheet.identity.reporting_basis].filter(Boolean).join(' · ') }}</p><small v-if="row.unit">单位：{{ row.unit }}</small></th>
               <td class="template-option">
                 <p v-if="row.criteria_text" class="worksheet-criterion">{{ row.criteria_text }}</p>
+                <template v-if="!row.criteria_text && !row.standards?.length && row.source_criteria?.length">
+                  <p class="pending">历史来源记载</p>
+                  <p v-for="criterion in row.source_criteria" :key="criterion" class="worksheet-criterion">{{ criterion }}</p>
+                </template>
                 <div v-for="standard in row.standards" :key="standard.specification_id + ':' + standard.table + ':' + standard.row">
                   <p class="worksheet-criterion">{{ standard.criterion }}</p>
                   <details><summary>标准来源</summary><a :href="'/api/v1/specifications/' + standard.specification_id + '/file'">{{ standard.filename }} · 表 {{ standard.table }} 行 {{ standard.row }}</a></details>
                 </div>
               </td>
               <td v-for="point in sheet.points" :key="point.id">
-                <template v-if="cells.get(row.id + ':' + point.id)?.adopted">{{ cells.get(row.id + ':' + point.id)?.adopted?.text }}</template>
+                <span v-if="cells.get(row.id + ':' + point.id)?.adopted"
+                  :class="{ 'outside-limit': cells.get(row.id + ':' + point.id)?.standard_assessment?.status === 'outside' }"
+                  :title="cells.get(row.id + ':' + point.id)?.standard_assessment?.criterion">
+                  {{ cells.get(row.id + ':' + point.id)?.adopted?.text }}
+                  <small v-if="cells.get(row.id + ':' + point.id)?.standard_assessment?.status === 'outside'"> 超出标准</small>
+                  <small v-if="cells.get(row.id + ':' + point.id)?.standard_assessment?.status === 'undetermined'"> 待判断</small>
+                </span>
                 <span v-else-if="point.label === '0M' && sheet.pending_release_references?.[row.id]" class="pending">方案要求引用放行结果，待关联</span>
                 <span v-else-if="point.label === '0M' && sheet.invalidated_release_rows?.includes(row.id)" class="pending">放行结果已作废，请重新关联或解除引用</span>
                 <span v-else-if="cells.get(row.id + ':' + point.id)?.release_reference" class="pending">
@@ -214,6 +240,7 @@ async function refreshSheet() {
 </template>
 
 <style scoped>
+.outside-limit { color: #9d2424; background: #fde8e8; font-weight: 700; }
 .worksheet-matrix { border: 1px solid #afc4d5; border-radius: 9px; padding: 0; }
 .worksheet-matrix table { table-layout: fixed; min-width: 1240px; width: 100%; border-collapse: separate; border-spacing: 0; }
 .worksheet-matrix th,.worksheet-matrix td { padding: 8px 10px; border-right: 1px solid #becfdd; border-bottom: 1px solid #becfdd; white-space: pre-wrap; overflow-wrap: anywhere; vertical-align: top; background: #fff; }
@@ -227,4 +254,3 @@ async function refreshSheet() {
 .worksheet-notes li { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; overflow-wrap: anywhere; }
 .worksheet-notes p { margin: 0; white-space: pre-wrap; }
 </style>
-

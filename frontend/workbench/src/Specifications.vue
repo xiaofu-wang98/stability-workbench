@@ -6,7 +6,7 @@ import CoaEditor from './CoaEditor.vue';
 import ConfirmAssays from './ConfirmAssays.vue';
 
 type Summary = { id: string; filename: string };
-type Specification = Summary & { scope: string; material_scope: string; linked_projects?: { project: string; count: number }[]; rows: {
+type Specification = Summary & { scope: string; material_scope: string; linked_projects?: { project: string; count: number; is_current: number }[]; rows: {
   table: number; row: number; column: number; page?: number; category: string; item: string;
   method: string; sop: string; criterion: string;
 }[] };
@@ -30,6 +30,17 @@ async function refresh() {
 onMounted(() => run(refresh));
 function open(id: string) {
   return run(async () => { selected.value = await api('/specifications/' + encodeURIComponent(id)); });
+}
+function makeCurrent(project: string) {
+  return run(async () => {
+    const item = selected.value;
+    if (!item || !window.confirm(`将「${item.filename}」设为 ${project} 的当前${materials[item.material_scope]}标准？`)) return;
+    const path = '/projects/' + encodeURIComponent(project);
+    const config = await api<{ base_revision: number }>(path + '/configuration');
+    await api(path + '/current-specifications', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ specification_id: item.id, revision: config.base_revision, idempotency_key: crypto.randomUUID() }) });
+    selected.value = await api('/specifications/' + encodeURIComponent(item.id));
+  });
 }
 function upload(event: Event) {
   const input = event.target as HTMLInputElement;
@@ -63,6 +74,13 @@ function upload(event: Event) {
     <p v-else>没有识别到标准条款。请核对 Word 表格，或在研究表中手工填写标准。</p>
     <p>适用对象 {{ materials[selected.material_scope] || '待核对' }}</p>
     <p>当前条款归属：{{ selected.linked_projects?.map(item => `${item.project}（${item.count} 条）`).join('、') || '尚未确认到项目' }}。</p>
+    <ul v-if="materials[selected.material_scope] && selected.linked_projects?.length">
+      <li v-for="link in selected.linked_projects" :key="link.project">
+        {{ link.project }}
+        <span v-if="link.is_current">当前适用标准</span>
+        <NButton v-else text :disabled="busy" @click="makeCurrent(link.project)">设为当前适用标准</NButton>
+      </li>
+    </ul>
     <p class="source-scope">{{ selected.scope }}</p>
     <a :href="'/api/v1/specifications/' + selected.id + '/file'">下载标准原件</a>
     <div class="matrix">
@@ -84,4 +102,3 @@ function upload(event: Event) {
 .source-scope { white-space: pre-wrap; }
 .matrix { margin-top: 14px; }
 </style>
-

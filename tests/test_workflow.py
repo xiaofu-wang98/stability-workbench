@@ -337,18 +337,27 @@ def test_project_alias_sample_registration_and_legacy_conflict(tmp_path):
             assert response.json()["code"] == "project_identity_conflict"
             blocked = client.post(f"/api/v1/projects/{code}/samples", json=sample)
             assert blocked.status_code == 409
+        with store.connect() as conn:
+            conn.execute("INSERT INTO project_aliases(alias,canonical_project) VALUES('501','IP501')")
+        for code in ("501", "ip501"):
+            resolved = client.get(f"/api/v1/projects/{code}/configuration")
+            assert resolved.is_success, resolved.text
+            deduplicated = client.post(f"/api/v1/projects/{code}/samples", json=sample)
+            assert deduplicated.json()["id"] == created.json()["id"]
+        assert [p["project"] for p in client.get("/api/v1/projects").json() if p["purpose"] == "formal"] == ["IP501"]
     with store.read() as conn:
         assert conn.execute("SELECT COUNT(*) FROM sample_entities").fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM workflow_projects WHERE purpose='formal'").fetchone()[0] == 2
 
 
 def test_p0_3_formal_result_invalidation_and_audit(flow, xlsx, context):
     """P0-3 业务验收：正式结果留痕作废、采用取消、缺口保留、审计事件记录与不可逆性"""
     from stability_hub.workflow_contracts import InvalidateRequest
     from stability_hub.identity_associations import adopted
-    
+
     first = confirm(flow, upload(flow, xlsx([['Purity', '0M', '98', '%']]), context))
     version_id = first.result_version_ids[0]
-    
+
     with flow.store.connect() as conn:
         row = conn.execute("SELECT slot_id, project FROM workflow_versions WHERE id=?", (version_id,)).fetchone()
         slot_id = row["slot_id"]

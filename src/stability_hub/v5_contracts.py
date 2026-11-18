@@ -283,6 +283,7 @@ class SheetCommitResult(Model):
     historical_count: int
     result_version_ids: tuple[str, ...]
     state: Literal['committed'] = 'committed'
+    worksheet_sync: tuple[dict[str, str], ...] = ()
 
 
 class ManualResult(Model):

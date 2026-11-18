@@ -9,8 +9,23 @@ from .workflow_schema import STATEMENTS
 from .source_schema import SCHEMA as SOURCE_SCHEMA
 from .worksheet_schema import SCHEMA as WORKSHEET_SCHEMA
 
-CURRENT_VERSION = 18
+CURRENT_VERSION = 20
 MIGRATIONS = {
+    20: (
+        """CREATE TABLE current_specifications (
+            project TEXT NOT NULL REFERENCES workflow_projects(project),
+            material_scope TEXT NOT NULL CHECK(material_scope IN ('DS','DP','placebo','reference')),
+            specification_id TEXT NOT NULL REFERENCES specifications(id),
+            PRIMARY KEY(project, material_scope)
+        )""",
+        "INSERT INTO schema_migrations(version, description) VALUES (20, 'Current specification per project and material scope')",
+    ),
+    19: (
+        "ALTER TABLE business_worksheets ADD COLUMN deleted_at TEXT",
+        "ALTER TABLE sample_entities ADD COLUMN deleted_at TEXT",
+        "ALTER TABLE workflow_projects ADD COLUMN purpose TEXT NOT NULL DEFAULT 'formal' CHECK(purpose IN ('formal','sandbox'))",
+        "INSERT INTO schema_migrations(version, description) VALUES (19, 'Archive worksheets and samples')",
+    ),
     18: (
         # P0-3: 创建独立的结果作废留痕事件审计表与作废版本登记
         """CREATE TABLE IF NOT EXISTS workflow_invalidated_versions (
@@ -250,6 +265,17 @@ def migrate(conn: sqlite3.Connection, database: Path) -> None:
             if next_version == 15:
                 from .business_worksheets import backfill_worksheet_positions
                 backfill_worksheet_positions(conn)
+            if next_version == 19:
+                from .models import ProjectConfig
+                from .workflow_common import resolve_canonical_project
+                code, suffix = "TEST", 1
+                while conn.execute("SELECT 1 FROM workflow_projects WHERE project=?",
+                                   (resolve_canonical_project(conn, code),)).fetchone():
+                    suffix += 1
+                    code = f"TEST-{suffix}"
+                config = ProjectConfig(project=code, name="TEST").model_dump_json()
+                conn.execute("""INSERT INTO workflow_projects(project,config_json,startup_config_json,purpose)
+                                VALUES (?,?,?,'sandbox')""", (code, config, config))
             conn.execute(f"PRAGMA user_version={next_version}")
         conn.commit()
     except BaseException:

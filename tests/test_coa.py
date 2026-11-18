@@ -15,6 +15,24 @@ def content(doc):
     return output.getvalue()
 
 
+def test_formal_workbench_requires_sample_and_creates_from_confirmed_identity(tmp_path, config, context):
+    actor = actor_for_role("local-user", "Local", Role.ADMIN)
+    app = create_app(Store(tmp_path), [config], actor, enforce_formal_sample_binding=True)
+    with TestClient(app) as client:
+        endpoint = "/api/v1/projects/PROJECT-P/worksheets"
+        command = {"idempotency_key": "create-sample-required", "name": "Study", "identity": context.defaults,
+                   "start_date": "2026-11-17", "items": ["purity"],
+                   "points": [{"unit": "M", "amount": 0, "required_items": ["purity"]}]}
+        missing = client.post(endpoint, json=command)
+        assert missing.status_code == 409 and missing.json()["code"] == "worksheet_sample_required"
+        command["material_stage"] = "验收材料"
+        made = client.post(endpoint, json=command)
+        assert made.status_code == 201, made.text
+        sheet = client.get("/api/v1/worksheets/" + made.json()["id"]).json()
+        assert sheet["sample_id"]
+        assert client.post(endpoint, json=command).json() == made.json()
+
+
 def test_coa_word_round_trip_and_version_guard(tmp_path):
     store = Store(tmp_path)
     actor = actor_for_role('test', 'Test', Role.ADMIN)
@@ -30,7 +48,11 @@ def test_coa_word_round_trip_and_version_guard(tmp_path):
                 table.cell(row, column).text = value
     original = content(doc)
     with TestClient(create_app(store, [ProjectConfig(project='P')], actor)) as client:
-        standard = client.post('/api/v1/specifications', files={'file': ('standard.docx', original)})
+        blocked = client.post('/api/v1/projects/TEST/previews',
+                              headers={'Idempotency-Key': 'sandbox-history'},
+                              files={'file': ('history.xlsx', b'not parsed in sandbox')})
+        assert blocked.status_code == 409 and blocked.json()['code'] == 'sandbox_history_import'
+        standard = client.post('/api/v1/specifications', files={'file': ('standard DS.docx', original)})
         assert standard.status_code == 200, standard.text
         spec = standard.json()['id']
         sample_path = '/api/v1/projects/P/samples'
@@ -70,15 +92,22 @@ def test_coa_word_round_trip_and_version_guard(tmp_path):
                             'method': 'SEC', 'unit': '%', 'result_type': 'numeric'}],
         })
         assert registered.is_success, registered.text
+        selected_standard = {'specification_id': spec, 'idempotency_key': 'set-current-standard',
+                             'revision': client.get(base + '/configuration').json()['base_revision']}
+        activated = client.post(base + '/current-specifications', json=selected_standard)
+        assert activated.is_success, activated.text
+        assert client.post(base + '/current-specifications', json=selected_standard).json() == activated.json()
+        assert client.get(base + '/current-specifications').json()[0]['specification_id'] == spec
         item = registered.json()['links'][0]['item_id']
-        created = client.post(base + '/worksheets', json={
+        study_command = {
             'name': 'COA study', 'idempotency_key': 'study', 'start_date': '2026-01-02',
             'identity': {'batch': sample['batch'], 'presentation': '1mg', 'sample_type': 'DS',
                          'study': 'long_term', 'study_id': 'STUDY', 'condition': '5C'},
             'items': [item], 'points': [{'amount': 0, 'unit': 'M', 'required_items': [item]},
                                         {'amount': 1, 'unit': 'M', 'required_items': [item]}],
             'item_standards': {item: [{'specification_id': spec, 'table': 1, 'row': 2}]},
-        })
+        }
+        created = client.post(base + '/worksheets', json=study_command)
         assert created.is_success, created.text
         sheet_path = '/api/v1/worksheets/' + created.json()['id']
         sheet = client.get(sheet_path).json()
@@ -190,6 +219,46 @@ def test_coa_word_round_trip_and_version_guard(tmp_path):
         assert "available_coa_references" in sheet_view
         assert row in sheet_view["available_coa_references"]
         assert any(opt["value"] == "98.50%" for opt in sheet_view["available_coa_references"][row])
+        option = client.get(sheet_path + '/coa-release-options', params={'row_id': row}).json()[0]
+        command = {'token': token, 'revision': sheet_view['revision'], 'idempotency_key': 'copy-coa',
+                   'row_id': row, 'coa_fingerprint': option['fingerprint'], 'intent': 'initial'}
+        copied = client.post(sheet_path + '/copy-coa-to-0m', json=command)
+        assert copied.is_success, copied.text
+        assert client.post(sheet_path + '/copy-coa-to-0m', json=command).json() == copied.json()
+        version_id, = copied.json()['result_version_ids']
+        copied_view = client.get(sheet_path).json()
+        zero = next(cell for cell in copied_view['cells'] if cell['point_id'] == sheet_view['points'][0]['id'])
+        assert zero['adopted']['result_version_id'] == version_id
+        assert zero['raw'] == '98.50%' and row not in copied_view['release_references']
+        cleared = client.post(sheet_path + '/save', json={
+            'token': token, 'revision': copied_view['revision'], 'idempotency_key': 'clear-copy',
+            'changes': [{'row_id': row, 'point_id': zero['point_id'], 'intent': 'correction',
+                         'expected_version_id': version_id, 'value': ''}],
+        })
+        assert cleared.is_success, cleared.text
+        with store.read() as conn:
+            assert conn.execute('SELECT 1 FROM workflow_invalidated_versions WHERE version_id=?',
+                                (version_id,)).fetchone()
+        sample_path = '/api/v1/samples/' + sample['id']
+        impact = client.get(sample_path + '/archive-impact').json()
+        assert [entry['id'] for entry in impact['worksheets']] == [sheet_view['id']]
+        archive_command = {'fingerprint': impact['fingerprint'], 'basis': '误建样品',
+                           'idempotency_key': 'archive-sample'}
+        assert client.request('DELETE', sample_path, json=archive_command).status_code == 409
+        assert client.post(sheet_path + '/lease/release', json={'token': token}).is_success
+        archived_sample = client.request('DELETE', sample_path, json=archive_command)
+        assert archived_sample.is_success, archived_sample.text
+        assert client.request('DELETE', sample_path, json=archive_command).json() == archived_sample.json()
+        assert len(archived_sample.json()['invalidated_version_ids']) == 1
+        assert client.get(sheet_path).status_code == 404
+        assert client.get(path).status_code == 404
+        assert client.get(original_report).content == original_content
+        reopened = client.post(base + '/worksheets', json={**study_command, 'idempotency_key': 'study-replacement'})
+        assert reopened.is_success, reopened.text
+        replacement_id = reopened.json()['id']
+        assert replacement_id != sheet_view['id']
+        replacement = client.get('/api/v1/worksheets/' + replacement_id).json()
+        assert not any(cell.get('adopted') for cell in replacement['cells'])
 
     with store.read() as conn:
         assert conn.execute('SELECT count(*) FROM coa_versions').fetchone()[0] == 3

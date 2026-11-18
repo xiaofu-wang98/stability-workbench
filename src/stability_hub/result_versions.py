@@ -170,7 +170,7 @@ class ResultVersions:
                         WHERE json_extract(r.value,'$.result_version_id')=?) AS release_reference
             FROM business_worksheets w
             JOIN business_worksheet_plans p ON p.sheet_id=w.id AND p.version=w.plan_version
-            WHERE w.project=? AND (
+            WHERE w.project=? AND w.deleted_at IS NULL AND (
                 EXISTS (SELECT 1 FROM business_worksheet_slots s WHERE s.sheet_id=w.id AND s.slot_id=?)
                 OR EXISTS (SELECT 1 FROM json_each(p.plan_json,'$.release_references') r
                            WHERE json_extract(r.value,'$.result_version_id')=?))
@@ -201,39 +201,16 @@ class ResultVersions:
             conn.execute("BEGIN IMMEDIATE")
             version = self._version(conn, version_id)
             project = version["project"]
-            slot_id = version["slot_id"]
             payload = {"result_invalidate": version_id, **request.model_dump(mode="json")}
             prior = replay(conn, project, actor, request.idempotency_key, payload)
             if prior:
                 return MutationResult.model_validate(prior)
             check_revision(conn, project, request.base_revision)
-            
-            # 1. 如果该版本是当前采用值，取消当前采用（置空），不得静默回退到更早版本
-            require_valid_version(conn, version_id)
-            if version["state"] not in {"confirmed", "legacy"}:
-                raise WorkflowError("invalid_state", "只有已确认的正式结果可以作废。", 409)
-            ensure_worksheet_slot_unlocked(conn, slot_id)
-            studies = self._invalidation_studies(conn, project, slot_id, version_id)
-            current = adopted(conn, project, slot_id)
-            if current and current["id"] == version_id:
-                conn.execute("DELETE FROM workflow_adoptions WHERE project=? AND slot_id=?", (project, slot_id))
-            conn.execute("DELETE FROM workflow_identity_adoptions WHERE project=? AND version_id=?", (project, version_id))
-            conn.execute("DELETE FROM workflow_adoptions WHERE project=? AND version_id=?", (project, version_id))
-            
-            # 2. 登记作废留痕记录表（不违反不可逆只读触发器）
-            conn.execute("""INSERT INTO workflow_invalidated_versions (version_id, project, slot_id, reason, invalidated_by)
-                             VALUES (?, ?, ?, ?, ?)""",
-                         (version_id, project, slot_id, request.reason, actor.id))
-            
-            # 3. 记录作废审计事件
-            record = StabilityRecord.model_validate_json(version["record_json"])
-            event(conn, project, version_id, "invalidate_result", actor, request.reason, {
-                "slot_id": slot_id,
-                "invalidated_value": record.result.raw_text,
-                "studies": studies,
-                "references": [ref.model_dump(mode="json") for ref in request.references]
-            })
-            
+
+            studies = self.invalidate_in_transaction(
+                conn, version, reason=request.reason, actor=actor,
+                references=[ref.model_dump(mode="json") for ref in request.references],
+            )
             # 4. 递增项目版本号并记录幂等
             conn.executemany("UPDATE business_worksheets SET revision=revision+1 WHERE id=?",
                              [(study["id"],) for study in studies])
@@ -241,6 +218,28 @@ class ResultVersions:
             result = MutationResult(project=project, base_revision=new_rev, result_version_ids=(version_id,))
             remember(conn, project, actor, request.idempotency_key, payload, result.model_dump(mode="json"))
             return result
+
+    def invalidate_in_transaction(self, conn, version, *, reason, actor, references=(), locked_sheet_id=None):
+        require(actor, Capability.CONFIRM_FACT)
+        project, slot_id, version_id = version["project"], version["slot_id"], version["id"]
+        require_valid_version(conn, version_id)
+        if version["state"] not in {"confirmed", "legacy"}:
+            raise WorkflowError("invalid_state", "只有已确认的正式结果可以作废。", 409)
+        ensure_worksheet_slot_unlocked(conn, slot_id, except_sheet_id=locked_sheet_id)
+        studies = self._invalidation_studies(conn, project, slot_id, version_id)
+        conn.execute("DELETE FROM workflow_identity_adoptions WHERE project=? AND version_id=?", (project, version_id))
+        conn.execute("DELETE FROM workflow_adoptions WHERE project=? AND version_id=?", (project, version_id))
+        conn.execute(
+            """INSERT INTO workflow_invalidated_versions (version_id, project, slot_id, reason, invalidated_by)
+               VALUES (?, ?, ?, ?, ?)""",
+            (version_id, project, slot_id, reason, actor.id),
+        )
+        record = StabilityRecord.model_validate_json(version["record_json"])
+        event(conn, project, version_id, "invalidate_result", actor, reason, {
+            "slot_id": slot_id, "invalidated_value": record.result.raw_text,
+            "studies": studies, "references": list(references),
+        })
+        return studies
 
     def record_worksheet_result(self, conn, record, *, actor, previous, current, intent, reason, source):
         """Record a direct entry in the same version and adoption tables as file intake."""

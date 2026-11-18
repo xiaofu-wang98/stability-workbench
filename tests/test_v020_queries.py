@@ -69,7 +69,7 @@ def test_version8_index_upgrade_backs_up_without_rewriting_facts(tmp_path, xlsx,
     database = target_home / 'history.sqlite'
     with flow.store.read() as origin, sqlite3.connect(database) as target:
         origin.backup(target)
-        for name in ['specification_assay_components', 'assay_components', 'assay_definitions',
+        for name in ['current_specifications', 'specification_assay_components', 'assay_components', 'assay_definitions',
                      'worksheet_position_conflicts', 'worksheet_result_positions', 'business_worksheet_slots', 'business_worksheet_leases', 'business_worksheet_plans',
                      'business_worksheets', 'workflow_result_clock', 'protocol_drafts', 'specifications', 'worksheet_drafts',
                      'coa_versions', 'coa_sources', 'sample_entities', 'worksheet_return_sources']:
@@ -77,6 +77,8 @@ def test_version8_index_upgrade_backs_up_without_rewriting_facts(tmp_path, xlsx,
         for name in ['workflow_candidates_upload', 'workflow_events_subject_action', 'workflow_events_project_action']:
             target.execute(f'DROP INDEX {name}')
         target.execute('DELETE FROM schema_migrations WHERE version>=9')
+        target.execute("DELETE FROM workflow_projects WHERE purpose='sandbox'")
+        target.execute("ALTER TABLE workflow_projects DROP COLUMN purpose")
         target.execute('PRAGMA user_version=8')
         before = target.execute('SELECT id,record_json,source_json FROM workflow_versions').fetchall()
         candidates = target.execute('SELECT id,raw_json FROM workflow_candidates').fetchall()

@@ -127,7 +127,8 @@ const seed = ref<{ identity: Partial<Worksheet['identity']> & { sample_id?: stri
   custom_items?: CustomItem[]; protocol_row_items?: Record<number, string[]>;
   standard_candidate_count?: number;
   item_standards: Record<string, { specification_id: string; table: number; row: number }[]>;
-  equipment: string; location: string; start_date?: string; source_timepoints?: string[];
+  equipment: string; location: string; start_date?: string; source_timepoints?: string[]; material_stage?: string; packaging?: string;
+  point_metadata?: Record<string, { planned_date: string | null; signed_status: string }>;
   copy?: { id: string; name: string; plan_version: number; has_standards: boolean } }>();
 const copied = computed(() => seed.value?.copy);
 const protocolStandards = computed(() => seed.value?.protocol_standards);
@@ -145,7 +146,7 @@ const itemOptions = computed(() => {
 });
 const pointText = ref('');
 const material = ref('');
-const formValues = ref<Record<string, string>>({ presentation: '', start_date: '', equipment: '', study_id: '', study: '', orientation: '', purpose: 'unknown', reporting_basis: '', name: '', basis: '' });
+const formValues = ref<Record<string, string>>({ presentation: '', start_date: '', equipment: '', study_id: '', study: '', orientation: '', purpose: 'unknown', reporting_basis: '', name: '', basis: '', material_stage: '', packaging: '' });
 const detailsOpen = ref(false);
 const conditionValue = ref('');
 const locationValue = ref('');
@@ -188,6 +189,7 @@ const candidates = computed(() => (configuration.value?.config.items ?? []).filt
 function chooseMaterial(event: Event) {
   if (matrix.value || copied.value || seedSlot) return;
   material.value = (event.target as HTMLSelectElement).value;
+  if (route.query.specification) return;
   const names = materialItems[material.value];
   if (!names) return;
   const matches = (item: Item, terms: string[]) => terms.some(name =>
@@ -304,6 +306,8 @@ async function loadSource() {
     const data = await api<NonNullable<typeof seed.value>>('/projects/' + encodeURIComponent(project.value) + '/worksheet-seed?' + query);
     seed.value = data;
     Object.assign(formValues.value, { presentation: linkedSample.value?.presentation ?? data.identity.presentation ?? '', start_date: data.start_date ?? '', equipment: data.equipment ?? '', study_id: data.identity.study_id ?? '', study: data.identity.study ?? '', orientation: data.identity.orientation ?? '', purpose: data.identity.purpose || (linkedSample.value?.material_stage === '参考品' ? 'reference' : 'unknown'), reporting_basis: data.identity.reporting_basis ?? '' });
+    formValues.value.material_stage = data.material_stage ?? formValues.value.material_stage;
+    formValues.value.packaging = data.packaging ?? formValues.value.packaging;
     material.value = linkedSample.value?.sample_type || data.identity.sample_type || material.value;
     matrix.value = data.matrix;
     customItems.value = data.custom_items ?? [];
@@ -371,9 +375,10 @@ watch([setupReady, draftForm], async ([ready, form]) => {
   savedPlan = planSignature(form);
 }, { flush: 'post' });
 function availableSuggestions(row: Matrix['items'][number]) {
-  return (row.suggested_component_ids ?? []).filter(id => !Object.entries(rowItems.value).some(
-    ([number, items]) => Number(number) !== row.row && items.includes(id),
-  ));
+  const current = rowItems.value[row.row] ?? [];
+  if (current.includes(':exclude')) return [];
+  return (row.suggested_component_ids ?? []).filter(id =>
+    !current.includes(id) && !Object.values(rowItems.value).some(items => items.includes(id)));
 }
 function mapRow(row: Matrix['items'][number], items: string[]) {
   const previous = rowItems.value[row.row] || [];
@@ -534,7 +539,7 @@ function save(event: Event) {
     const points = templatePoints.value.map(text => {
       const match = /^(\d+)([MD])$/i.exec(text);
       if (!match) throw new Error('请使用 0M、3M 或 7D 这样的时间点格式。');
-      return { amount: Number(match[1]), unit: match[2].toUpperCase(),
+      return { ...seed.value?.point_metadata?.[text], amount: Number(match[1]), unit: match[2].toUpperCase(),
         required_items: items.filter(item => !excluded.value[text]?.includes(item)) };
     });
     const { start_date, basis } = data;
@@ -558,6 +563,7 @@ function save(event: Event) {
         [id, [...new Map(links.map(link => [standardKey(link), link])).values()]])),
       ...(seedSlot ? { seed_slot_id: seedSlot } : {}),
       ...(linkedSample.value || seed.value?.identity.sample_id ? { sample_id: linkedSample.value?.id || seed.value?.identity.sample_id } : {}),
+      ...(data.material_stage ? { material_stage: data.material_stage, packaging: data.packaging || '' } : {}),
       ...(resumed ? { worksheet_draft_id: resumed } : {}),
       ...(draftId ? { protocol_draft_id: draftId, protocol_table: matrix.value?.table,
         protocol_row_items: Object.fromEntries(Object.entries(rowItems.value).map(([row, ids]) =>
@@ -632,7 +638,10 @@ function save(event: Event) {
               disabled: Object.entries(rowItems).some(([r, ids]) => Number(r) !== row.row && ids.includes(item.value)) }))]"
             @update:value="mapRow(row, $event)" />
             <NButton v-if="availableSuggestions(row).length" text :disabled="busy"
-              @click="mapRow(row, availableSuggestions(row))">带入标准匹配建议（{{ availableSuggestions(row).length }}）</NButton>
+              @click="mapRow(row, [...(rowItems[row.row] || []), ...availableSuggestions(row)])">带入标准匹配建议（{{ availableSuggestions(row).length }}）</NButton>
+            <NButton v-if="rowItems[row.row]?.includes(':exclude')" text :disabled="busy"
+              @click="mapRow(row, [])">恢复核对本行</NButton>
+            <NButton v-else text :disabled="busy" @click="mapRow(row, [':exclude'])">本行不纳入本表</NButton>
           </td>
           <td v-for="cell in row.cells" :key="cell.column">{{ cell.raw || '待核对' }}</td>
         </tr></tbody>
@@ -653,6 +662,12 @@ function save(event: Event) {
         <div class="template-header-value"><b>产品名称</b><span>{{ props.projects.find(item => item.project === project)?.name }}</span></div>
         <label>批号 <input name="batch" v-model="suggestedBatch" :readonly="Boolean(linkedSample)" required placeholder="例如：20260301"></label>
         <label>材料类别 <select name="sample_type" v-model="material" @change="chooseMaterial" required><option value="">请选择</option><option value="DS">原液</option><option value="DP">制剂</option><option value="placebo">安慰剂</option></select></label>
+        <template v-if="!linkedSample && !seed?.identity.sample_id && projects.find(item => item.project === project)?.purpose !== 'sandbox'">
+          <label>材料阶段 <input name="material_stage" v-model="formValues.material_stage" required maxlength="250" placeholder="如裸抗、ADC、参考品" :aria-describedby="formValues.purpose === 'reference' ? 'reference-material-stage' : undefined">
+            <small v-if="formValues.purpose === 'reference'" id="reference-material-stage">样品用途为参考品时，材料阶段填写「参考品」。</small>
+          </label>
+          <label>包装 <input name="packaging" v-model="formValues.packaging" maxlength="250"></label>
+        </template>
           <label>规格 <input name="presentation" v-model="formValues.presentation" required></label>
           <label>开始日期 <input name="start_date" type="date" v-model="formValues.start_date" required></label>
           <label>设备名称及编号 <input name="equipment" v-model="formValues.equipment"></label>
@@ -697,7 +712,7 @@ function save(event: Event) {
               @click="selected = [...new Set([...selected, ...(configuration?.config.items ?? []).map(item => item.id)])]">
               一键添加项目全部字典检项 ({{ (configuration?.config.items ?? []).length }}项)
             </NButton>
-            <NButton v-if="candidates.some(item => !selected.includes(item.id))" 
+            <NButton v-if="candidates.some(item => !selected.includes(item.id))"
               @click="selected = [...new Set([...selected, ...candidates.map(item => item.id)])]">添加候选检项</NButton>
             <NButton @click="standardTarget = undefined; showSpecifications = !showSpecifications">引用质量标准</NButton>
             <NButton @click="insertItem()">插入检项行</NButton>

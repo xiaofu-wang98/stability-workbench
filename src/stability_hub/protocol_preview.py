@@ -44,8 +44,13 @@ def _state(text):
 
 
 def _cell_text(cell):
-    return "\n".join("".join(paragraph.xpath(".//w:t/text()"))
-                     for paragraph in cell._tc.xpath("./w:p")).strip()
+    separators = {"br": "\n", "cr": "\n", "tab": "\t"}
+    return "\n".join(
+        "".join(separators.get(node.tag.rsplit("}", 1)[-1], node.text or "")
+                for node in paragraph.xpath(".//w:t|.//w:br|.//w:cr|.//w:tab")
+                if not node.xpath("ancestor::w:del"))
+        for paragraph in cell._tc.xpath("./w:p")
+    ).strip()
 
 
 def _item_label(values):

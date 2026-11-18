@@ -17,7 +17,8 @@ from .models import ItemDefinition, Model, ProjectConfig, RecordKey, StabilityRe
 from .normalize import NeedsReview, normalize_worksheet_result
 from .permissions import Capability, require
 from .result_queries import result_value, selected_rows
-from .workflow_common import WorkflowError, bump, encoded, event, project_row, remember, replay, uid
+from .specification_limits import worksheet_assessment
+from .workflow_common import WorkflowError, bump, encoded, ensure_worksheet_slot_unlocked, event, project_row, remember, replay, uid
 from .workflow_contracts import ResultFilter
 
 LEASE_SECONDS = 90
@@ -52,6 +53,10 @@ def historical_rows(records):
                                         record.result.status == 'numeric' for record in group) else 'qualitative')
         rows[identifier] = {**definition.model_dump(exclude={'id', 'aliases'}), 'item_id': key.item,
                             'plan_key': identifier, 'reporting_basis': key.reporting_basis}
+        criteria = sorted({standard.criterion_text for record in group for standard in record.standards
+                           if standard.criterion_text.strip()})
+        if criteria:
+            rows[identifier]["source_criteria"] = criteria
     return rows
 
 
@@ -115,10 +120,14 @@ class StudyIdentity(Model):
         return condition
 
 
+SignedStatus = Literal["", "已签", "已签报告"]
+
+
 class PlannedPoint(Model):
     unit: Literal["M", "D"]
     amount: int = Field(ge=0, le=3650, strict=True)
     planned_date: date | None = None
+    signed_status: SignedStatus = ""
     required_items: tuple[Text, ...] = Field(max_length=150)
 
 
@@ -159,6 +168,8 @@ class CreateWorksheet(Model):
     worksheet_draft_id: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     seed_slot_id: Text | None = None
     sample_id: Text | None = None
+    material_stage: str = Field(default="", max_length=250)
+    packaging: str = Field(default="", max_length=250)
     item_standards: dict[str, tuple[SpecificationCriterion, ...]] = Field(default_factory=dict, max_length=150)
     row_criteria: dict[str, WorksheetCriteria] = Field(default_factory=dict, max_length=150)
     protocol_row_items: dict[int, tuple[Text, ...]] = Field(default_factory=dict, max_length=150)
@@ -171,6 +182,12 @@ class LeaseToken(Model):
 class WorksheetMutation(LeaseToken):
     idempotency_key: Text
     revision: int = Field(ge=1, strict=True)
+
+
+class EditPointMetadata(WorksheetMutation):
+    point_id: Text
+    planned_date: date
+    signed_status: SignedStatus = ""
 
 
 class ExtendPlan(WorksheetMutation):
@@ -209,6 +226,13 @@ class SetWorksheetStandards(WorksheetMutation):
 class RemoveWorksheetRow(WorksheetMutation):
     row_id: Text
     basis: Text
+    fingerprint: str = ""
+
+
+class ArchiveStudyObject(Model):
+    basis: Text
+    fingerprint: Text
+    idempotency_key: Text
 
 
 class StopWorksheetChecks(RemoveWorksheetRow):
@@ -222,6 +246,14 @@ class SetReleaseReference(WorksheetMutation):
     release_completed: date | None = None
     coa_specification_id: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     coa_version: int | None = Field(default=None, ge=1)
+
+
+class CopyCoaToZero(WorksheetMutation):
+    row_id: Text
+    coa_fingerprint: Text
+    expected_version_id: str | None = None
+    intent: Literal["initial", "correction", "retest", "keep"]
+    basis: str = Field(default="", max_length=2000)
 
 
 class AttachProtocol(WorksheetMutation):
@@ -245,7 +277,7 @@ class CellChange(Model):
     row_id: Text
     point_id: Text
     expected_version_id: str | None = None
-    value: str = Field(min_length=1, max_length=8000)
+    value: str = Field(max_length=8000)
     intent: Literal["initial", "correction", "retest"]
 
 
@@ -290,15 +322,23 @@ def add_points(existing, requests, rows, start):
         result.append({
             "id": uid("point"), "unit": point.unit, "amount": point.amount,
             "label": f"{point.amount}{point.unit}", "planned_date": planned_date(start, point),
+            **({"signed_status": point.signed_status} if point.signed_status else {}),
             "required_row_ids": [rows[item]["id"] for item in point.required_items],
         })
     return result
 
 
+def ordered_points(points):
+    if len({point["unit"] for point in points}) <= 1:
+        return sorted(points, key=lambda point: point["amount"])
+    return sorted(points, key=lambda point: (point["planned_date"], point["unit"], point["amount"]))
+
+
 class BusinessWorksheets:
-    def __init__(self, workflow, result_versions):
+    def __init__(self, workflow, result_versions, *, enforce_formal_sample_binding=False):
         self.store = workflow.store
         self.result_versions = result_versions
+        self.enforce_formal_sample_binding = enforce_formal_sample_binding
 
     def list(self, project, actor):
         require(actor, Capability.VIEW)
@@ -308,11 +348,11 @@ class BusinessWorksheets:
                 """SELECT id,name,revision,plan_version,
                           json_extract(identity_json,'$.batch') AS batch,
                           json_extract(identity_json,'$.condition') AS condition
-                   FROM business_worksheets WHERE project=? ORDER BY name,id""", (project,)
+                   FROM business_worksheets WHERE project=? AND deleted_at IS NULL ORDER BY name,id""", (project,)
             )]
 
     def _sheet(self, conn, sheet_id):
-        sheet = conn.execute("SELECT * FROM business_worksheets WHERE id=?", (sheet_id,)).fetchone()
+        sheet = conn.execute("SELECT * FROM business_worksheets WHERE id=? AND deleted_at IS NULL", (sheet_id,)).fetchone()
         if sheet is None:
             raise WorkflowError("not_found", "研究工作表不存在。", 404)
         return sheet
@@ -334,11 +374,15 @@ class BusinessWorksheets:
         if not lease or lease["actor_id"] != actor.id or not secrets.compare_digest(lease["token_hash"], digest(token)):
             raise WorkflowError("worksheet_lease_lost", "编辑占用已失效，请重新打开工作表并核对最新数据。", 409)
 
-    def create(self, project, request, actor):
+    def create(self, project, request, actor, *, _conn=None):
         require(actor, Capability.CONFIRM_FACT)
-        with self.store.connect() as conn:
-            conn.execute("BEGIN IMMEDIATE")
+        with (self.store.connect() if _conn is None else nullcontext(_conn)) as conn:
+            if _conn is None:
+                conn.execute("BEGIN IMMEDIATE")
             creation = request.model_dump(mode="json")
+            for point in creation["points"]:
+                if not point["signed_status"]:
+                    point.pop("signed_status")
             if creation["identity"]["sample_id"] is None:
                 del creation["identity"]["sample_id"]
             for key in ("protocol_draft_id", "protocol_table", "copy_source_id", "copy_source_plan_version", "worksheet_draft_id", "seed_slot_id", "sample_id"):
@@ -346,13 +390,28 @@ class BusinessWorksheets:
                     del creation[key]
             if not creation["copy_standards"]:
                 del creation["copy_standards"]
-            for key in ("equipment", "location", "custom_items", "item_standards", "protocol_row_items", "row_criteria"):
+            for key in ("equipment", "location", "custom_items", "item_standards", "protocol_row_items", "row_criteria",
+                        "material_stage", "packaging"):
                 if not creation[key]:
                     del creation[key]
             payload = {"worksheet_create": creation}
             prior = replay(conn, project, actor, request.idempotency_key, payload)
             if prior is not None:
                 return prior
+            if request.material_stage.strip() and not request.sample_id:
+                from .coa import SampleInput, ensure_sample
+                identity = request.identity
+                if (request.material_stage.strip() == "参考品") != (identity.purpose == "reference"):
+                    raise WorkflowError("worksheet_sample_scope", "样品材料阶段与参考品用途不一致。")
+                sample = ensure_sample(conn, project, SampleInput(
+                    batch=identity.batch, material_stage=request.material_stage,
+                    sample_type=identity.sample_type, presentation=identity.presentation,
+                    packaging=request.packaging, purpose=identity.purpose,
+                ), actor)
+                request = request.model_copy(update={"sample_id": sample["id"]})
+            if (self.enforce_formal_sample_binding and not request.sample_id
+                    and project_row(conn, project)["purpose"] == "formal"):
+                raise WorkflowError("worksheet_sample_required", "正式项目请先选择样品，或填写材料阶段以建档。", 409)
             draft_id = request.worksheet_draft_id
             if draft_id:
                 draft = conn.execute("SELECT draft_json FROM worksheet_drafts WHERE id=? AND project=?",
@@ -396,12 +455,12 @@ class BusinessWorksheets:
             if request.identity.sample_id and request.identity.sample_id != request.sample_id:
                 raise WorkflowError("worksheet_sample_scope", "研究预填的样品与所选样品不一致。")
             if request.sample_id:
-                sample = conn.execute("SELECT * FROM sample_entities WHERE project=? AND id=?",
+                sample = conn.execute("SELECT * FROM sample_entities WHERE project=? AND id=? AND deleted_at IS NULL",
                                       (project, request.sample_id)).fetchone()
                 if sample is None or not sample_matches_study(sample, request.identity):
                     raise WorkflowError("worksheet_sample_scope", "所选样品的批号、类别、规格或用途与研究表不符。")
                 existing_scope = request.identity.model_dump(exclude={"sample_id"})
-                for candidate in conn.execute("SELECT sample_id,identity_json FROM business_worksheets WHERE project=? AND sample_id=?",
+                for candidate in conn.execute("SELECT sample_id,identity_json FROM business_worksheets WHERE project=? AND sample_id=? AND deleted_at IS NULL",
                                               (project, request.sample_id)):
                     if StudyIdentity.model_validate_json(candidate["identity_json"]).model_dump(exclude={"sample_id"}) == existing_scope:
                         raise WorkflowError("worksheet_exists", "此样品与研究条件已建立工作表，请打开现有工作表。", 409)
@@ -475,7 +534,7 @@ class BusinessWorksheets:
             if draft_id:
                 source["worksheet_draft_id"] = draft_id
             source.update({key: getattr(request, key) for key in ("equipment", "location") if getattr(request, key)})
-            points = add_points([], request.points, rows, request.start_date)
+            points = ordered_points(add_points([], request.points, rows, request.start_date))
             if request.protocol_row_items:
                 source["pending_release_references"] = self._pending_protocol_release(
                     matrix, request.protocol_row_items, rows, points,
@@ -536,7 +595,7 @@ class BusinessWorksheets:
             conn.execute("BEGIN IMMEDIATE")
             self._sheet(conn, sheet_id)
             lease = self._lease(conn, sheet_id)
-            if lease:
+            if lease and (lease["actor_id"] != actor.id or actor.id != "local-user"):
                 raise WorkflowError("worksheet_occupied", f'{lease["actor_name"]}正在编辑此工作表。', 409)
             token = secrets.token_urlsafe(32)
             expires = int(time.time()) + LEASE_SECONDS
@@ -602,6 +661,8 @@ class BusinessWorksheets:
                                 if member["id"] in reference_ids}
             cells = []
             for row in plan["rows"]:
+                historical_criteria = set(row.get("source_criteria", ()))
+                from_history = row.get("plan_key", "").startswith("history_")
                 for point in plan["points"]:
                     slot = self._key(sheet, identity, row, point).slot_id
                     members = grouped.get(slot, ())
@@ -628,12 +689,20 @@ class BusinessWorksheets:
                         continue
                     latest = current(members)
                     adopted_row = next((member for member in members if member["id"] == choices.get(slot)), None)
+                    record = StabilityRecord.model_validate_json((adopted_row or latest)["record_json"])
+                    if from_history and adopted_row:
+                        historical_criteria.update(standard.criterion_text for standard in record.standards
+                                                   if standard.criterion_text.strip())
+                    assessment = worksheet_assessment(record, row) if adopted_row else None
                     cells.append({
                         "row_id": row["id"], "point_id": point["id"], "slot_id": slot,
                         "display": result_value(latest, preserve_special_text=True).model_dump(mode="json"),
                         "adopted": result_value(adopted_row, preserve_special_text=True).model_dump(mode="json") if adopted_row else None,
-                        "raw": StabilityRecord.model_validate_json((adopted_row or latest)["record_json"]).result.raw_text,
+                        "raw": record.result.raw_text,
+                        **({"standard_assessment": assessment} if assessment else {}),
                     })
+                if historical_criteria:
+                    row["source_criteria"] = sorted(historical_criteria)
             lease = self._lease(conn, sheet_id)
             available_coa = {}
             if sheet["sample_id"]:
@@ -659,6 +728,28 @@ class BusinessWorksheets:
         if sheet["revision"] != request.revision:
             raise WorkflowError("worksheet_revision_changed", "工作表已保存新版本，请刷新并核对修改。", 409)
 
+    def edit_point_metadata(self, sheet_id, request, actor):
+        require(actor, Capability.CONFIRM_FACT)
+        with self.store.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            sheet = self._sheet(conn, sheet_id)
+            project = sheet["project"]
+            payload = {"worksheet_point_metadata": sheet_id, **request.model_dump(mode="json")}
+            prior = replay(conn, project, actor, request.idempotency_key, payload)
+            if prior is not None:
+                return prior
+            self._check_mutation(conn, sheet, request, actor)
+            plan = self._plan(conn, sheet)
+            point = next((point for point in plan["points"] if point["id"] == request.point_id), None)
+            if point is None:
+                raise WorkflowError("worksheet_point_scope", "请选择当前研究表的时间点。", 404)
+            point["planned_date"] = request.planned_date.isoformat()
+            point["signed_status"] = request.signed_status
+            plan["points"] = ordered_points(plan["points"])
+            response = self._write_plan(conn, sheet, plan, actor, "维护计划取样日期与签署文字", "worksheet_point_metadata")
+            remember(conn, project, actor, request.idempotency_key, payload, response)
+            return response
+
     def extend(self, sheet_id, request, actor):
         require(actor, Capability.CONFIRM_FACT)
         with self.store.connect() as conn:
@@ -666,6 +757,9 @@ class BusinessWorksheets:
             sheet = self._sheet(conn, sheet_id)
             project = sheet["project"]
             payload = {"worksheet_extend": sheet_id, **request.model_dump(mode="json")}
+            for point in payload["points"]:
+                if not point["signed_status"]:
+                    point.pop("signed_status")
             prior = replay(conn, project, actor, request.idempotency_key, payload)
             if prior is not None:
                 return prior
@@ -675,7 +769,7 @@ class BusinessWorksheets:
             points = add_points(plan["points"], request.points, rows, date.fromisoformat(sheet["start_date"]))
             self._register_slots(conn, sheet, StudyIdentity.model_validate_json(sheet["identity_json"]), rows.values(),
                                  points[len(plan["points"]):])
-            plan["points"] = points
+            plan["points"] = ordered_points(points)
             response = self._write_plan(conn, sheet, plan, actor, request.basis, "worksheet_extend")
             remember(conn, project, actor, request.idempotency_key, payload, response)
             return response
@@ -746,7 +840,7 @@ class BusinessWorksheets:
             sheet = self._sheet(conn, sheet_id)
             identity = StudyIdentity.model_validate_json(sheet["identity_json"])
             return [{**dict(sample), "compatible": sample_matches_study(sample, identity)} for sample in conn.execute(
-                "SELECT * FROM sample_entities WHERE project=? AND batch=? ORDER BY id",
+                "SELECT * FROM sample_entities WHERE project=? AND batch=? AND deleted_at IS NULL ORDER BY id",
                 (sheet["project"], identity.batch))]
 
     def link_sample(self, sheet_id, command, actor):
@@ -760,7 +854,7 @@ class BusinessWorksheets:
                 return prior
             self._check_mutation(conn, sheet, command, actor)
             identity = StudyIdentity.model_validate_json(sheet["identity_json"])
-            sample = conn.execute("SELECT * FROM sample_entities WHERE project=? AND id=?",
+            sample = conn.execute("SELECT * FROM sample_entities WHERE project=? AND id=? AND deleted_at IS NULL",
                                   (project, command.sample_id)).fetchone()
             if sample is None or not sample_matches_study(sample, identity):
                 raise WorkflowError("worksheet_sample_scope", "样品的项目、批号、类别、规格或用途与研究表不符。")
@@ -901,7 +995,7 @@ class BusinessWorksheets:
                 plan.setdefault("pending_release_references", {}).update(
                     self._pending_protocol_release(matrix, request.row_mapping, rows, new_points)
                 )
-                plan["points"] = points
+                plan["points"] = ordered_points(points)
                 plan["protocol_row_items"] = request.row_mapping
             plan["protocol_draft_id"] = request.protocol_draft_id
             plan["protocol_table"] = request.protocol_table
@@ -1007,6 +1101,112 @@ class BusinessWorksheets:
         self._check_standard_versions(conn, criteria)
         return criteria
 
+    def _archive_impact(self, conn, target, kind):
+        project, target_id = target["project"], target["id"]
+        sheets = [target] if kind == "worksheet" else conn.execute(
+            "SELECT * FROM business_worksheets WHERE sample_id=? AND deleted_at IS NULL ORDER BY id",
+            (target_id,),
+        ).fetchall()
+        sheet_ids = {sheet["id"] for sheet in sheets}
+        slots = {row["slot_id"] for sheet in sheets for row in conn.execute(
+            "SELECT slot_id FROM business_worksheet_slots WHERE sheet_id=?", (sheet["id"],))}
+        records = [version for version in versions(conn, project)
+                   if version["state"] in {"confirmed", "legacy"}
+                   and (version["slot_id"] in slots or (kind == "sample" and
+                        StabilityRecord.model_validate_json(version["record_json"]).key.sample_id == target_id))]
+        impact = {
+            "id": target_id, "kind": kind, "project_revision": project_row(conn, project)["revision"],
+            "worksheets": [{"id": sheet["id"], "name": sheet["name"], "revision": sheet["revision"]}
+                           for sheet in sheets],
+            "results": [{"id": version["id"],
+                         "value": StabilityRecord.model_validate_json(version["record_json"]).result.raw_text,
+                         "studies": self.result_versions._invalidation_studies(
+                             conn, project, version["slot_id"], version["id"])}
+                        for version in sorted(records, key=lambda entry: entry["id"])],
+        }
+        return sheet_ids, records, {**impact, "fingerprint": digest(impact)}
+
+    def archive_object(self, object_id, kind, actor, command=None):
+        require(actor, Capability.CONFIRM_FACT)
+        table = {"worksheet": "business_worksheets", "sample": "sample_entities"}[kind]
+        with (self.store.read() if command is None else self.store.connect()) as conn:
+            if command is not None:
+                conn.execute("BEGIN IMMEDIATE")
+            target = conn.execute(f"SELECT * FROM {table} WHERE id=?", (object_id,)).fetchone()
+            if target is None:
+                raise WorkflowError("not_found", "找不到要删除的对象。", 404)
+            project = target["project"]
+            if command is not None:
+                payload = {"archive": kind, "id": object_id, **command.model_dump(mode="json")}
+                prior = replay(conn, project, actor, command.idempotency_key, payload)
+                if prior is not None:
+                    return prior
+            if target["deleted_at"] is not None:
+                raise WorkflowError("not_found", "此对象已删除。", 404)
+            sheet_ids, records, impact = self._archive_impact(conn, target, kind)
+            if command is None:
+                return impact
+            if command.fingerprint != impact["fingerprint"]:
+                raise WorkflowError("archive_impact_changed", "删除影响已变化，请重新预览。", 409)
+            if any(self._lease(conn, sheet_id) for sheet_id in sheet_ids):
+                raise WorkflowError("worksheet_occupied", "请退出受影响研究表的编辑模式后重试。", 409)
+            affected = set(sheet_ids)
+            for version in records:
+                affected.update(study["id"] for study in self.result_versions.invalidate_in_transaction(
+                    conn, version, reason=command.basis, actor=actor))
+            for sheet_id in sorted(sheet_ids):
+                positions = [dict(row) for row in conn.execute(
+                    "SELECT row_id,point_id,slot_id FROM worksheet_result_positions WHERE sheet_id=? ORDER BY row_id,point_id",
+                    (sheet_id,))]
+                original = self._sheet(conn, sheet_id)
+                event(conn, project, sheet_id, "worksheet_archive_positions", actor, command.basis, {
+                    "identity": json.loads(original["identity_json"]), "positions": positions,
+                    "plan_version": original["plan_version"],
+                })
+                conn.execute("DELETE FROM worksheet_result_positions WHERE sheet_id=?", (sheet_id,))
+                conn.execute("DELETE FROM business_worksheet_slots WHERE sheet_id=?", (sheet_id,))
+                # Keep the identity fields readable while freeing the legacy unique key for a new plan.
+                conn.execute("""UPDATE business_worksheets
+                    SET deleted_at=CURRENT_TIMESTAMP, identity_json=json_set(identity_json,'$.archived_sheet_id',id)
+                    WHERE id=?""", (sheet_id,))
+            conn.executemany("UPDATE business_worksheets SET revision=revision+1 WHERE id=?",
+                             [(sheet_id,) for sheet_id in sorted(affected)])
+            if kind == "sample":
+                conn.execute("UPDATE sample_entities SET deleted_at=CURRENT_TIMESTAMP WHERE id=?", (object_id,))
+            event(conn, project, object_id, kind + "_archive", actor, command.basis, impact)
+            response = {"id": object_id, "project_revision": bump(conn, project),
+                        "invalidated_version_ids": [item["id"] for item in impact["results"]]}
+            remember(conn, project, actor, command.idempotency_key, payload, response)
+            return response
+
+    def _row_removal(self, conn, sheet, row_id):
+        plan = self._plan(conn, sheet)
+        row = next((item for item in plan["rows"] if item["id"] == row_id), None)
+        if row is None or len(plan["rows"]) <= 1:
+            raise WorkflowError("plan_item_scope", "请选择本表检项，且至少保留一个检项。")
+        project = sheet["project"]
+        identity = StudyIdentity.model_validate_json(sheet["identity_json"])
+        slots = sorted({self._key(sheet, identity, row, point).slot_id for point in plan["points"]})
+        records = [version for slot in slots for version in versions(conn, project, slot)
+                   if version["state"] in {"confirmed", "legacy"}]
+        impact = {
+            "sheet_revision": sheet["revision"], "project_revision": project_row(conn, project)["revision"],
+            "row_id": row_id, "label": row["label"],
+            "release_reference": plan.get("release_references", {}).get(row_id),
+            "events": [item for item in plan.get("events", []) if item.get("row_id") == row_id],
+            "results": [{"id": version["id"],
+                         "value": StabilityRecord.model_validate_json(version["record_json"]).result.raw_text,
+                         "studies": self.result_versions._invalidation_studies(
+                             conn, project, version["slot_id"], version["id"])}
+                        for version in records],
+        }
+        return plan, row, slots, records, {**impact, "fingerprint": digest(impact)}
+
+    def preview_remove_row(self, sheet_id, row_id, actor):
+        require(actor, Capability.CONFIRM_FACT)
+        with self.store.read() as conn:
+            return self._row_removal(conn, self._sheet(conn, sheet_id), row_id)[-1]
+
     def remove_row(self, sheet_id, request, actor):
         require(actor, Capability.CONFIRM_FACT)
         with self.store.connect() as conn:
@@ -1017,20 +1217,24 @@ class BusinessWorksheets:
             if (prior := replay(conn, project, actor, request.idempotency_key, payload)) is not None:
                 return prior
             self._check_mutation(conn, sheet, request, actor)
-            plan = self._plan(conn, sheet)
-            row = next((item for item in plan["rows"] if item["id"] == request.row_id), None)
-            if row is None or len(plan["rows"]) <= 1:
-                raise WorkflowError("plan_item_scope", "请选择本表检项，且至少保留一个检项。")
-            identity = StudyIdentity.model_validate_json(sheet["identity_json"])
-            slots = [self._key(sheet, identity, row, point).slot_id for point in plan["points"]]
-            if any(versions(conn, project, slot, include_invalidated=True) for slot in slots) or row["id"] in plan.get("release_references", {}):
-                raise WorkflowError("worksheet_row_has_results", "此检项已有检测记录或放行引用，不能移除。请保留历史并使用更正流程。", 409)
-            if any(item.get("row_id") == row["id"] for item in plan.get("events", [])):
-                raise WorkflowError("worksheet_row_has_events", "此检项已有研究事件，不能移除。", 409)
-            if any(item["row_id"] == row["id"] for item in plan.get("stopped_checks", [])):
-                raise WorkflowError("worksheet_row_has_events", "此检项已有停检记录，不能移除。", 409)
+            plan, row, slots, records, impact = self._row_removal(conn, sheet, request.row_id)
+            if ((request.fingerprint or records or impact["release_reference"] or impact["events"]
+                 or any(item["row_id"] == row["id"] for item in plan.get("stopped_checks", [])))
+                    and request.fingerprint != impact["fingerprint"]):
+                raise WorkflowError("worksheet_row_impact_changed", "请重新预览并确认移除检项的影响。", 409)
+            affected = set()
+            for version in records:
+                studies = self.result_versions.invalidate_in_transaction(
+                    conn, version, reason=request.basis, actor=actor, locked_sheet_id=sheet_id)
+                affected.update(study["id"] for study in studies if study["id"] != sheet_id)
+            conn.executemany("UPDATE business_worksheets SET revision=revision+1 WHERE id=?",
+                             [(item,) for item in sorted(affected)])
             plan["rows"] = [item for item in plan["rows"] if item["id"] != row["id"]]
             plan.get("pending_release_references", {}).pop(row["id"], None)
+            plan.get("release_references", {}).pop(row["id"], None)
+            for field in ("events", "stopped_checks"):
+                if field in plan:
+                    plan[field] = [item for item in plan[field] if item.get("row_id") != row["id"]]
             removed_key = row.get("plan_key", row["item_id"])
             for source_row, keys in plan.get("protocol_row_items", {}).items():
                 plan["protocol_row_items"][source_row] = [key for key in keys if key != removed_key]
@@ -1040,6 +1244,7 @@ class BusinessWorksheets:
                 conn.execute("DELETE FROM worksheet_result_positions WHERE sheet_id=? AND slot_id=?", (sheet_id, slot))
                 conn.execute("DELETE FROM business_worksheet_slots WHERE sheet_id=? AND slot_id=?", (sheet_id, slot))
             response = self._write_plan(conn, sheet, plan, actor, request.basis, "worksheet_remove_row")
+            response["invalidated_version_ids"] = [version["id"] for version in records]
             remember(conn, project, actor, request.idempotency_key, payload, response)
             return response
 
@@ -1160,7 +1365,61 @@ class BusinessWorksheets:
         with self.store.read() as conn:
             sheet = self._sheet(conn, sheet_id)
             row = next((item for item in self._plan(conn, sheet)["rows"] if item["id"] == row_id), None)
-            return self._coa_release_options(conn, sheet, row) if row else []
+            return [{**option, "fingerprint": digest(option)}
+                    for option in self._coa_release_options(conn, sheet, row)] if row else []
+
+    def copy_coa_to_zero(self, sheet_id, request, actor):
+        require(actor, Capability.CONFIRM_FACT)
+        with self.store.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            sheet = self._sheet(conn, sheet_id)
+            project = sheet["project"]
+            payload = {"worksheet_copy_coa": sheet_id, **request.model_dump(mode="json")}
+            prior = replay(conn, project, actor, request.idempotency_key, payload)
+            if prior is not None:
+                return prior
+            self._check_mutation(conn, sheet, request, actor)
+            plan = self._plan(conn, sheet)
+            row = next((item for item in plan["rows"] if item["id"] == request.row_id), None)
+            point = next((item for item in plan["points"] if item["unit"] == "M" and item["amount"] == 0
+                          and request.row_id in item["required_row_ids"]), None)
+            if row is None or point is None:
+                raise WorkflowError("worksheet_cell_scope", "请选择本表 0M 应检项目。")
+            matches = [option for option in self._coa_release_options(conn, sheet, row)
+                       if digest(option) == request.coa_fingerprint]
+            if len(matches) != 1:
+                raise WorkflowError("coa_source_changed", "放行结果已变化，请重新选择。", 409)
+            coa = matches[0]
+            identity = StudyIdentity.model_validate_json(sheet["identity_json"])
+            key = self._key(sheet, identity, row, point)
+            previous = adopted(conn, project, key.slot_id)
+            latest = current(versions(conn, project, key.slot_id))
+            if request.expected_version_id != (previous["id"] if previous else None):
+                raise WorkflowError("worksheet_result_changed", "0M 采用结果已变化，请重新核对。", 409)
+            try:
+                result = normalize_worksheet_result(coa["value"], row["unit"], row["result_type"])
+            except NeedsReview as exc:
+                raise WorkflowError(exc.code, str(exc)) from exc
+            if result.status == "blank":
+                raise WorkflowError("coa_blank", "不能复制空白放行结果。")
+            old = StabilityRecord.model_validate_json(previous["record_json"]) if previous else None
+            if request.intent == "keep" or (old and old.result == result):
+                response = {"id": sheet_id, "revision": sheet["revision"], "result_version_ids": []}
+            else:
+                ensure_worksheet_slot_unlocked(conn, key.slot_id, except_sheet_id=sheet_id)
+                record = StabilityRecord(key=key, result=result, standards=old.standards if old else ())
+                version_id = self.result_versions.record_worksheet_result(
+                    conn, record, actor=actor, previous=previous, current=latest, intent=request.intent,
+                    reason=request.basis.strip(), source={"kind": "coa_snapshot", "worksheet_id": sheet_id,
+                    "row_id": row["id"], "point_id": point["id"], "plan_version": sheet["plan_version"],
+                    "sample_id": sheet["sample_id"], "coa": coa, "raw_text": coa["value"], "unit": row["unit"]},
+                )
+                for name in ("release_references", "pending_release_references"):
+                    plan.get(name, {}).pop(row["id"], None)
+                response = self._write_plan(conn, sheet, plan, actor, request.basis, "worksheet_copy_coa")
+                response["result_version_ids"] = [version_id]
+            remember(conn, project, actor, request.idempotency_key, payload, response)
+            return response
 
     def set_release_reference(self, sheet_id, request, actor):
         require(actor, Capability.CONFIRM_FACT)
@@ -1249,6 +1508,8 @@ class BusinessWorksheets:
             points = {point["id"]: point for point in plan["points"]}
             changed_cells = set()
             version_ids = []
+            invalidated_ids = []
+            affected_sheets = set()
             for change in request.changes:
                 cell = (change.row_id, change.point_id)
                 row, point = rows.get(change.row_id), points.get(change.point_id)
@@ -1274,7 +1535,15 @@ class BusinessWorksheets:
                 except NeedsReview as exc:
                     raise WorkflowError(exc.code, f'{row["label"]} {point["label"]}：{exc}') from exc
                 if result.status == "blank":
-                    raise WorkflowError("worksheet_blank", "已有结果不能通过留空撤销。")
+                    if file_source is not None or change.intent != "correction" or previous is None:
+                        raise WorkflowError("worksheet_blank", "请选择当前采用结果后明确清空。")
+                    studies = self.result_versions.invalidate_in_transaction(
+                        conn, previous, reason=request.reason.strip() or "人工清空单元格",
+                        actor=actor, locked_sheet_id=sheet_id,
+                    )
+                    invalidated_ids.append(previous["id"])
+                    affected_sheets.update(study["id"] for study in studies if study["id"] != sheet_id)
+                    continue
                 standards = StabilityRecord.model_validate_json(previous["record_json"]).standards if previous else ()
                 record = StabilityRecord(key=key, result=result, standards=standards)
                 source = {"kind": "worksheet_entry", "worksheet_id": sheet_id,
@@ -1294,8 +1563,11 @@ class BusinessWorksheets:
                     raise WorkflowError("worksheet_layout_scope", "行高、列宽或表头合并超出支持范围。")
                 conn.execute("UPDATE business_worksheets SET layout_json=? WHERE id=?", (layout.model_dump_json(), sheet_id))
             conn.execute("UPDATE business_worksheets SET revision=revision+1 WHERE id=?", (sheet_id,))
+            conn.executemany("UPDATE business_worksheets SET revision=revision+1 WHERE id=?",
+                             [(item,) for item in sorted(affected_sheets)])
             event(conn, project, sheet_id, "worksheet_save", actor, request.reason,
-                  {"result_version_ids": version_ids, "previous_revision": sheet["revision"]})
+                  {"result_version_ids": version_ids, "invalidated_version_ids": invalidated_ids,
+                   "previous_revision": sheet["revision"]})
             response = {"id": sheet_id, "revision": sheet["revision"] + 1, "result_version_ids": version_ids,
                         "project_revision": bump(conn, project)}
             remember(conn, project, actor, request.idempotency_key, payload, response)

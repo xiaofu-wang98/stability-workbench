@@ -322,8 +322,12 @@ def commit(flow,upload_id,request,*,actor,_compat=False):
         for c in flow._preview(conn,upload,actor).candidates:
             if c.location.section == request.section and c.lifecycle == 'draft' and c.status == 'empty':
                 conn.execute("UPDATE workflow_candidates SET lifecycle='withdrawn',revision=revision+1 WHERE id=?",(c.id,))
+        from .business_worksheets import BusinessWorksheets
+        from .worksheet_seed import provision_from_results
+        sync = provision_from_results(conn, BusinessWorksheets(flow, service), project, ids, actor)
         result = SheetCommitResult(commit_id=uid('sheet_commit'),project=project,base_revision=bump(conn,project),
-            section=request.section,counts=view.counts,historical_count=view.historical_count,result_version_ids=tuple(ids))
+            section=request.section,counts=view.counts,historical_count=view.historical_count,
+            result_version_ids=tuple(ids), worksheet_sync=tuple(sync))
         event(conn,project,upload_id,'confirm_sheet',actor,request.reason,result.model_dump(mode='json'))
         remember(conn,project,actor,request.idempotency_key,payload,result.model_dump(mode='json'))
         return result

@@ -142,7 +142,7 @@ function save() {
       <label>上限 <input v-model="upper" type="number" step="any" :disabled="busy"></label>
       <span>两项留空会清除标准线。</span>
     </div>
-    <p>未产生检测记录或放行引用的检项可移除，系统保留旧计划。需保留检项时，可以仅停检选定的后续时间点。</p>
+    <p>移除检项前可预览受影响的结果和放行引用。确认后系统作废相关结果并保留旧计划。也可以只停检选定的后续时间点。</p>
     <details v-if="eligibleStopPoints.length">
       <summary>调整后续应检安排</summary>
       <label v-for="point in eligibleStopPoints" :key="point.id">
