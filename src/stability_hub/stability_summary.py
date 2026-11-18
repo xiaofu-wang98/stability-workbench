@@ -18,7 +18,7 @@ TITLE = "稳定性汇总表"
 TEMPLATE_VERSION = "stability-study-table-1"
 
 
-def freeze_worksheet_table(sheet, project_name, *, filled, invalidated_positions=None):
+def freeze_worksheet_table(sheet, project_name, *, filled, invalidated_positions=None, retain_source_items=False):
     identity = sheet["identity"]
     units = {point["unit"] for point in sheet["points"]}
     cells = {(cell["row_id"], cell["point_id"]): cell for cell in sheet["cells"]}
@@ -29,8 +29,11 @@ def freeze_worksheet_table(sheet, project_name, *, filled, invalidated_positions
                        *(standard["criterion"] for standard in row.get("standards", []))])))
         if not criteria:
             criteria = row.get("source_criteria", [])
-        label = "\n".join(filter(None, (row["label"], visible(row["method"]), visible(row["method_version"]),
-                                        basis, row["unit"])))
+        originals = row.get("source_test_item", []) if retain_source_items else []
+        normalized = "" if any(row["label"] in original for original in originals) else row["label"]
+        label_parts = filter(None, (*originals, normalized, visible(row["method"]),
+                                    visible(row["method_version"]), basis, row["unit"]))
+        label = "\n".join(dict.fromkeys(label_parts) if originals else label_parts)
         values, positions = [], []
         for point in sheet["points"]:
             cell = cells.get((row["id"], point["id"]), {})
@@ -207,7 +210,7 @@ def _write_block(sheet, summary, offset=0):
 
 
 def controlled_block(sheet, project_name):
-    summary = freeze_worksheet_table(sheet, project_name, filled=True)
+    summary = freeze_worksheet_table(sheet, project_name, filled=True, retain_source_items=True)
     summary.pop("contract")
     identity = StudyIdentity.model_validate(sheet["identity"])
     condition = identity.record_condition()
@@ -243,6 +246,10 @@ def controlled_block(sheet, project_name):
                                        item.get("reference"), item.get("description"), item.get("scan_id"))))
         if note:
             remark[column] = "\n".join(filter(None, (remark[column], note)))
+    for point_id, notes in sheet.get("source_events", {}).items():
+        if point_id in points:
+            column = points[point_id]
+            remark[column] = "\n".join(dict.fromkeys(filter(None, (remark[column], *notes))))
     summary["body"].append(remark)
     return summary
 

@@ -10,6 +10,7 @@ from typing import Literal
 
 from pydantic import Field
 
+from .business_notes import frozen_block_events
 from .identity_associations import adopted, adoption_choices, current, invalidation, versions
 from .identity_links import linked_config
 from .matrix_fields import selected_condition
@@ -25,8 +26,8 @@ LEASE_SECONDS = 90
 
 
 def adopted_scope(conn, project, batch):
-    return [(row['slot_id'], StabilityRecord.model_validate_json(value['record_json']))
-            for row, value in selected_rows(conn, project, ResultFilter(batch=batch)) if value]
+    return [(value, StabilityRecord.model_validate_json(value['record_json']))
+            for _, value in selected_rows(conn, project, ResultFilter(batch=batch)) if value]
 
 
 def scope_result_entries(entries, identity):
@@ -43,12 +44,23 @@ def historical_row_key(key):
     return 'history_' + digest([key.item, key.method, key.method_version, key.reporting_basis])
 
 
-def historical_rows(records):
+def historical_raw_sources(version):
+    for source in json.loads(version["source_json"]):
+        if raw := source.get("raw_json"):
+            yield raw
+
+
+def original_test_items(sources):
+    return (text for raw in sources if (text := raw.get("fields", {}).get("test_item", "").strip()))
+
+
+def historical_rows(entries):
     grouped = {}
-    for record in records:
-        grouped.setdefault(historical_row_key(record.key), []).append(record)
+    for version, record in entries:
+        grouped.setdefault(historical_row_key(record.key), []).append((version, record))
     rows = {}
-    for identifier, group in grouped.items():
+    for identifier, entries in grouped.items():
+        group = [record for _, record in entries]
         key = group[0].key
         units = {record.result.unit for record in group if record.result.unit}
         if len(units) > 1:
@@ -62,6 +74,10 @@ def historical_rows(records):
                            if standard.criterion_text.strip()})
         if criteria:
             rows[identifier]["source_criteria"] = criteria
+        labels = list(dict.fromkeys(text for version, _ in entries
+                                    for text in original_test_items(historical_raw_sources(version))))
+        if labels:
+            rows[identifier]["source_test_item"] = labels
     return rows
 
 
@@ -489,11 +505,11 @@ class BusinessWorksheets:
                 if source or request.copy_source_id:
                     raise WorkflowError("worksheet_seed_scope", "请选择一个研究表来源。")
                 records = adopted_scope(conn, project, request.identity.batch)
-                selected = next((record for slot, record in records if slot == request.seed_slot_id), None)
+                selected = next((record for version, record in records if version["slot_id"] == request.seed_slot_id), None)
                 if selected is None or (selected.key.sample_id and selected.key.sample_id != request.sample_id):
                     raise WorkflowError("worksheet_seed_scope", "所选样品与采用结果不符。")
-                scoped = scope_records(records, request.identity.model_copy(update={"sample_id": selected.key.sample_id}))
-                if not any(slot == request.seed_slot_id and record in scoped for slot, record in records):
+                scoped = scope_result_entries(records, request.identity.model_copy(update={"sample_id": selected.key.sample_id}))
+                if not any(version["slot_id"] == request.seed_slot_id for version, _ in scoped):
                     raise WorkflowError("worksheet_seed_scope", "所填样品或研究范围与采用结果不符。")
                 source_rows = historical_rows(scoped)
             if request.copy_source_id:
@@ -686,7 +702,9 @@ class BusinessWorksheets:
             release_versions = {member["id"]: member for members in grouped.values() for member in members
                                 if member["id"] in reference_ids}
             cells = []
+            source_events = {}
             for row in plan["rows"]:
+                original_labels = {}
                 historical_criteria = set(row.get("source_criteria", ()))
                 from_history = row.get("plan_key", "").startswith("history_")
                 for point in plan["points"]:
@@ -716,9 +734,15 @@ class BusinessWorksheets:
                     latest = current(members)
                     adopted_row = next((member for member in members if member["id"] == choices.get(slot)), None)
                     record = StabilityRecord.model_validate_json((adopted_row or latest)["record_json"])
-                    if from_history and adopted_row:
-                        historical_criteria.update(standard.criterion_text for standard in record.standards
-                                                   if standard.criterion_text.strip())
+                    if adopted_row:
+                        sources = list(historical_raw_sources(adopted_row))
+                        if from_history:
+                            historical_criteria.update(standard.criterion_text for standard in record.standards
+                                                       if standard.criterion_text.strip())
+                            original_labels.update(dict.fromkeys(original_test_items(sources)))
+                        notes = [line for raw in sources for line in frozen_block_events(raw, point)]
+                        if notes:
+                            source_events.setdefault(point["id"], {}).update(dict.fromkeys(notes))
                     assessment = worksheet_assessment(record, row) if adopted_row else None
                     cells.append({
                         "row_id": row["id"], "point_id": point["id"], "slot_id": slot,
@@ -729,6 +753,10 @@ class BusinessWorksheets:
                     })
                 if historical_criteria:
                     row["source_criteria"] = sorted(historical_criteria)
+                if original_labels:
+                    row["source_test_item"] = list(original_labels)
+                elif from_history:
+                    row.pop("source_test_item", None)
             lease = self._lease(conn, sheet_id)
             available_coa = {}
             if sheet["sample_id"]:
@@ -743,6 +771,7 @@ class BusinessWorksheets:
                 "plan_version": sheet["plan_version"], "start_date": sheet["start_date"], "identity": identity.model_dump(),
                 **plan, "layout": json.loads(sheet["layout_json"]), "cells": cells,
                 "selection_id": digest({"revision": sheet["revision"], "cells": cells}),
+                **({"source_events": {point_id: list(notes) for point_id, notes in source_events.items()}} if source_events else {}),
                 "available_coa_references": available_coa,
                 "invalidated_release_rows": invalidated_references,
                 "editable": Capability.CONFIRM_FACT in actor.capabilities,
@@ -840,13 +869,13 @@ class BusinessWorksheets:
 
     def _historical_additions(self, conn, sheet, plan):
         identity = StudyIdentity.model_validate_json(sheet["identity_json"])
-        records = scope_records(adopted_scope(conn, sheet["project"], identity.batch), identity)
+        records = scope_result_entries(adopted_scope(conn, sheet["project"], identity.batch), identity)
         existing = {(row["item_id"], row["method"], row["method_version"],
                      row.get("reporting_basis", identity.reporting_basis)) for row in plan["rows"]}
         candidates = historical_rows(records)
         point_labels = {point["label"] for point in plan["points"]}
         matches = {}
-        for record in records:
+        for _, record in records:
             if record.key.time_label in point_labels:
                 matches.setdefault(historical_row_key(record.key), set()).add(record.key.time_label)
         return identity, [

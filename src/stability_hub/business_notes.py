@@ -66,6 +66,36 @@ def time_references(text):
     return result, unresolved
 
 
+def frozen_block_events(raw, point):
+    """Read only the specific remark lines the matrix parser assigned to this result."""
+    marker = '表后说明（未自动修改结果）：'
+    comment = raw.get('comment', '')
+    if marker not in comment:
+        return
+    from openpyxl.utils import get_column_letter
+
+    fields, evidence = raw.get('fields', {}), raw.get('evidence', {})
+    location = raw.get('location', {})
+    scoped = {}
+    for key, value in fields.items():
+        source = evidence.get(key, {})
+        if (key.startswith('block_note_') and source.get('section') == location.get('section')
+                and source.get('row', 0) > location.get('row', 0) and source.get('column', 0) > 0):
+            coordinate = f"{get_column_letter(source['column'])}{source['row']}"
+            scoped.setdefault(coordinate, set()).update(line.strip() for line in value.splitlines())
+
+    for entry in comment.split(marker, 1)[1].splitlines():
+        coordinate, _, line = entry.partition(':')
+        line = line.strip()
+        if line not in scoped.get(coordinate.strip(), ()):
+            continue
+        if not re.search(r'(?<![A-Za-z0-9])(?:AE|AR|OOS)(?![A-Za-z0-9])', review_text(line), re.I):
+            continue
+        times, uncertain = time_references(line)
+        if not uncertain and (not times or (point['amount'], point['unit']) in times):
+            yield line
+
+
 def note_scope(line, observations):
     """Return source indexes only where the written restrictions can be established."""
     from .matrix_fields import method_text, month_token, purity_subresults, item_text

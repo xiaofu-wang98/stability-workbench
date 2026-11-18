@@ -11,13 +11,11 @@ from unicodedata import normalize
 
 from openpyxl import load_workbook
 
-from .business_worksheets import CreateWorksheet, StudyIdentity, historical_row_key, historical_rows, scope_result_entries
+from .business_worksheets import CreateWorksheet, StudyIdentity, adopted_scope, historical_row_key, historical_rows, scope_result_entries
 from .matrix_fields import timepoint_token
 from .models import ProjectConfig, StabilityRecord, digest
 from .specification_preview import matching_standards, protocol_numbers, specification_material_scope, unambiguous_standard_sources
-from .result_queries import selected_rows
 from .workflow_common import WorkflowError, project_row
-from .workflow_contracts import ResultFilter
 from .xlsx_matrix import parse_matrix_sheet, text
 
 
@@ -58,11 +56,6 @@ HEADER_FIELDS = {
     "稳定性试验箱/温控设备名称和编号": "equipment",
     "稳定性开展地点": "location",
 }
-
-
-def historical_results(conn, project, batch):
-    return [(value, StabilityRecord.model_validate_json(value["record_json"]))
-            for _, value in selected_rows(conn, project, ResultFilter(batch=batch)) if value]
 
 
 def historical_blocks(conn, results, stack):
@@ -211,7 +204,7 @@ def metadata_preview(header):
 
 
 def worksheet_metadata_preview(conn, project, identity):
-    results = historical_results(conn, project, identity.batch)
+    results = adopted_scope(conn, project, identity.batch)
     return metadata_preview(historical_header(conn, scope_result_entries(results, identity)))
 
 
@@ -306,7 +299,7 @@ def plan_seed(conn, worksheets, project, actor, *, source, batch, slot_id, sourc
     if source == "blank":
         return plan
     if source == "results":
-        results = historical_results(conn, project, batch)
+        results = adopted_scope(conn, project, batch)
         key = next((record.key for version, record in results if version["slot_id"] == slot_id and record.key.study != "release"), None)
         if key is None:
             raise WorkflowError("worksheet_seed_missing", "找不到已采用的稳定性结果。", 404)
@@ -321,7 +314,7 @@ def plan_seed(conn, worksheets, project, actor, *, source, batch, slot_id, sourc
         for label in axis:
             points.setdefault(label, set())
         # Preserve complete historical identities; aliases require explicit review.
-        items_out = [{"id": key, **row} for key, row in historical_rows(records).items()]
+        items_out = [{"id": key, **row} for key, row in historical_rows(results).items()]
 
         return {**plan, "identity": identity,
                 "items": items_out,

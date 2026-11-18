@@ -1,6 +1,7 @@
 """Browser acceptance for creating a study without source files."""
 import os
 import json
+import re
 import hashlib
 import socket
 import threading
@@ -43,7 +44,10 @@ def main():
                 page.on('pageerror', lambda error: errors.append(str(error)))
                 page.goto(url)
                 page.get_by_role('link', name='新建研究表').click()
-                page.get_by_label('项目编号').fill('EVAL-NEW')
+                project_form = page.locator('details').filter(has=page.get_by_text('新建项目', exact=True)).filter(has=page.locator('input[name=project]'))
+                if not project_form.evaluate('(element) => element.open'):
+                    project_form.locator('summary').click()
+                project_form.get_by_label('项目编号').fill('EVAL-NEW')
                 page.get_by_label('项目名称').fill('验收项目')
                 page.get_by_role('button', name='创建项目').click()
                 page.get_by_text('添加项目检项', exact=True).click()
@@ -68,7 +72,7 @@ def main():
                 expect(page.get_by_label('工作表名称', exact=True)).to_have_value('待补全示例')
                 expect(page.get_by_label('批号', exact=True)).to_have_value('')
                 expect(page.get_by_text('纯度 · SEC', exact=True)).to_be_visible()
-                fields = {'工作表名称': '长期研究', '批号': 'B01', '规格': '1mg',
+                fields = {'工作表名称': '长期研究', '批号': 'B01', '规格': '1mg', '材料阶段': '裸抗',
                           '方案编号或内部研究名称': 'P1', '条件': '5℃', '开始日期': '2026-01-31',
                           '时间点': '0M, 3M'}
                 for label, value in fields.items():
@@ -197,6 +201,7 @@ def main():
                 page.get_by_label('工作表名称', exact=True).fill('新批次结构副本')
                 page.get_by_label('批号', exact=True).fill('B-COPY')
                 page.get_by_label('开始日期', exact=True).fill('2026-02-28')
+                page.get_by_label('材料阶段', exact=True).fill('裸抗')
                 page.get_by_role('button', name='创建研究表').click()
                 expect(page.get_by_role('heading', name='新批次结构副本')).to_be_visible()
                 expect(page.get_by_role('link', name='查看结构来源', exact=False)).to_be_visible()
@@ -204,15 +209,28 @@ def main():
                 expect(page.get_by_role('cell', name='不要求')).to_be_visible()
                 sheet_id = page.url.rsplit('/', 1)[-1]
                 assert context.request.get(url + '/api/v1/worksheets/' + sheet_id).json()['cells'] == []
+                def receive_candidates():
+                    receive = page.get_by_role('button', name='条候选供核对', exact=False)
+                    expect(receive).to_be_visible()
+                    receive.click()
+                    expect(receive).to_have_count(0)
+
                 book = Workbook()
                 book.active.title = 'Results'
                 book.active.append(['Test item', 'Time point', 'Result', 'Unit', 'Method'])
                 book.active.append(['纯度', '0M', 97.2, '%', 'SEC'])
+                sample = context.request.post(url + '/api/v1/projects/EVAL-NEW/samples', data={
+                    'batch': 'B02', 'sample_type': 'DS', 'presentation': '1mg', 'material_stage': '裸抗', 'purpose': '研究',
+                })
+                assert sample.ok, sample.text()
+                b02_intake = url + '/workbench/#/import?sample=' + sample.json()['id']
                 source = Path(temp) / 'EVAL-NEW.xlsx'
                 book.save(source)
                 book.close()
-                page.get_by_role('link', name='导入文件', exact=True).click()
+                page.goto(b02_intake)
+                page.reload()
                 page.get_by_label('选择来源文件 Excel 或 Word').set_input_files(source)
+                page.get_by_label("文件用途").select_option("stability_source")
                 page.get_by_text('补充原件未注明的身份').click()
                 for label, value in {'批号': 'B02', '规格': '1mg', '方案编号': 'P1', '条件': '5℃'}.items():
                     page.get_by_label(label, exact=True).fill(value)
@@ -222,8 +240,9 @@ def main():
                 page.locator('.n-base-select-option').filter(has_text='EVAL-NEW · 验收项目').click()
                 page.get_by_role('button', name='解析并核对').click()
                 expect(page.get_by_role('cell', name='B02')).to_be_visible(timeout=15000)
+                receive_candidates()
                 page.get_by_role('button', name='核对无误，写入本工作表').click()
-                expect(page.get_by_role('status')).to_have_text('已写入结果。')
+                expect(page.get_by_text('此工作表已写入。', exact=True)).to_be_visible()
                 result = context.request.get(url + '/api/v1/projects/EVAL-NEW/result-display?batch=B02')
                 assert result.ok and result.json()['total'] == 1, result.text()
                 old_cells = context.request.get(url + '/api/v1/projects/EVAL-NEW/result-cells?batch=B02')
@@ -247,20 +266,19 @@ def main():
                 page.get_by_label('选择来源文件 Excel 或 Word').set_input_files(revised)
                 page.get_by_role('button', name='解析并核对').click()
                 expect(page.get_by_role('cell', name='B02')).to_be_visible()
-                page.get_by_role('button', name='核对无误，写入本工作表').click()
-                expect(page.get_by_role('status')).to_contain_text('已保留来源')
+                receive_candidates()
                 page.get_by_role('button', name='处理变动').click()
                 page.get_by_label('处理方式').select_option('correction')
                 page.get_by_label('核对依据').fill('核对新版原始记录后更正')
                 page.get_by_role('button', name='保存并核对选择').click()
                 expect(page.get_by_role('status')).to_contain_text('已记录处理选择')
                 page.get_by_role('button', name='核对无误，写入本工作表').click()
-                expect(page.get_by_role('status')).to_have_text('已写入结果。')
+                expect(page.get_by_text('此工作表已写入。', exact=True)).to_be_visible()
                 page.get_by_role('link', name='打开项目数据').click()
                 page.get_by_placeholder('输入批号筛选').fill('B02')
                 page.get_by_role('button', name='按批号查看').click()
                 expect(page.get_by_role('status')).to_contain_text('共 1 条结果')
-                expect(page.get_by_role('cell', name='97.3%', exact=True)).to_be_visible()
+                expect(page.get_by_role('cell', name='97.3% 留痕作废')).to_be_visible()
                 controls = page.locator('.result-controls')
                 controls.get_by_label('考察类型').select_option('release')
                 controls.get_by_role('button', name='按批号查看').click()
@@ -312,18 +330,22 @@ def main():
                 assert any('97.3' in cell.text for table in structured.tables for row in table.rows for cell in row.cells)
                 compare_panel = page.locator('.delivery-comparison')
                 compare_panel.get_by_text('比较 Word 报告结果', exact=True).click()
-                structured_option = compare_panel.get_by_label('基准报告').locator('option').filter(has_text='草稿')
-                compare_panel.get_by_label('基准报告').select_option(value=structured_option.get_attribute('value'))
-                general_option = compare_panel.get_by_label('对比报告').locator('option').filter(has_text='EVAL-NEW', has_not_text='更正前')
-                compare_panel.get_by_label('对比报告').select_option(value=general_option.get_attribute('value'))
+                def select_report(label, text, *, exclude=None):
+                    compare_panel.locator('label').filter(has_text=label).locator('.n-base-selection').click()
+                    options = page.locator('.n-base-select-option:visible').filter(has_text=text)
+                    if exclude:
+                        options = options.filter(has_not_text=exclude)
+                    options.last.click()
+
+                select_report('基准报告', '草稿')
+                select_report('对比报告', 'EVAL-NEW', exclude=re.compile('更正前|草稿'))
                 compare_panel.get_by_role('button', name='比较结果').click()
                 expect(compare_panel.get_by_role('status')).to_contain_text('纳入范围 4 条 · 移出范围 0 条 · 采用版本变化 0 条')
                 differences = compare_panel.get_by_role('table', name='Word 报告结果差异')
                 expect(differences.get_by_role('cell', name='未纳入', exact=True)).to_have_count(4)
                 expect(differences.get_by_role('cell', name='B01', exact=True)).to_have_count(4)
-                new_report_id = compare_panel.get_by_label('基准报告').input_value()
-                compare_panel.get_by_label('基准报告').select_option(value=old_report_id)
-                compare_panel.get_by_label('对比报告').select_option(value=new_report_id)
+                select_report('基准报告', '更正前')
+                select_report('对比报告', '草稿')
                 compare_panel.get_by_role('button', name='比较结果').click()
                 expect(compare_panel.get_by_role('status')).to_contain_text('纳入范围 0 条 · 移出范围 0 条 · 采用版本变化 1 条')
                 expect(differences.locator('tbody td').nth(5)).to_have_text('97.2')
@@ -400,7 +422,7 @@ def main():
                 page.get_by_role('link', name='打开质量标准库').click()
                 page.get_by_role('button', name='standards.pdf').click()
                 expect(page.get_by_role('cell', name='PDF 第 1 页 · 人工录入条款 1')).to_be_visible()
-                expect(page.get_by_role('cell', name='测试条款')).to_be_visible()
+                expect(page.get_by_role('cell', name='测试条款', exact=True)).to_be_visible()
                 manual_doc = Document()
                 manual_doc.add_paragraph('长期考察，按方案正文在 0M 和 3M 检测纯度。')
                 manual_file = Path(temp) / '正文方案.docx'
@@ -416,10 +438,11 @@ def main():
                 page.locator('[aria-label="应检项目"]').click()
                 page.locator('.n-base-select-option').filter(has_text='纯度 · SEC').click()
                 page.keyboard.press('Escape')
+                page.get_by_text('研究资料 · 正式建表前补齐', exact=True).click()
                 for label, value in {**fields, '工作表名称': '正文方案手工表', '批号': 'B-MANUAL'}.items():
                     page.get_by_label(label, exact=True).fill(value)
                 page.get_by_label('材料类别').select_option('DS')
-                page.get_by_label('考察类型').select_option('long_term')
+                page.get_by_role('radio', name='长期', exact=True).check()
                 page.get_by_role('button', name='创建研究表').click()
                 expect(page.get_by_role('heading', name='正文方案手工表')).to_be_visible()
                 protocol_url = page.get_by_role('link', name='下载原方案', exact=True).get_attribute('href')
@@ -438,7 +461,8 @@ def main():
                 page.get_by_role('link', name='按结果建研究表').click()
                 expect(page.get_by_label('批号', exact=True)).to_have_value('B02')
                 expect(page.get_by_label('条件', exact=True)).to_have_value('5℃')
-                expect(page.get_by_label('来源时间点 0M')).to_have_value('0M')
+                expect(page.get_by_label('时间点 1', exact=True)).to_have_value('0M')
+                page.get_by_text('研究资料 · 正式建表前补齐', exact=True).click()
                 page.get_by_label('工作表名称', exact=True).fill('从已有结果建立')
                 page.get_by_label('开始日期').fill('2026-01-31')
                 page.get_by_role('button', name='创建研究表').click()
@@ -463,8 +487,10 @@ def main():
                 book.close()
                 with app.state.workflow.store.connect() as conn:
                     version_count = conn.execute('SELECT count(*) FROM workflow_versions').fetchone()[0]
-                page.get_by_role('link', name='导入文件', exact=True).click()
+                page.goto(b02_intake)
+                page.reload()
                 page.get_by_label('选择来源文件 Excel 或 Word').set_input_files(repeat_source)
+                page.get_by_label("文件用途").select_option("stability_source")
                 page.get_by_text('补充原件未注明的身份').click()
                 for label, value in {'批号': 'B02', '规格': '1mg', '方案编号': 'P1', '条件': '5℃'}.items():
                     page.get_by_label(label, exact=True).fill(value)
@@ -473,14 +499,15 @@ def main():
                 page.locator('.import-panel .n-base-selection').click()
                 page.locator('.n-base-select-option').filter(has_text='EVAL-NEW · 验收项目').click()
                 page.get_by_role('button', name='解析并核对').click()
+                receive_candidates()
                 page.get_by_role('button', name='核对无误，写入本工作表').click()
-                expect(page.get_by_role('status')).to_have_text('已写入结果。')
+                expect(page.get_by_text('此工作表已写入。', exact=True)).to_be_visible()
                 with app.state.workflow.store.connect() as conn:
                     upload_count = conn.execute('SELECT count(*) FROM workflow_uploads').fetchone()[0]
                 page.get_by_role('button', name='返回导入列表').click()
                 page.get_by_label('选择来源文件 Excel 或 Word').set_input_files(repeat_source)
                 page.get_by_role('button', name='解析并核对').click()
-                expect(page.get_by_role('status')).to_have_text('该原件已导入，已打开原有导入记录。请查看下方核对状态。')
+                expect(page.get_by_role('status')).to_have_text('该原件已归档，已打开原有导入记录。')
                 expect(page.get_by_role('button', name='核对无误，写入本工作表')).to_be_disabled()
                 page.get_by_role('link', name='打开研究表 从已有结果建立').click()
                 expect(page.get_by_role('heading', name='从已有结果建立')).to_be_visible()
@@ -519,7 +546,9 @@ def main():
                 page.get_by_role('button', name='增加计划时间点').click()
                 page.get_by_label('新增时间点').fill('18M')
                 page.locator('.extra-form .n-base-selection').click()
-                page.get_by_text('纯度', exact=True).click()
+                options = page.locator('.n-base-select-option:visible')
+                expect(options).to_have_count(1)
+                options.click()
                 page.get_by_label('计划变更依据').fill('18M 计划补充验收')
                 page.get_by_role('button', name='保存计划').click()
                 expect(page.get_by_role('status')).to_have_text('已保存新计划版本。')
@@ -532,8 +561,10 @@ def main():
                 book.active['C2'] = 96.8
                 book.save(follow_up)
                 book.close()
-                page.get_by_role('link', name='导入文件', exact=True).click()
+                page.goto(b02_intake)
+                page.reload()
                 page.get_by_label('选择来源文件 Excel 或 Word').set_input_files(follow_up)
+                page.get_by_label("文件用途").select_option("stability_source")
                 page.get_by_text('补充原件未注明的身份').click()
                 for label, value in {'批号': 'B02', '规格': '1mg', '方案编号': 'P1', '条件': '5℃'}.items():
                     page.get_by_label(label, exact=True).fill(value)
@@ -542,6 +573,7 @@ def main():
                 page.locator('.import-panel .n-base-selection').click()
                 page.locator('.n-base-select-option').filter(has_text='EVAL-NEW · 验收项目').click()
                 page.get_by_role('button', name='解析并核对').click()
+                receive_candidates()
                 page.get_by_role('button', name='核对无误，写入本工作表').click()
                 page.get_by_role('link', name='打开研究表 从已有结果建立').click()
                 expect(page).to_have_url(b02_worksheet_url)
@@ -592,25 +624,25 @@ def main():
                 standard_path = Path(temp) / 'acceptance-standard.docx'
                 standard.save(standard_path)
                 page.goto(url + '/workbench/#/import')
-                expect(page.get_by_role('status')).to_contain_text('第一步')
+                expect(page.get_by_role('heading', name='导入文件', exact=True).last).to_be_visible()
                 page.get_by_role('link', name='质量标准 Word：导入、查看或用于建表').click()
                 page.get_by_label('选择 Word 标准').set_input_files(standard_path)
                 expect(page.get_by_role('status')).to_contain_text('识别到 2 条标准')
-                page.get_by_role('link', name='在 IP281 通用表中引用此标准').click()
+                page.get_by_role('link', name='使用此标准新建研究表').click()
                 page.get_by_label('项目', exact=True).click()
                 page.locator('.n-base-select-option').filter(has_text='EVAL-OTHER').click()
-                expect(page.get_by_role('heading', name='为 IP281 通用表选择标准条款')).to_be_visible()
+                expect(page.get_by_role('heading', name='引用质量标准条款')).to_be_visible()
                 page.get_by_label('引用条款 1:2', exact=True).check()
                 page.get_by_label('引用条款 1:3', exact=True).check()
                 page.get_by_role('button', name='将所选条款加入研究表').click()
-                expect(page.locator('.criterion-text').filter(has_text='≥90.00%')).to_be_visible()
-                expect(page.locator('.criterion-text').filter(has_text='≤10.00%')).to_be_visible()
+                expect(page.locator('div.criterion-text').filter(has_text='≥90.00%')).to_be_visible()
+                expect(page.locator('div.criterion-text').filter(has_text='≤10.00%')).to_be_visible()
                 page.get_by_role('button', name='保存草稿', exact=True).click()
                 expect(page.get_by_role('status')).to_contain_text('待补全计划已保存')
                 page.get_by_role('link', name='重新打开已保存版本').click()
                 page.reload()
-                expect(page.locator('.criterion-text').filter(has_text='≥90.00%')).to_be_visible()
-                for label, value in {'批号': 'STD-B01', '规格': '1mg', '开始日期': '2026-01-01',
+                expect(page.locator('div.criterion-text').filter(has_text='≥90.00%')).to_be_visible()
+                for label, value in {'批号': 'STD-B01', '规格': '1mg', '材料阶段': '裸抗', '开始日期': '2026-01-01',
                                      '方案编号或内部研究名称': 'STD-P1', '条件': '5℃'}.items():
                     page.get_by_label(label, exact=True).fill(value)
                 page.get_by_label('材料类别').select_option('DS')
