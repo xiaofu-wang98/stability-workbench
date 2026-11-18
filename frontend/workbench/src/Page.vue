@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { NAlert, NButton, NInput, NSelect, NSpin } from 'naive-ui';
-import { api, archiveStudyObject, type Project, type WorksheetSummary, type Worksheet } from './api';
+import { NAlert, NButton, NCard, NInput, NSelect, NSpace, NSpin, NTag } from 'naive-ui';
+import { api, archiveStudyObject, triggerDownload, type Project, type SampleEntry, type WorksheetSummary, type Worksheet } from './api';
 import StudyTemplateHeader from './StudyTemplateHeader.vue';
 import StudyWorkbook from './StudyWorkbook.vue';
 import HistoricalRows from './HistoricalRows.vue';
@@ -22,6 +22,7 @@ const page = computed(() => route.path.split('/')[1] || 'home');
 const project = computed(() => String(route.params.project || ''));
 const projects = ref<Project[]>([]);
 const sheets = ref<WorksheetSummary[]>([]);
+const samples = ref<SampleEntry[]>([]);
 const worksheetDrafts = ref<{ id: string; name: string; created_at: string; protocol_draft: string; protocol_table: string; copy_source: string }[]>([]);
 const sheet = ref<Worksheet>();
 const editingSheet = ref(false);
@@ -51,11 +52,33 @@ const filtered = computed(() => projects.value.filter(p =>
 const filteredSheets = computed(() => sheets.value.filter(item =>
   [item.name, item.batch, item.condition].join(' ').toLowerCase().includes(sheetSearch.value.trim().toLowerCase())));
 const cells = computed(() => new Map(sheet.value?.cells.map(c => [c.row_id + ':' + c.point_id, c])));
-const titles: Record<string, string> = { home: '工作台', new: '新建研究表', projects: '项目数据', worksheets: '研究工作表', import: '导入文件', specifications: '质量标准', scans: '扫描 PDF', trends: '趋势与比较', deliveries: '生成与历史' };
+const titles: Record<string, string> = { home: '工作台', new: '新建研究表', projects: '项目数据', worksheets: '研究工作表', import: '导入文件', specifications: '质量标准与 COA', scans: '扫描 PDF', trends: '趋势与比较', deliveries: '生成与历史' };
 const actions = [
   ['/import', '导入文件'], ['/new', '新建研究表'],
   ['/projects', '查看项目数据'], ['/trends', '趋势与导出'],
 ];
+
+const sampleWorksheetsMap = computed(() => {
+  const map = new Map<string, WorksheetSummary[]>();
+  for (const s of samples.value) {
+    map.set(s.id, []);
+  }
+  const unlinked: WorksheetSummary[] = [];
+  for (const item of sheets.value) {
+    if (item.sample_id && map.has(item.sample_id)) {
+      map.get(item.sample_id)!.push(item);
+    } else {
+      const found = samples.value.find(s => s.batch === item.batch);
+      if (found && map.has(found.id)) {
+        map.get(found.id)!.push(item);
+      } else {
+        unlinked.push(item);
+      }
+    }
+  }
+  return { map, unlinked };
+});
+
 watch(() => route.fullPath, async (_, __, onCleanup) => {
   const controller = new AbortController();
   onCleanup(() => controller.abort());
@@ -65,15 +88,21 @@ watch(() => route.fullPath, async (_, __, onCleanup) => {
   sheet.value = undefined;
   editingSheet.value = false;
   sheets.value = [];
+  samples.value = [];
   worksheetDrafts.value = [];
   download.value = '';
   try {
     projects.value = await api<Project[]>('/projects', init);
     if (project.value) {
       const base = '/projects/' + encodeURIComponent(project.value);
-      [sheets.value, worksheetDrafts.value] = await Promise.all([
-        api<WorksheetSummary[]>(base + '/worksheets', init), api<typeof worksheetDrafts.value>(base + '/worksheet-drafts', init),
+      const [sheetsData, draftsData, samplesData] = await Promise.all([
+        api<WorksheetSummary[]>(base + '/worksheets', init),
+        api<typeof worksheetDrafts.value>(base + '/worksheet-drafts', init),
+        api<SampleEntry[]>(base + '/samples', init).catch(() => [] as SampleEntry[]),
       ]);
+      sheets.value = sheetsData;
+      worksheetDrafts.value = draftsData;
+      samples.value = samplesData;
     }
     if (route.params.sheet) sheet.value = await api('/worksheets/' + encodeURIComponent(String(route.params.sheet)), init);
   } catch (e) {
@@ -92,7 +121,10 @@ async function confirmation() {
   try {
     const query = new URLSearchParams({ revision: String(current.revision), selection_id: current.selection_id });
     const result = await api<{download_url: string}>('/worksheets/' + encodeURIComponent(current.id) + '/confirmation?' + query, { method: 'POST' });
-    if (sheet.value === current) download.value = result.download_url;
+    if (sheet.value === current) {
+      download.value = result.download_url;
+      triggerDownload(result.download_url);
+    }
   } catch (e) {
     error.value = (e as Error).message;
   } finally {
@@ -121,7 +153,7 @@ async function refreshSheet() {
   <div v-else>
     <NewWorksheet v-if="page === 'new'" :key="route.fullPath" :projects="projects" />
     <div v-if="page === 'home'" class="actions">
-      <RouterLink v-for="[path, label] in actions" :key="path" :to="path">{{ label }} <span aria-hidden="true">↗</span></RouterLink>
+      <RouterLink v-for="[path, label] in actions" :key="path" :to="path" :aria-label="label === '新建研究表' ? '创建新研究表' : undefined">{{ label }} <span aria-hidden="true">↗</span></RouterLink>
     </div>
     <section v-if="page === 'home' || (page === 'projects' && !project)" class="panel">
       <h2>项目目录</h2>
@@ -135,10 +167,88 @@ async function refreshSheet() {
       <p v-if="!filtered.length" class="muted">{{ projects.length ? '没有匹配项目。' : '当前数据目录还没有项目。' }}</p>
     </section>
     <section v-if="page === 'projects' && project" class="panel">
-      <h2>研究工作表</h2>
+      <div class="project-header-row">
+        <h2>样品批次与研究表</h2>
+        <NSpace align="center">
+          <RouterLink :to="{ path: '/new', query: { project } }">
+            <NButton type="primary" size="small">新建研究表</NButton>
+          </RouterLink>
+          <RouterLink :to="'/trends?project=' + encodeURIComponent(project)">
+            <NButton size="small">查看项目趋势</NButton>
+          </RouterLink>
+          <RouterLink :to="'/deliveries?project=' + encodeURIComponent(project)">
+            <NButton size="small">生成交付文件</NButton>
+          </RouterLink>
+        </NSpace>
+      </div>
+
+      <div v-if="samples.length" class="sample-cards-grid">
+        <NCard v-for="s in samples" :key="s.id" class="sample-card" size="small" hoverable>
+          <template #header>
+            <div class="sample-card-header">
+              <span class="sample-batch-title"><strong>批号：{{ s.batch }}</strong></span>
+              <NSpace size="small">
+                <NTag type="info" size="small">{{ s.material_stage || s.sample_type }}</NTag>
+                <NTag v-if="s.sample_type && s.sample_type !== s.material_stage" size="small">{{ s.sample_type }}</NTag>
+              </NSpace>
+            </div>
+          </template>
+          <div class="sample-card-body">
+            <div class="sample-meta-grid">
+              <div><span class="meta-label">材料类别：</span>{{ s.material_stage || '—' }}</div>
+              <div><span class="meta-label">批号：</span>{{ s.batch }}</div>
+              <div><span class="meta-label">规格：</span>{{ s.presentation || '—' }}</div>
+              <div><span class="meta-label">包装：</span>{{ s.packaging || '—' }}</div>
+              <div><span class="meta-label">用途：</span>{{ s.purpose || '—' }}</div>
+            </div>
+
+            <div class="sample-worksheets-box">
+              <span class="group-title">关联研究表 ({{ sampleWorksheetsMap.map.get(s.id)?.length || 0 }})：</span>
+              <ul v-if="sampleWorksheetsMap.map.get(s.id)?.length" class="sample-sheets-list">
+                <li v-for="ws in sampleWorksheetsMap.map.get(s.id)" :key="ws.id">
+                  <RouterLink :to="'/worksheets/' + encodeURIComponent(ws.id)">
+                    {{ ws.name }} <span class="muted-tag">{{ [ws.condition, '计划版本 ' + ws.plan_version].filter(Boolean).join(' · ') }}</span>
+                  </RouterLink>
+                </li>
+              </ul>
+              <span v-else class="empty-hint">暂无关联研究表</span>
+            </div>
+          </div>
+          <template #action>
+            <div class="sample-card-actions">
+              <RouterLink v-if="sampleWorksheetsMap.map.get(s.id)?.length" :to="'/worksheets/' + encodeURIComponent(sampleWorksheetsMap.map.get(s.id)![0].id)">
+                <NButton size="tiny" type="primary">进入研究表</NButton>
+              </RouterLink>
+              <RouterLink v-else :to="{ path: '/new', query: { project, sample: s.id, batch: s.batch } }">
+                <NButton size="tiny" type="primary">新建研究表</NButton>
+              </RouterLink>
+              <RouterLink :to="{ path: '/specifications', query: { project, sample: s.id, batch: s.batch } }">
+                <NButton size="tiny">COA</NButton>
+              </RouterLink>
+              <RouterLink :to="{ path: '/import', query: { project, sample: s.id, batch: s.batch } }">
+                <NButton size="tiny">上传数据</NButton>
+              </RouterLink>
+            </div>
+          </template>
+        </NCard>
+      </div>
+      <p v-else class="muted">此项目暂未登记样品批次。可通过新建研究表或上传 COA 登记新样品。</p>
+
+      <div v-if="sampleWorksheetsMap.unlinked.length" class="unlinked-section" style="margin-top: 18px;">
+        <h3>未关联具体样品的研究表</h3>
+        <ul class="list">
+          <li v-for="item in sampleWorksheetsMap.unlinked" :key="item.id">
+            <RouterLink :to="'/worksheets/' + encodeURIComponent(item.id)">{{ item.name }}</RouterLink>
+            <span v-if="item.batch || item.condition">{{ [item.batch, item.condition].filter(Boolean).join(' · ') }}</span>
+            <span>计划版本 {{ item.plan_version }}</span>
+          </li>
+        </ul>
+      </div>
+
+      <h2 style="margin-top: 24px;">研究工作表</h2>
       <RouterLink :to="{ path: '/new', query: { project } }">新建研究表</RouterLink>
       <NInput v-if="sheets.length" v-model:value="sheetSearch" placeholder="搜索研究表名称、批号或条件"
-        :input-props="{ 'aria-label': '搜索研究表' }" clearable />
+        :input-props="{ 'aria-label': '搜索研究表' }" clearable style="margin: 8px 0;" />
       <ul class="list">
         <li v-for="item in filteredSheets" :key="item.id">
           <RouterLink :to="'/worksheets/' + encodeURIComponent(item.id)">{{ item.name }}</RouterLink>
@@ -157,8 +267,10 @@ async function refreshSheet() {
           <span>{{ draft.created_at }}</span>
         </li></ul>
       </template>
-      <RouterLink :to="'/trends?project=' + encodeURIComponent(project)">查看项目趋势</RouterLink>
-      <RouterLink :to="'/deliveries?project=' + encodeURIComponent(project)"> · 生成文件</RouterLink>
+      <div style="margin-top: 12px;">
+        <RouterLink :to="'/trends?project=' + encodeURIComponent(project)">查看项目趋势</RouterLink>
+        <RouterLink :to="'/deliveries?project=' + encodeURIComponent(project)"> · 生成文件</RouterLink>
+      </div>
     </section>
     <ProjectResults v-if="page === 'projects' && project" :key="project" :project="project" />
     <template v-if="sheet">
@@ -253,4 +365,16 @@ async function refreshSheet() {
 .worksheet-criterion { white-space: pre-wrap; margin: 4px 0 0; font-weight: normal; }
 .worksheet-notes li { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; overflow-wrap: anywhere; }
 .worksheet-notes p { margin: 0; white-space: pre-wrap; }
+
+.project-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.sample-cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; margin: 12px 0 18px; }
+.sample-card { border: 1px solid #d4e4df; border-radius: 8px; }
+.sample-card-header { display: flex; justify-content: space-between; align-items: center; width: 100%; }
+.sample-meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; font-size: 12px; margin-bottom: 8px; color: #2d3748; }
+.meta-label { color: #718096; font-weight: 500; }
+.sample-worksheets-box { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #e2e8f0; font-size: 12px; }
+.sample-sheets-list { list-style: none; padding: 0; margin: 4px 0 0; display: grid; gap: 3px; }
+.muted-tag { font-size: 11px; color: #718096; }
+.empty-hint { color: #a0aec0; font-size: 12px; margin: 4px 0; }
+.sample-card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 </style>

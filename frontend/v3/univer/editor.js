@@ -66,6 +66,14 @@ export function mountWorksheet(container, values, layout, editable, { onChange, 
   });
   workbook.setEditable(editable);
   const subscription = univerAPI.addEvent(univerAPI.Event.SheetValueChanged, onChange);
+  const isLegalPlaceholder = val => {
+    if (val === null || val === undefined) return true;
+    const s = String(val).trim().toLowerCase();
+    return s === '' || s === 'n/a' || s === 'na' || s === 'nt' ||
+           s === '—' || s === '–' || s === '─' || s === '-' || s === '--' || s === '---' ||
+           s === '/' || s === '／';
+  };
+
   const paste = event => {
     const text = event.clipboardData?.getData('text/plain');
     const range = workbook.getActiveSheet().getActiveRange()?.getRange();
@@ -73,14 +81,52 @@ export function mountWorksheet(container, values, layout, editable, { onChange, 
     event.preventDefault();
     event.stopImmediatePropagation();
     const rows = clipboardRows(text.replace(/\r\n/g, '\n'));
+    if (!rows.length || !rows[0].length) return;
     const width = rows[0].length;
-    if (rows.some((row, r) => row.length !== width ||
-        row.some((_, c) => !canEdit(range.startRow + r, range.startColumn + c)))) {
-      onError(`从第 ${range.startRow + 1} 行、第 ${range.startColumn + 1} 列开始的 ${rows.length} × ${width} 粘贴范围必须是连续应检格。`);
+    if (rows.some(row => row.length !== width)) {
+      onError('粘贴内容每行列数不一致。');
       return;
     }
+    if (range.startRow + rows.length > values.length || range.startColumn + width > values[0].length) {
+      onError(`从第 ${range.startRow + 1} 行、第 ${range.startColumn + 1} 列开始的 ${rows.length} × ${width} 粘贴范围超出表格范围。`);
+      return;
+    }
+
+    const conflicts = [];
+    for (let r = 0; r < rows.length; r++) {
+      for (let c = 0; c < width; c++) {
+        const targetR = range.startRow + r;
+        const targetC = range.startColumn + c;
+        const val = rows[r][c];
+        const allowed = canEdit(targetR, targetC);
+        if (!allowed) {
+          if (!isLegalPlaceholder(val)) {
+            conflicts.push({ row: targetR + 1, col: targetC + 1, value: val });
+          }
+        }
+      }
+    }
+
+    if (conflicts.length > 0) {
+      const summary = conflicts.slice(0, 3).map(item => `第 ${item.row} 行、第 ${item.col} 列（收到「${item.value}」）`).join('；');
+      const more = conflicts.length > 3 ? ` 等共 ${conflicts.length} 处冲突` : '';
+      onError(`非应检位置不得覆盖。发现冲突坐标：${summary}${more}。`);
+      return;
+    }
+
+    const currentSheet = workbook.save().sheets[sheetId];
+    const matrix = rows.map((row, r) => row.map((value, c) => {
+      const targetR = range.startRow + r;
+      const targetC = range.startColumn + c;
+      if (canEdit(targetR, targetC)) {
+        return { v: value, t: CellValueType.STRING, s: 'entry' };
+      }
+      const existing = currentSheet?.cellData?.[targetR]?.[targetC];
+      return existing || { v: '—', t: CellValueType.STRING, s: 'option' };
+    }));
+
     const target = workbook.getActiveSheet().getRange(range.startRow, range.startColumn, rows.length, width);
-    target.setValues(rows.map(row => row.map(value => ({ v: value, t: CellValueType.STRING, s: 'entry' }))));
+    target.setValues(matrix);
     onChange();
   };
   document.addEventListener('paste', paste, true);

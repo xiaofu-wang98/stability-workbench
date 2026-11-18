@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import { NAlert, NButton } from 'naive-ui';
 import { api } from './api';
 import CoaEditor from './CoaEditor.vue';
 import ConfirmAssays from './ConfirmAssays.vue';
 
+const route = useRoute();
 type Summary = { id: string; filename: string };
 type Specification = Summary & { scope: string; material_scope: string; linked_projects?: { project: string; count: number; is_current: number }[]; rows: {
   table: number; row: number; column: number; page?: number; category: string; item: string;
@@ -26,6 +28,11 @@ async function run(action: () => Promise<void>) {
 }
 async function refresh() {
   list.value = await api('/specifications');
+  if (route.query.specification) {
+    await open(String(route.query.specification));
+  } else if (!selected.value && list.value.length) {
+    await open(list.value[0].id);
+  }
 }
 onMounted(() => run(refresh));
 function open(id: string) {
@@ -95,7 +102,7 @@ function upload(event: Event) {
     </div>
   </section>
   <ConfirmAssays v-if="selected?.rows.length" :key="'assays-' + selected.id" :specification="selected" @registered="open(selected.id)" />
-  <CoaEditor v-if="selected?.rows.length" :key="selected.id" :specification="selected" />
+  <CoaEditor v-if="selected?.rows.length" :key="selected.id" :specification="selected" :initial-project="String(route.query.project || '')" :initial-batch="String(route.query.batch || '')" :initial-sample-id="String(route.query.sample || '')" />
 </template>
 
 <style scoped>

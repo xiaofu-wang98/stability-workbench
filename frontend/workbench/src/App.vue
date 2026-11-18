@@ -4,7 +4,9 @@ import { themeSettings } from './soybean-settings';
 
 const links = [
   ['/', '工作台'],
+  ['/new', '新建研究表'],
   ['/projects', '项目数据'],
+  ['/specifications', '质量标准与 COA'],
   ['/import', '导入文件'],
   ['/trends', '趋势与比较'],
   ['/deliveries', '生成与历史'],

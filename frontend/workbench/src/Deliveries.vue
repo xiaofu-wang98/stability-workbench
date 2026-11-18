@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { NAlert, NButton, NInput, NSelect } from 'naive-ui';
-import { api, type Project, type Worksheet, type WorksheetSummary } from './api';
+import { api, triggerDownload, type Project, type Worksheet, type WorksheetSummary } from './api';
 
 const props = defineProps<{ projects: Project[] }>();
 const route = useRoute();
@@ -240,6 +240,7 @@ function generate() {
       }
       if (scanId.value) query.set('scan_id', scanId.value);
       output.value = await api('/worksheets/' + encodeURIComponent(sheet.id) + '/confirmation?' + query, { method: 'POST' });
+      if (output.value?.download_url) triggerDownload(output.value.download_url);
       await history();
     });
   }
@@ -250,6 +251,7 @@ function generate() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ base_revision: selection.revision, sheet_ids: controlledIds.value }),
       });
+      if (output.value?.download_url) triggerDownload(output.value.download_url);
       await history();
     });
   }
@@ -263,6 +265,8 @@ function generate() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
+    const downloadTarget = output.value?.word_download_url || output.value?.download_url;
+    if (downloadTarget) triggerDownload(downloadTarget);
     await history();
   });
 }
@@ -357,6 +361,7 @@ function href(item: Delivery) {
       · 计划版本 {{ confirmation.plan_version }} · {{ confirmation.rows.length }} 个检项、{{ pointIds.length }} 个计划时间点
     </p>
     <div v-if="output" class="delivery-actions">
+      <span class="delivery-success-tip">文件已生成并自动触发下载，保留备用链接：</span>
       <a v-if="output.word_download_url" :href="output.word_download_url">下载 Word</a>
       <a :href="output.download_url">{{ output.word_download_url ? '下载完整报告包' : '下载 Excel' }}</a>
     </div>

@@ -1,14 +1,19 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { NAlert, NButton, NSelect } from 'naive-ui';
-import { api, archiveStudyObject, type Project } from './api';
+import { api, archiveStudyObject, triggerDownload, type Project } from './api';
 
 type Row = { table: number; row: number; category: string; item: string; method: string; sop: string; criterion: string };
 type Sample = { id: string; batch: string; material_stage: string; sample_type: string; presentation: string;
   packaging: string; purpose: string };
 type State = { version: number; revision: number; values: Record<string, string>; word_supported: boolean };
 type Preview = State & { upload_id: string; existing: Record<string, string> };
-const props = defineProps<{ specification: { id: string; rows: Row[]; material_scope: string } }>();
+const props = defineProps<{
+  specification: { id: string; rows: Row[]; material_scope: string };
+  initialProject?: string;
+  initialBatch?: string;
+  initialSampleId?: string;
+}>();
 const projects = ref<Project[]>([]);
 const project = ref('');
 const batch = ref('');
@@ -36,7 +41,29 @@ async function run(action: () => Promise<void>) {
   catch (e) { error.value = (e as Error).message; }
   finally { busy.value = false; }
 }
-onMounted(() => run(async () => { projects.value = await api('/projects'); }));
+
+function downloadCoa(format: 'docx' | 'xlsx') {
+  if (!selected.value) return;
+  const url = '/api/v1' + coaPath() + '/file' + (format === 'xlsx' ? '?format=xlsx' : '');
+  triggerDownload(url);
+}
+
+onMounted(() => run(async () => {
+  projects.value = await api('/projects');
+  if (props.initialProject) {
+    project.value = props.initialProject;
+  }
+  if (props.initialBatch) {
+    batch.value = props.initialBatch;
+  }
+  if (project.value && batch.value) {
+    await search();
+    if (props.initialSampleId) {
+      const target = samples.value.find(s => s.id === props.initialSampleId);
+      if (target) await open(target);
+    }
+  }
+}));
 function removeSample(sample: Sample) {
   return run(async () => {
     if (!await archiveStudyObject('/samples/' + encodeURIComponent(sample.id), '样品')) return;
@@ -159,8 +186,10 @@ function save() {
       <p>当前样品 {{ selected.batch }} · {{ selected.material_stage }} · {{ selected.sample_type }} · {{ selected.presentation }} · {{ selected.packaging }} · {{ selected.purpose }}</p>
       <p>COA 版本 {{ state.version || '未填写' }}。留空会保留已保存的结果。</p>
       <div class="coa-actions">
-        <a v-if="state.word_supported" :href="'/api/v1' + coaPath() + '/file'">下载 COA Word</a>
-        <a :href="'/api/v1' + coaPath() + '/file?format=xlsx'">下载 COA Excel</a>
+        <NButton v-if="state.word_supported" size="small" @click="downloadCoa('docx')">下载 COA Word</NButton>
+        <a v-if="state.word_supported" :href="'/api/v1' + coaPath() + '/file'">Word 备用链接</a>
+        <NButton size="small" @click="downloadCoa('xlsx')">下载 COA Excel</NButton>
+        <a :href="'/api/v1' + coaPath() + '/file?format=xlsx'">Excel 备用链接</a>
         <label>上传填写后的 COA <input type="file" :accept="state.word_supported ? '.docx,.xlsx' : '.xlsx'" :disabled="busy" @change="read"></label>
       </div>
       <p v-if="!state.word_supported">该标准来自扫描件，可填写放行结果。保留 Word 原版式的下载和回传需要 Word 标准。</p>

@@ -39,6 +39,10 @@ const headerPreview = ref<HeaderMetadataPreview>();
 const sourceError = ref('');
 const planItems = ref<string[]>([]);
 const retest = ref<{ rowId: string; pointId: string; label: string; version: string }>();
+const retestBasis = ref('');
+const showDraftText = ref(false);
+const correctionReasons = ['数据录入笔误更正', '复核原始检测记录后更正', '依据仪器重积分结果更正', '依据复核人检验报告更正'];
+const retestReasons = ['时间点常规复测', '异常数据复测调查', '不同检验员比对复测', '仪器维护后复测确认'];
 let editor: Editor | undefined;
 let baseline: Snapshot;
 let current: Worksheet;
@@ -95,7 +99,8 @@ async function renew() {
     clearInterval(timer);
     expired.value = true;
     editor?.setEditable(false);
-    error.value = '无法续期，编辑已暂停。请复制尚未保存的内容，然后结束编辑并重新打开。';
+    rememberRecovery();
+    error.value = '编辑租约已失效或网络中断。未提交的内容已自动保存在本地草稿中；请勿抢占他人租约，网络或租约恢复后可点击「恢复本地草稿」重新载入。';
   }
 }
 
@@ -336,6 +341,7 @@ function openRetest() {
     if (!cell || !point.required_row_ids.includes(row.id)) throw new Error('请选择一个已有结果的应检单元格。');
     plan.value = false;
     standards.value = false;
+    retestBasis.value = '';
     retest.value = { rowId: row.id, pointId: point.id, label: row.label + ' · ' + point.label,
       version: cell.display.result_version_id };
   } catch (e) {
@@ -450,7 +456,7 @@ function applyHeaderSuggestion(field: HeaderField) {
   headerForm.value.metadata_fingerprint = headerPreview.value.metadata_fingerprint;
 }
 
-async function submitExtra(input: Event | object, kind: 'stop-checks' | 'remove-row' | 'plan' | 'retest' | 'standards' | 'protocol-standards' | 'release-reference' | 'copy-coa-to-0m' | 'protocol' | 'events' | 'point-metadata' | 'header-metadata') {
+async function submitExtra(input: Event | object, kind: 'stop-checks' | 'remove-row' | 'plan' | 'retest' | 'standards' | 'protocol-standards' | 'release-reference' | 'copy-coa-to-0m' | 'copy-coa-to-0m/batch' | 'protocol' | 'events' | 'point-metadata' | 'header-metadata') {
   if (busy.value || expired.value) return;
   busy.value = true;
   error.value = '';
@@ -462,7 +468,7 @@ async function submitExtra(input: Event | object, kind: 'stop-checks' | 'remove-
       payload = input;
     } else {
       const form = new FormData((input as Event).target as HTMLFormElement);
-      const basis = String(form.get('basis') ?? '').trim();
+      const basis = (kind === 'retest' ? (retestBasis.value.trim() || String(form.get('basis') ?? '').trim()) : String(form.get('basis') ?? '').trim());
       if (!basis) throw new Error('请填写说明。');
       if (kind === 'plan') {
       if (!planItems.value.length) throw new Error('请选择新增时间点的应检项目。');
@@ -493,7 +499,7 @@ async function submitExtra(input: Event | object, kind: 'stop-checks' | 'remove-
     protocolForm.value = false;
     eventForm.value = false;
     retest.value = undefined;
-    status.value = kind === 'header-metadata' ? '已保存研究表头。' : kind === 'stop-checks' ? '已停检所选时间点，历史结果和计划已保留。' : kind === 'remove-row' ? '已移除检项，旧计划仍保留。' : kind === 'events' ? '已保存研究事件。' : kind === 'protocol' ? '已关联研究方案。' : kind === 'copy-coa-to-0m' ? '已处理 COA 复制。' : kind === 'release-reference' ? '已保存放行引用设置。' : ['standards', 'protocol-standards'].includes(kind) ? '已保存标准关联。' :
+    status.value = kind === 'header-metadata' ? '已保存研究表头。' : kind === 'stop-checks' ? '已停检所选时间点，历史结果和计划已保留。' : kind === 'remove-row' ? '已移除检项，旧计划仍保留。' : kind === 'events' ? '已保存研究事件。' : kind === 'protocol' ? '已关联研究方案。' : kind === 'copy-coa-to-0m/batch' ? '已批量复制 COA 结果到 0M。' : kind === 'copy-coa-to-0m' ? '已处理 COA 复制。' : kind === 'release-reference' ? '已保存放行引用设置。' : ['standards', 'protocol-standards'].includes(kind) ? '已保存标准关联。' :
       kind === 'plan' ? '已保存新计划版本。' : '已保存独立复测，当前采用结果保持原值。';
     try { await mount(); }
     catch {
@@ -541,7 +547,9 @@ onBeforeUnmount(() => {
 <template>
   <NAlert v-if="error" type="error" role="alert">{{ error }}</NAlert>
   <div class="worksheet-controls" :class="{ 'is-editing': editing }">
-    <NButton v-if="!editing" type="primary" :loading="busy" :disabled="busy || !sheet.editable" @click="begin">{{ recovery ? '恢复编辑' : '编辑结果' }}</NButton>
+    <NButton v-if="!editing" type="primary" :loading="busy" :disabled="busy || !sheet.editable" @click="begin">
+      {{ recovery ? '恢复编辑' : '编辑结果' }}
+    </NButton>
     <template v-else>
       <NButton type="primary" :loading="busy" :disabled="expired" @click="save">保存结果</NButton>
       <NButton :disabled="busy || expired" @click="toggleTitle">合并或拆分标题</NButton>
@@ -558,14 +566,30 @@ onBeforeUnmount(() => {
     </template>
     <span role="status">{{ status || (dirty ? '有未保存的改动' : editing ? '正在编辑' : '只读') }}</span>
   </div>
-  <details v-if="recovery && (!editing || recovery.selection !== current?.selection_id)">
-    <summary>查看本标签页的未保存副本</summary>
-    <textarea readonly :value="recovery.snapshot.rows.map(row => row.map(value => '&quot;' + value.replaceAll('&quot;', '&quot;&quot;') + '&quot;').join('\t')).join('\n')" rows="5" aria-label="未保存内容"></textarea>
-    <NButton :disabled="busy" @click="forgetRecovery">清除此副本</NButton>
-  </details>
-  <label v-if="editing && requiresReason">更正原因
-    <NInput v-model:value="reason" placeholder="说明本次对已有结果的更正" @update:value="rememberRecovery" />
-  </label>
+  <NAlert v-if="recovery" type="warning" title="检测到本工作表存在未提交的本地编辑草稿" class="recovery-box">
+    <p>包含未提交的表格修改与说明。在网络或租约恢复后，可一键恢复至表格继续编辑。</p>
+    <div class="recovery-actions">
+      <NButton v-if="editing && recovery.selection === current?.selection_id" size="small" type="warning" @click="mount(true)">
+        恢复草稿到当前表格
+      </NButton>
+      <NButton size="small" @click="showDraftText = !showDraftText">
+        {{ showDraftText ? '收起草稿内容' : '查看/复制草稿文本' }}
+      </NButton>
+      <NButton size="small" tertiary @click="forgetRecovery">清除此草稿</NButton>
+    </div>
+    <div v-if="showDraftText" class="mt-2">
+      <textarea readonly :value="recovery.snapshot.rows.map(row => row.map(value => '&quot;' + value.replaceAll('&quot;', '&quot;&quot;') + '&quot;').join('\t')).join('\n')" rows="5" class="draft-textarea" aria-label="未保存内容"></textarea>
+    </div>
+  </NAlert>
+  <div v-if="editing && requiresReason" class="extra-form reason-box">
+    <label>更正原因（必填）
+      <NInput v-model:value="reason" placeholder="说明本次对已有结果的更正依据" @update:value="rememberRecovery" />
+    </label>
+    <div class="quick-reasons">
+      <span class="quick-title">快捷依据参考：</span>
+      <NButton v-for="opt in correctionReasons" :key="opt" size="tiny" tertiary @click="reason = opt; rememberRecovery()">{{ opt }}</NButton>
+    </div>
+  </div>
   <form v-if="editing && plan" class="extra-form" @submit.prevent="submitExtra($event, 'plan')">
     <label>新增时间点 <input name="points" placeholder="6M, 12M" required></label>
     <NSelect v-model:value="planItems" multiple placeholder="选择应检项目"
@@ -609,6 +633,7 @@ onBeforeUnmount(() => {
   <WorksheetStandards v-if="editing && standards" :sheet="current" :busy="busy || expired"
     @stop="value => submitExtra(value, 'stop-checks')" @remove="confirmRowRemoval" @save="value => submitExtra(value, 'standards')" @confirm-protocol="value => submitExtra(value, 'protocol-standards')" @cancel="standards = false" />
   <WorksheetRelease v-if="editing && releaseForm" :sheet="current" :busy="busy || expired"
+    @batch-copy="value => submitExtra(value, 'copy-coa-to-0m/batch')"
     @copy="value => submitExtra(value, 'copy-coa-to-0m')" @save="value => submitExtra(value, 'release-reference')" @cancel="releaseForm = false" />
   <WorksheetProtocol v-if="editing && protocolForm" :sheet="current" :busy="busy || expired"
     @save="value => submitExtra(value, 'protocol')" @cancel="protocolForm = false" />
@@ -617,9 +642,15 @@ onBeforeUnmount(() => {
   <form v-if="editing && retest" class="extra-form" @submit.prevent="submitExtra($event, 'retest')">
     <strong>{{ retest.label }}</strong>
     <label>复测结果 <textarea name="value" required></textarea></label>
-    <label>复测说明 <input name="basis" required></label>
-    <NButton attr-type="submit" type="primary" :loading="busy" :disabled="expired">保存复测</NButton>
-    <NButton :disabled="busy" @click="retest = undefined">取消</NButton>
+    <label>复测说明 <input v-model="retestBasis" name="basis" required placeholder="请说明复测背景与依据"></label>
+    <div class="quick-reasons">
+      <span class="quick-title">快捷依据参考：</span>
+      <NButton v-for="opt in retestReasons" :key="opt" size="tiny" tertiary @click="retestBasis = opt">{{ opt }}</NButton>
+    </div>
+    <div class="buttons">
+      <NButton attr-type="submit" type="primary" :loading="busy" :disabled="expired">保存复测</NButton>
+      <NButton :disabled="busy" @click="retest = undefined">取消</NButton>
+    </div>
   </form>
   <div v-if="editing" ref="grid" class="worksheet-editor" aria-label="结果编辑表格"></div>
 </template>
@@ -629,7 +660,15 @@ onBeforeUnmount(() => {
 .worksheet-controls.is-editing { padding: 12px; margin-bottom: 8px; background: #eef6f3; border: 1px solid #d3e5df; border-radius: 10px; }
 .worksheet-controls [role="status"] { margin-left: auto; color: #395a53; font-size: 13px; }
 .worksheet-editor { border-radius: 10px; overflow: hidden; height: min(64vh, 660px); min-height: 360px; border: 1px solid #dbe5e2; }
-.extra-form { display: grid; gap: 10px; max-width: 480px; margin: 12px 0; padding: 14px; background: white; }
+.extra-form { display: grid; gap: 10px; max-width: 480px; margin: 12px 0; padding: 14px; background: white; border: 1px solid #dbe5e2; border-radius: 8px; }
 .extra-form label { display: grid; gap: 4px; }
 .extra-form input, .extra-form textarea { font: inherit; padding: 6px; border: 1px solid #aabdb8; border-radius: 5px; }
+.quick-reasons { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
+.quick-title { font-size: 12px; color: #637772; }
+.buttons { display: flex; gap: 10px; margin-top: 6px; }
+.recovery-box { margin: 12px 0; }
+.recovery-actions { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.draft-textarea { width: 100%; font-size: 12px; padding: 6px; border: 1px solid #aabdb8; border-radius: 4px; }
+.mt-2 { margin-top: 8px; }
+.mb-2 { margin-bottom: 8px; }
 </style>

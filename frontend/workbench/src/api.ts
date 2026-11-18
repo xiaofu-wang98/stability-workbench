@@ -46,12 +46,81 @@ export type HeaderMetadataPreview = Record<HeaderField, string> & {
   metadata_fingerprint: string;
 };
 
+export function triggerDownload(url: string, filename?: string) {
+  const a = document.createElement('a');
+  a.href = url;
+  if (filename) a.download = filename;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => a.remove(), 1000);
+}
+
+export interface SampleEntry {
+  id: string;
+  project: string;
+  batch: string;
+  material_stage: string;
+  sample_type: string;
+  presentation: string;
+  packaging: string;
+  purpose: string;
+  source: string;
+  created_at: string;
+  deleted_at: string | null;
+}
+
+export interface CoaZeroBatchSource {
+  specification_id: string;
+  version: number;
+  source_id: string;
+  value: string;
+  filename: string;
+  criterion_key: string;
+}
+
+export interface CoaZeroBatchRow {
+  row_id: string;
+  item_id: string;
+  label: string;
+  method: string;
+  method_version: string;
+  unit: string;
+  slot_id: string;
+  status: 'matched' | 'unmatched' | 'existing' | 'conflict';
+  reason: 'sample_missing' | 'no_applicable_coa' | 'standard_scope_conflict' | 'multiple_coa_matches' | 'invalid_coa_value' | 'release_reference_exists' | 'result_history_exists' | 'worksheet_slot_conflict' | 'worksheet_occupied' | null;
+  adopted_version_id: string | null;
+  adopted_value: string | null;
+  candidates: CoaZeroBatchSource[];
+}
+
+export interface CoaZeroBatchPreview {
+  id: string;
+  revision: number;
+  sample_id: string | null;
+  point_id: string | null;
+  release_completed: string;
+  preview_fingerprint: string;
+  rows: CoaZeroBatchRow[];
+}
+
+export interface CoaZeroBatchResult {
+  id: string;
+  revision: number;
+  plan_version: number;
+  project_revision: number;
+  result_version_ids: string[];
+  copied: Record<string, string>;
+}
+
 export interface WorksheetSummary {
   id: string;
   name: string;
   plan_version: number;
+  sample_id?: string | null;
   batch?: string;
   condition?: string;
+  study?: 'long_term' | 'accelerated' | 'stress';
 }
 
 export interface Worksheet extends WorksheetSummary {
@@ -83,6 +152,7 @@ export interface Worksheet extends WorksheetSummary {
     coa?: { source_id: string; version: number } }>;
   layout: { row_heights: Record<string, number>; column_widths: Record<string, number>; title_merge_to: number };
   editable: boolean;
+  occupied_by?: string | null;
   protocol_draft_id?: string;
   protocol_table?: number;
   events?: { id: string; category: string; reference: string; description: string; item_label: string;
