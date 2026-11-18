@@ -28,6 +28,7 @@ from .permissions import Actor, Capability, require
 from .result_versions import ResultVersions
 from .workflow import Workflow
 from .business_worksheets import AddWorksheetEvent, AttachProtocol, BusinessWorksheets, ConfirmProtocolStandards, CopyCoaToZero, CreateWorksheet, ExtendPlan, IncludeHistoricalRows, LeaseToken, SaveWorksheet, SetWorksheetStandards, SetReleaseReference, CustomWorksheetItem, WorksheetCriteria
+from .business_worksheets import CoaZeroBatchPreview, CoaZeroBatchResult, CopyCoaZeroBatch, PreviewCoaZeroBatch, WorksheetListEntry
 from .workflow_common import WorkflowError, active_project_code, unique_project_code
 from .workflow_contracts import (
     InvalidateRequest,
@@ -242,9 +243,10 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
     def archive_sample(sample_id: str, command: ArchiveStudyObject, operator: ActorDependency):
         return worksheets.archive_object(sample_id, "sample", operator, command)
 
-    @app.get("/api/v1/projects/{project}/worksheets")
-    def list_worksheets(project: ProjectDependency, operator: ActorDependency):
-        return worksheets.list(project, operator)
+    @app.get("/api/v1/projects/{project}/worksheets", response_model=list[WorksheetListEntry])
+    def list_worksheets(project: ProjectDependency, operator: ActorDependency, sample_id: str | None = None,
+                        study: Literal["long_term", "accelerated", "stress"] | None = None):
+        return worksheets.list(project, operator, sample_id=sample_id, study=study)
 
     @app.post("/api/v1/projects/{project}/worksheets", status_code=201)
     def create_worksheet(project: ProjectDependency, command: CreateWorksheet, operator: ActorDependency):
@@ -317,6 +319,17 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
     @app.post("/api/v1/worksheets/{sheet_id}/copy-coa-to-0m")
     def copy_coa_to_zero(sheet_id: str, command: CopyCoaToZero, operator: ActorDependency):
         return worksheets.copy_coa_to_zero(sheet_id, command, operator)
+
+    @app.post("/api/v1/worksheets/{sheet_id}/copy-coa-to-0m/batch/preview", response_model=CoaZeroBatchPreview)
+    def preview_copy_coa_batch(sheet_id: str, command: PreviewCoaZeroBatch, operator: ActorDependency):
+        """Preview exact, applicable COA matches without writing results."""
+        return worksheets.preview_copy_coa_batch(sheet_id, command, operator)
+
+    @app.post("/api/v1/worksheets/{sheet_id}/copy-coa-to-0m/batch", response_model=CoaZeroBatchResult,
+              responses={409: {"description": "Lease, revision, preview, selection or idempotency conflict. No results copied."}})
+    def copy_coa_batch_to_zero(sheet_id: str, command: CopyCoaZeroBatch, operator: ActorDependency):
+        """Copy selected eligible rows as independent first 0M results in one transaction."""
+        return worksheets.copy_coa_batch_to_zero(sheet_id, command, operator)
 
     @app.get("/api/v1/worksheets/{sheet_id}/coa-release-options")
     def coa_release_options(sheet_id: str, row_id: str, operator: ActorDependency):

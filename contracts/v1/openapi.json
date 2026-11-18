@@ -215,10 +215,50 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "default": "",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exact batch filter; omit to browse the project.",
               "title": "Batch"
+            },
+            "description": "Exact batch filter; omit to browse the project."
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 9223372036854775807,
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
             }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 500,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Defaults to 100 when browsing the project.",
+              "title": "Limit"
+            },
+            "description": "Defaults to 100 when browsing the project."
           }
         ],
         "responses": {
@@ -226,7 +266,13 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SampleEntry"
+                  },
+                  "title": "Response Samples Api V1 Projects  Project  Samples Get"
+                }
               }
             }
           },
@@ -1080,6 +1126,43 @@
               "type": "string",
               "title": "Project"
             }
+          },
+          {
+            "name": "sample_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sample Id"
+            }
+          },
+          {
+            "name": "study",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "long_term",
+                    "accelerated",
+                    "stress"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Study"
+            }
           }
         ],
         "responses": {
@@ -1087,7 +1170,13 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WorksheetListEntry"
+                  },
+                  "title": "Response List Worksheets Api V1 Projects  Project  Worksheets Get"
+                }
               }
             }
           },
@@ -1862,6 +1951,109 @@
                 "schema": {}
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worksheets/{sheet_id}/copy-coa-to-0m/batch/preview": {
+      "post": {
+        "summary": "Preview Copy Coa Batch",
+        "description": "Preview exact, applicable COA matches without writing results.",
+        "operationId": "preview_copy_coa_batch_api_v1_worksheets__sheet_id__copy_coa_to_0m_batch_preview_post",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewCoaZeroBatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoaZeroBatchPreview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worksheets/{sheet_id}/copy-coa-to-0m/batch": {
+      "post": {
+        "summary": "Copy Coa Batch To Zero",
+        "description": "Copy selected eligible rows as independent first 0M results in one transaction.",
+        "operationId": "copy_coa_batch_to_zero_api_v1_worksheets__sheet_id__copy_coa_to_0m_batch_post",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CopyCoaZeroBatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoaZeroBatchResult"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Lease, revision, preview, selection or idempotency conflict. No results copied."
           },
           "422": {
             "description": "Validation Error",
@@ -9701,6 +9893,262 @@
         ],
         "title": "CoaSave"
       },
+      "CoaZeroBatchPreview": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "revision": {
+            "type": "integer",
+            "title": "Revision"
+          },
+          "sample_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Id"
+          },
+          "point_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Point Id"
+          },
+          "release_completed": {
+            "type": "string",
+            "format": "date",
+            "title": "Release Completed"
+          },
+          "preview_fingerprint": {
+            "type": "string",
+            "title": "Preview Fingerprint"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/CoaZeroBatchRow"
+            },
+            "type": "array",
+            "title": "Rows"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "revision",
+          "sample_id",
+          "point_id",
+          "release_completed",
+          "preview_fingerprint",
+          "rows"
+        ],
+        "title": "CoaZeroBatchPreview"
+      },
+      "CoaZeroBatchResult": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "revision": {
+            "type": "integer",
+            "title": "Revision"
+          },
+          "plan_version": {
+            "type": "integer",
+            "title": "Plan Version"
+          },
+          "project_revision": {
+            "type": "integer",
+            "title": "Project Revision"
+          },
+          "result_version_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Result Version Ids"
+          },
+          "copied": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Copied"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "revision",
+          "plan_version",
+          "project_revision",
+          "result_version_ids",
+          "copied"
+        ],
+        "title": "CoaZeroBatchResult"
+      },
+      "CoaZeroBatchRow": {
+        "properties": {
+          "row_id": {
+            "type": "string",
+            "title": "Row Id"
+          },
+          "item_id": {
+            "type": "string",
+            "title": "Item Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "method": {
+            "type": "string",
+            "title": "Method"
+          },
+          "method_version": {
+            "type": "string",
+            "title": "Method Version"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          },
+          "slot_id": {
+            "type": "string",
+            "title": "Slot Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "matched",
+              "unmatched",
+              "existing",
+              "conflict"
+            ],
+            "title": "Status"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "sample_missing",
+                  "no_applicable_coa",
+                  "standard_scope_conflict",
+                  "multiple_coa_matches",
+                  "invalid_coa_value",
+                  "release_reference_exists",
+                  "result_history_exists",
+                  "worksheet_slot_conflict",
+                  "worksheet_occupied"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "adopted_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adopted Version Id"
+          },
+          "adopted_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adopted Value"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/CoaZeroBatchSource"
+            },
+            "type": "array",
+            "title": "Candidates"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "row_id",
+          "item_id",
+          "label",
+          "method",
+          "method_version",
+          "unit",
+          "slot_id",
+          "status",
+          "reason",
+          "adopted_version_id",
+          "adopted_value",
+          "candidates"
+        ],
+        "title": "CoaZeroBatchRow"
+      },
+      "CoaZeroBatchSource": {
+        "properties": {
+          "specification_id": {
+            "type": "string",
+            "title": "Specification Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "criterion_key": {
+            "type": "string",
+            "title": "Criterion Key"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "specification_id",
+          "version",
+          "source_id",
+          "value",
+          "filename",
+          "criterion_key"
+        ],
+        "title": "CoaZeroBatchSource"
+      },
       "ConfigurationChange": {
         "properties": {
           "base_revision": {
@@ -10002,6 +10450,63 @@
           "intent"
         ],
         "title": "CopyCoaToZero"
+      },
+      "CopyCoaZeroBatch": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Token"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision"
+          },
+          "release_completed": {
+            "type": "string",
+            "format": "date",
+            "title": "Release Completed"
+          },
+          "preview_fingerprint": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Preview Fingerprint"
+          },
+          "row_ids": {
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 150,
+            "minItems": 1,
+            "title": "Row Ids"
+          },
+          "basis": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Basis"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token",
+          "idempotency_key",
+          "revision",
+          "release_completed",
+          "preview_fingerprint",
+          "row_ids",
+          "basis"
+        ],
+        "title": "CopyCoaZeroBatch"
       },
       "CreateWorksheet": {
         "properties": {
@@ -11931,6 +12436,21 @@
         ],
         "title": "PlannedPoint"
       },
+      "PreviewCoaZeroBatch": {
+        "properties": {
+          "release_completed": {
+            "type": "string",
+            "format": "date",
+            "title": "Release Completed"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "release_completed"
+        ],
+        "title": "PreviewCoaZeroBatch"
+      },
       "PreviewSummary": {
         "properties": {
           "preview_id": {
@@ -13458,6 +13978,76 @@
           "rule_version"
         ],
         "title": "RuleRetirement"
+      },
+      "SampleEntry": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "project": {
+            "type": "string",
+            "title": "Project"
+          },
+          "batch": {
+            "type": "string",
+            "title": "Batch"
+          },
+          "material_stage": {
+            "type": "string",
+            "title": "Material Stage"
+          },
+          "sample_type": {
+            "type": "string",
+            "title": "Sample Type"
+          },
+          "presentation": {
+            "type": "string",
+            "title": "Presentation"
+          },
+          "packaging": {
+            "type": "string",
+            "title": "Packaging"
+          },
+          "purpose": {
+            "type": "string",
+            "title": "Purpose"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deleted At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "project",
+          "batch",
+          "material_stage",
+          "sample_type",
+          "presentation",
+          "packaging",
+          "purpose",
+          "source",
+          "created_at",
+          "deleted_at"
+        ],
+        "title": "SampleEntry"
       },
       "SampleInput": {
         "properties": {
@@ -15344,6 +15934,67 @@
         "additionalProperties": false,
         "type": "object",
         "title": "WorksheetLayout"
+      },
+      "WorksheetListEntry": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "revision": {
+            "type": "integer",
+            "title": "Revision"
+          },
+          "plan_version": {
+            "type": "integer",
+            "title": "Plan Version"
+          },
+          "sample_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Id"
+          },
+          "batch": {
+            "type": "string",
+            "title": "Batch"
+          },
+          "condition": {
+            "type": "string",
+            "title": "Condition"
+          },
+          "study": {
+            "type": "string",
+            "enum": [
+              "long_term",
+              "accelerated",
+              "stress"
+            ],
+            "title": "Study"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "revision",
+          "plan_version",
+          "sample_id",
+          "batch",
+          "condition",
+          "study"
+        ],
+        "title": "WorksheetListEntry"
       },
       "WorkspacePreview": {
         "properties": {

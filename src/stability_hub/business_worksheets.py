@@ -297,6 +297,72 @@ class CopyCoaToZero(WorksheetMutation):
     basis: str = Field(default="", max_length=2000)
 
 
+class PreviewCoaZeroBatch(Model):
+    release_completed: date
+
+
+class CopyCoaZeroBatch(WorksheetMutation):
+    release_completed: date
+    preview_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+    row_ids: tuple[Text, ...] = Field(min_length=1, max_length=150)
+    basis: Text = Field(max_length=2000)
+
+
+class CoaZeroBatchSource(Model):
+    specification_id: str
+    version: int
+    source_id: str
+    value: str
+    filename: str
+    criterion_key: str
+
+
+class CoaZeroBatchRow(Model):
+    row_id: str
+    item_id: str
+    label: str
+    method: str
+    method_version: str
+    unit: str
+    slot_id: str
+    status: Literal["matched", "unmatched", "existing", "conflict"]
+    reason: Literal["sample_missing", "no_applicable_coa", "standard_scope_conflict", "multiple_coa_matches", "invalid_coa_value",
+                    "release_reference_exists", "result_history_exists", "worksheet_slot_conflict", "worksheet_occupied"] | None
+    adopted_version_id: str | None
+    adopted_value: str | None
+    candidates: list[CoaZeroBatchSource]
+
+
+class CoaZeroBatchPreview(Model):
+    id: str
+    revision: int
+    sample_id: str | None
+    point_id: str | None
+    release_completed: date
+    preview_fingerprint: str
+    rows: list[CoaZeroBatchRow]
+
+
+class CoaZeroBatchResult(Model):
+    id: str
+    revision: int
+    plan_version: int
+    project_revision: int
+    result_version_ids: list[str]
+    copied: dict[str, str]
+
+
+class WorksheetListEntry(Model):
+    id: str
+    name: str
+    revision: int
+    plan_version: int
+    sample_id: str | None
+    batch: str
+    condition: str
+    study: Literal["long_term", "accelerated", "stress"]
+
+
 class AttachProtocol(WorksheetMutation):
     protocol_draft_id: str = Field(pattern=r"^[a-f0-9]{64}$")
     protocol_table: int = Field(ge=1)
@@ -381,15 +447,24 @@ class BusinessWorksheets:
         self.result_versions = result_versions
         self.enforce_formal_sample_binding = enforce_formal_sample_binding
 
-    def list(self, project, actor):
+    def list(self, project, actor, *, sample_id=None, study=None):
         require(actor, Capability.VIEW)
         with self.store.read() as conn:
             project_row(conn, project)
+            query = """SELECT id,name,revision,plan_version,sample_id,
+                              json_extract(identity_json,'$.batch') AS batch,
+                              json_extract(identity_json,'$.condition') AS condition,
+                              json_extract(identity_json,'$.study') AS study
+                       FROM business_worksheets WHERE project=? AND deleted_at IS NULL"""
+            params = [project]
+            if sample_id is not None:
+                query += " AND sample_id=?"
+                params.append(sample_id)
+            if study is not None:
+                query += " AND json_extract(identity_json,'$.study')=?"
+                params.append(study)
             return [dict(row) for row in conn.execute(
-                """SELECT id,name,revision,plan_version,
-                          json_extract(identity_json,'$.batch') AS batch,
-                          json_extract(identity_json,'$.condition') AS condition
-                   FROM business_worksheets WHERE project=? AND deleted_at IS NULL ORDER BY name,id""", (project,)
+                query + " ORDER BY name,id", params
             )]
 
     def _sheet(self, conn, sheet_id):
@@ -1449,7 +1524,7 @@ class BusinessWorksheets:
             remember(conn, project, actor, request.idempotency_key, payload, response)
             return response
 
-    def _coa_release_options(self, conn, sheet, row):
+    def _coa_release_options(self, conn, sheet, row, *, exact_standard=False):
         if not sheet["sample_id"]:
             return []
         identity = StudyIdentity.model_validate_json(sheet["identity_json"])
@@ -1460,8 +1535,18 @@ class BusinessWorksheets:
         if not item or any(getattr(item, field) != row[field] for field in ("method", "method_version", "unit", "result_type")):
             return []
         options = []
-        seen_keys = set()
-        for standard in row.get("standards", []):
+        standards = row.get("standards", [])
+        if exact_standard:
+            registered = conn.execute("""SELECT a.method,a.method_version,c.unit,c.result_type,c.reporting_basis
+                FROM assay_components c JOIN assay_definitions a ON a.id=c.assay_id AND a.project=c.project
+                WHERE c.project=? AND c.item_id=?""", (sheet["project"], row["item_id"])).fetchone()
+            if (registered is None or registered["reporting_basis"]
+                    or any(registered[field] != row[field] for field in ("method", "method_version", "unit", "result_type"))):
+                return []
+            links = [SpecificationCriterion(specification_id=s["specification_id"], table=s["table"], row=s["row"])
+                     for s in standards]
+            standards = self._resolve_standards(conn, sheet["project"], identity, row, links)
+        for standard in standards:
             spec_id = standard["specification_id"]
             component = conn.execute("""SELECT item_id FROM specification_assay_components
                 WHERE project=? AND specification_id=? AND table_number=? AND row_number=?""",
@@ -1473,13 +1558,15 @@ class BusinessWorksheets:
                 WHERE sample_id=? AND specification_id=? ORDER BY version DESC""", (sheet["sample_id"], spec_id)):
                 changes = json.loads(entry["changed_json"])
                 if key in changes:
-                    if entry["source_id"]:
-                        options.append({"specification_id": spec_id, "version": entry["version"], "source_id": entry["source_id"],
+                    if entry["source_id"] or exact_standard:
+                        options.append({"specification_id": spec_id, "version": entry["version"], "source_id": entry["source_id"] or "",
                                         "value": changes[key], "filename": standard["filename"], "criterion_key": key})
-                        seen_keys.add((spec_id, key))
                     break
 
-        # 2. 新增通用字典匹配路径：通过 sample_release_results
+        if exact_standard:
+            return options
+
+        # Preserve the dictionary fallback for individually reviewed choices.
         generic = conn.execute("""
             SELECT r.specification_id, r.coa_version AS version, r.source_id, r.raw_value AS value, s.filename
             FROM sample_release_results r
@@ -1506,6 +1593,39 @@ class BusinessWorksheets:
             row = next((item for item in self._plan(conn, sheet)["rows"] if item["id"] == row_id), None)
             return [{**option, "fingerprint": digest(option)}
                     for option in self._coa_release_options(conn, sheet, row)] if row else []
+
+    @staticmethod
+    def _release_completed_date(sheet, completed):
+        start = date.fromisoformat(sheet["start_date"])
+        if completed is None or not completed <= start <= date.fromisoformat(
+            planned_date(completed, PlannedPoint(unit="M", amount=1, required_items=()))
+        ):
+            raise WorkflowError("release_reference_date", "请核对放行完成日期，开始日期须在放行完成后一个月内。")
+
+    @staticmethod
+    def _normalize_coa_result(coa, row):
+        try:
+            result = normalize_worksheet_result(coa["value"], row["unit"], row["result_type"])
+        except NeedsReview as exc:
+            raise WorkflowError(exc.code, str(exc)) from exc
+        if result.status == "blank":
+            raise WorkflowError("coa_blank", "不能复制空白放行结果。")
+        return result
+
+    def _record_coa_snapshot(self, conn, sheet, plan, row, point, record, coa, *, actor, previous,
+                             latest, intent, basis, release_completed=None):
+        ensure_worksheet_slot_unlocked(conn, record.key.slot_id, except_sheet_id=sheet["id"])
+        source = {"kind": "coa_snapshot", "worksheet_id": sheet["id"], "row_id": row["id"],
+                  "point_id": point["id"], "plan_version": sheet["plan_version"], "sample_id": sheet["sample_id"],
+                  "coa": coa, "raw_text": coa["value"], "unit": row["unit"]}
+        if release_completed is not None:
+            source["release_completed"] = release_completed.isoformat()
+        version_id = self.result_versions.record_worksheet_result(
+            conn, record, actor=actor, previous=previous, current=latest, intent=intent, reason=basis.strip(), source=source,
+        )
+        for name in ("release_references", "pending_release_references"):
+            plan.get(name, {}).pop(row["id"], None)
+        return version_id
 
     def copy_coa_to_zero(self, sheet_id, request, actor):
         require(actor, Capability.CONFIRM_FACT)
@@ -1535,28 +1655,129 @@ class BusinessWorksheets:
             latest = current(versions(conn, project, key.slot_id))
             if request.expected_version_id != (previous["id"] if previous else None):
                 raise WorkflowError("worksheet_result_changed", "0M 采用结果已变化，请重新核对。", 409)
-            try:
-                result = normalize_worksheet_result(coa["value"], row["unit"], row["result_type"])
-            except NeedsReview as exc:
-                raise WorkflowError(exc.code, str(exc)) from exc
-            if result.status == "blank":
-                raise WorkflowError("coa_blank", "不能复制空白放行结果。")
+            result = self._normalize_coa_result(coa, row)
             old = StabilityRecord.model_validate_json(previous["record_json"]) if previous else None
             if request.intent == "keep" or (old and old.result == result):
                 response = {"id": sheet_id, "revision": sheet["revision"], "result_version_ids": []}
             else:
-                ensure_worksheet_slot_unlocked(conn, key.slot_id, except_sheet_id=sheet_id)
                 record = StabilityRecord(key=key, result=result, standards=old.standards if old else ())
-                version_id = self.result_versions.record_worksheet_result(
-                    conn, record, actor=actor, previous=previous, current=latest, intent=request.intent,
-                    reason=request.basis.strip(), source={"kind": "coa_snapshot", "worksheet_id": sheet_id,
-                    "row_id": row["id"], "point_id": point["id"], "plan_version": sheet["plan_version"],
-                    "sample_id": sheet["sample_id"], "coa": coa, "raw_text": coa["value"], "unit": row["unit"]},
+                version_id = self._record_coa_snapshot(
+                    conn, sheet, plan, row, point, record, coa, actor=actor, previous=previous,
+                    latest=latest, intent=request.intent, basis=request.basis,
                 )
-                for name in ("release_references", "pending_release_references"):
-                    plan.get(name, {}).pop(row["id"], None)
                 response = self._write_plan(conn, sheet, plan, actor, request.basis, "worksheet_copy_coa")
                 response["result_version_ids"] = [version_id]
+            remember(conn, project, actor, request.idempotency_key, payload, response)
+            return response
+
+    def _coa_batch_options(self, conn, sheet, row, sample):
+        if sample is None:
+            return [], "sample_missing"
+        try:
+            options = self._coa_release_options(conn, sheet, row, exact_standard=True)
+        except WorkflowError:
+            return [], "standard_scope_conflict"
+        if len(options) > 1:
+            return options, "multiple_coa_matches"
+        if not options:
+            return [], "no_applicable_coa"
+        try:
+            self._normalize_coa_result(options[0], row)
+        except WorkflowError:
+            return options, "invalid_coa_value"
+        return options, None
+
+    def _coa_batch_rows(self, conn, sheet, plan, point, identity):
+        project = sheet["project"]
+        sample = conn.execute("""SELECT * FROM sample_entities
+            WHERE project=? AND id=? AND deleted_at IS NULL""", (project, sheet["sample_id"])).fetchone()
+        if sample is not None and not sample_matches_study(sample, identity):
+            sample = None
+        positions = dict(conn.execute("""SELECT row_id,slot_id FROM worksheet_result_positions
+            WHERE sheet_id=? AND point_id=?""", (sheet["id"], point["id"])))
+        for row in plan["rows"]:
+            row_id = row["id"]
+            if row_id not in point["required_row_ids"]:
+                continue
+            slot_id = self._key(sheet, identity, row, point).slot_id
+            previous = adopted(conn, project, slot_id)
+            candidates, reason = self._coa_batch_options(conn, sheet, row, sample)
+            if previous:
+                status, reason = "existing", None
+            elif any(row_id in plan.get(key, {}) for key in ("release_references", "pending_release_references")):
+                status, reason = "conflict", "release_reference_exists"
+            elif versions(conn, project, slot_id, include_invalidated=True):
+                status, reason = "conflict", "result_history_exists"
+            elif positions.get(row_id) != slot_id:
+                status, reason = "conflict", "worksheet_slot_conflict"
+            elif reason in {"sample_missing", "no_applicable_coa"}:
+                status = "unmatched"
+            elif reason:
+                status = "conflict"
+            else:
+                try:
+                    ensure_worksheet_slot_unlocked(conn, slot_id, except_sheet_id=sheet["id"])
+                    status = "matched"
+                except WorkflowError:
+                    status, reason = "conflict", "worksheet_occupied"
+            yield {
+                "row_id": row_id, "item_id": row["item_id"], "label": row["label"], "method": row["method"],
+                "method_version": row["method_version"], "unit": row["unit"], "slot_id": slot_id,
+                "status": status, "reason": reason, "candidates": candidates,
+                "adopted_version_id": previous["id"] if previous else None,
+                "adopted_value": StabilityRecord.model_validate_json(previous["record_json"]).result.raw_text if previous else None,
+            }
+
+    def _coa_batch_preview(self, conn, sheet, plan, point, identity, completed):
+        self._release_completed_date(sheet, completed)
+        preview = {"id": sheet["id"], "revision": sheet["revision"], "sample_id": sheet["sample_id"],
+                   "point_id": point["id"] if point else None, "release_completed": completed.isoformat(),
+                   "rows": list(self._coa_batch_rows(conn, sheet, plan, point, identity)) if point else []}
+        return {**preview, "preview_fingerprint": digest(preview)}
+
+    def preview_copy_coa_batch(self, sheet_id, request, actor):
+        require(actor, Capability.VIEW)
+        with self.store.read() as conn:
+            sheet = self._sheet(conn, sheet_id)
+            plan = self._plan(conn, sheet)
+            point = next((p for p in plan["points"] if p["unit"] == "M" and p["amount"] == 0), None)
+            identity = StudyIdentity.model_validate_json(sheet["identity_json"])
+            return self._coa_batch_preview(conn, sheet, plan, point, identity, request.release_completed)
+
+    def copy_coa_batch_to_zero(self, sheet_id, request, actor):
+        require(actor, Capability.CONFIRM_FACT)
+        with self.store.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            sheet = self._sheet(conn, sheet_id)
+            project = sheet["project"]
+            payload = {"worksheet_copy_coa_batch": sheet_id, **request.model_dump(mode="json", exclude={"token"})}
+            if (prior := replay(conn, project, actor, request.idempotency_key, payload)) is not None:
+                return prior
+            self._check_mutation(conn, sheet, request, actor)
+            plan = self._plan(conn, sheet)
+            point = next((p for p in plan["points"] if p["unit"] == "M" and p["amount"] == 0), None)
+            identity = StudyIdentity.model_validate_json(sheet["identity_json"])
+            preview = self._coa_batch_preview(conn, sheet, plan, point, identity, request.release_completed)
+            if preview["preview_fingerprint"] != request.preview_fingerprint:
+                raise WorkflowError("coa_batch_preview_changed", "放行来源或 0M 状态已变化，请重新预览。", 409)
+            matched = {row["row_id"]: row["candidates"][0] for row in preview["rows"] if row["status"] == "matched"}
+            selected = set(request.row_ids)
+            if len(selected) != len(request.row_ids) or not selected <= matched.keys():
+                raise WorkflowError("coa_batch_selection", "仅可批量复制预览中唯一匹配且无正式记录的 0M 检项。", 409)
+            copied = {}
+            for row in plan["rows"]:
+                if row["id"] not in selected:
+                    continue
+                coa = matched[row["id"]]
+                record = StabilityRecord(key=self._key(sheet, identity, row, point),
+                                         result=self._normalize_coa_result(coa, row))
+                copied[row["id"]] = self._record_coa_snapshot(
+                    conn, sheet, plan, row, point, record, coa, actor=actor, previous=None, latest=None,
+                    intent="initial", basis=request.basis, release_completed=request.release_completed,
+                )
+            response = self._write_plan(conn, sheet, plan, actor, request.basis, "worksheet_copy_coa_batch",
+                                        detail={"copied": copied, "preview_fingerprint": request.preview_fingerprint})
+            response.update(copied=copied, result_version_ids=list(copied.values()))
             remember(conn, project, actor, request.idempotency_key, payload, response)
             return response
 
@@ -1612,12 +1833,8 @@ class BusinessWorksheets:
                     ):
                         raise WorkflowError("release_reference_identity", "放行结果与 0M 检项的样品、方法或单位不符。")
                     version_id = source["id"]
-                start = date.fromisoformat(sheet["start_date"])
                 completed = request.release_completed
-                if completed is None or not completed <= start <= date.fromisoformat(
-                    planned_date(completed, PlannedPoint(unit="M", amount=1, required_items=()))
-                ):
-                    raise WorkflowError("release_reference_date", "请核对放行完成日期，开始日期须在放行完成后一个月内。")
+                self._release_completed_date(sheet, completed)
                 references[row["id"]] = {"result_version_id": version_id, "release_completed": completed.isoformat(),
                                         "basis": request.basis, **provenance}
             plan.get("pending_release_references", {}).pop(row["id"], None)

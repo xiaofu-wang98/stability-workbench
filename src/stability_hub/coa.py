@@ -10,7 +10,7 @@ from zipfile import BadZipFile
 
 from docx import Document
 from docx.shared import Inches
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, File, Query, UploadFile
 from fastapi.responses import Response
 from lxml.etree import XMLSyntaxError
 import openpyxl
@@ -34,6 +34,20 @@ class SampleInput(BaseModel):
     presentation: Label = ''
     packaging: Label = ''
     purpose: Annotated[Label, Field(min_length=1)]
+
+
+class SampleEntry(BaseModel):
+    id: str
+    project: str
+    batch: str
+    material_stage: str
+    sample_type: str
+    presentation: str
+    packaging: str
+    purpose: str
+    source: str
+    created_at: str
+    deleted_at: str | None
 
 
 class CoaSave(BaseModel):
@@ -273,13 +287,24 @@ def router_for(store, actor_dependency, project_dependency):
                            (sample_id, specification_id)).fetchone()
         return (row['version'], json.loads(row['values_json'])) if row else (0, {})
 
-    @router.get('/projects/{project}/samples')
-    def samples(project: project_dependency, operator: actor_dependency, batch: str = ''):
+    @router.get('/projects/{project}/samples', response_model=list[SampleEntry])
+    def samples(
+        project: project_dependency, operator: actor_dependency,
+        batch: Annotated[str | None, Query(description='Exact batch filter; omit to browse the project.')] = None,
+        offset: Annotated[int, Query(ge=0, le=2**63 - 1)] = 0,
+        limit: Annotated[int | None, Query(ge=1, le=500, description='Defaults to 100 when browsing the project.')] = None,
+    ):
         require(operator, Capability.VIEW)
         with store.read() as conn:
             project_row(conn, project)
-            return [dict(row) for row in conn.execute(
-                'SELECT * FROM sample_entities WHERE project=? AND batch=? AND deleted_at IS NULL ORDER BY created_at,id', (project, batch.strip()))]
+            query = 'SELECT * FROM sample_entities WHERE project=? AND deleted_at IS NULL'
+            if batch is None:
+                query += ' ORDER BY batch COLLATE NOCASE, batch, created_at, id'
+                params = (project, limit or 100, offset)
+            else:
+                query += ' AND batch=? ORDER BY created_at,id'
+                params = (project, batch.strip(), limit or -1, offset)
+            return [dict(row) for row in conn.execute(query + ' LIMIT ? OFFSET ?', params)]
 
     @router.post('/projects/{project}/samples', status_code=201)
     def add_sample(project: project_dependency, command: SampleInput, operator: actor_dependency):
