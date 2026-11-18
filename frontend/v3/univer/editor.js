@@ -1,7 +1,9 @@
 import { CellValueType, createUniver, LocaleType, mergeLocales } from '@univerjs/presets';
+import { IContextService } from '@univerjs/core';
 import { UniverSheetsCorePreset } from '@univerjs/preset-sheets-core';
 import zhCN from '@univerjs/preset-sheets-core/locales/zh-CN';
 import '@univerjs/preset-sheets-core/lib/index.css';
+import { DISABLE_AUTO_FOCUS_KEY } from '@univerjs/ui';
 
 function clipboardRows(text) {
   const rows = [[]];
@@ -35,7 +37,7 @@ export function mountWorksheet(container, values, layout, editable, { onChange, 
     locales: { [LocaleType.ZH_CN]: mergeLocales(zhCN) },
     presets: [UniverSheetsCorePreset({
       container, header: false, toolbar: false, formulaBar: false, footer: false,
-      contextMenu: false,
+      contextMenu: false, disableAutoFocus: true,
     })],
   });
   const sheetId = 'study';
@@ -86,6 +88,11 @@ export function mountWorksheet(container, values, layout, editable, { onChange, 
     },
   });
   workbook.setEditable(editable);
+  const focusContext = univer.__getInjector().get(IContextService);
+  const focusWithinGrid = event => {
+    focusContext.setContextValue(DISABLE_AUTO_FOCUS_KEY, !container.contains(event.target));
+  };
+  document.addEventListener('pointerdown', focusWithinGrid, true);
   const subscription = univerAPI.addEvent(univerAPI.Event.SheetValueChanged, onChange);
   const editGuard = univerAPI.addEvent(univerAPI.Event.BeforeSheetEditStart, event => {
     if (!editable || !canEdit(event.row, event.column)) {
@@ -197,6 +204,7 @@ export function mountWorksheet(container, values, layout, editable, { onChange, 
     },
     dispose() {
       document.removeEventListener('paste', paste, true);
+      document.removeEventListener('pointerdown', focusWithinGrid, true);
       subscription.dispose();
       editGuard.dispose();
       selectionListeners.forEach(listener => listener.dispose());

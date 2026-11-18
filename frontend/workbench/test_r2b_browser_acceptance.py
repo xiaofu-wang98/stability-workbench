@@ -270,6 +270,10 @@ def run_acceptance():
                 # 聚焦到 1M 第一行单元格位置 (col index 3 in visual grid)
                 # 1M 列包含: 行 2 (检项_1: 应检), 行 3 (检项_2: 非应检 '—'), 行 4 (检项_3: 应检)
                 page.mouse.click(box['x'] + 680, box['y'] + 105)
+                page.keyboard.press('ArrowDown')
+                page.keyboard.type('95.50')
+                expect(page.get_by_role('alert')).to_contain_text('请选择应检结果格录入。')
+                page.keyboard.press('ArrowUp')
 
                 # 5.1 错误路径测试：向包含非应检格的列粘贴实际数值 (如 检项 2 收到 95.5%)
                 conflict_paste = "98.10%\t95.50%\t93.80%" # 复制包含实际数值到非应检位置
