@@ -49,6 +49,7 @@ class Result(Model):
 
 class RecordKey(Model):
     project: Text
+    sample_id: Text | None = Field(default=None, exclude_if=lambda value: value is None)
     sample_type: Literal["DS", "DP", "placebo"]
     purpose: Literal["unknown", "routine", "reference"] = "unknown"
     reporting_basis: str = ""
@@ -135,6 +136,7 @@ class StabilityRecord(Model):
 
 class ImportContext(Model):
     role: Literal["stability_source", "release_coa"] = "stability_source"
+    sample_id: Text | None = None
     defaults: dict[str, str] = Field(default_factory=dict)
 
 

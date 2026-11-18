@@ -4,7 +4,7 @@ from collections import defaultdict
 
 from .models import StabilityRecord, digest
 from .result_queries import selected_rows, cells_from_rows
-from .trend_export import analysis_scope, chart_data
+from .trend_export import analysis_scope, chart_data, freeze_plot_limits
 from .workflow_common import project_row, check_revision, WorkflowError
 
 
@@ -55,5 +55,7 @@ def trend_results(conn, project, filters, *, group_id, revision, batches=(), axi
     members = [(a,b) for a,b in members if StabilityRecord.model_validate_json(a['record_json']).key.batch in batches]
     snapshot = {'project':project,'revision':revision,'filters':filters.model_dump(),
                 'entries':[{'display':dict(a),'adopted':dict(b) if b else None} for a,b in members]}
+    if limits := freeze_plot_limits(conn, snapshot):
+        snapshot['plot_limits'] = limits
     snapshot['snapshot_id'] = digest(snapshot)
     return chart_data(snapshot, axis=axis)

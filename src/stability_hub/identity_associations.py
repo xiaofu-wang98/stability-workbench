@@ -63,13 +63,26 @@ def logical_row(row, links):
     return data
 
 
-def versions(conn, project, slot_id=None):
+def invalidation(conn, version_id):
+    return conn.execute(
+        "SELECT * FROM workflow_invalidated_versions WHERE version_id=?", (version_id,)
+    ).fetchone()
+
+
+def require_valid_version(conn, version_id):
+    if invalidation(conn, version_id):
+        raise WorkflowError("result_invalidated", "此结果已作废，不能采用或更正。", 409)
+
+
+def versions(conn, project, slot_id=None, *, include_invalidated=False):
     links = overlays(conn, project)
     args = [project]
     where = ''
+    if not include_invalidated:
+        where += ' AND NOT EXISTS (SELECT 1 FROM workflow_invalidated_versions i WHERE i.version_id=v.id)'
     if slot_id is not None:
         physical = {slot_id, *(sid for sid,link in links.items() if RecordKey.model_validate(link['key']).slot_id == slot_id)}
-        where = ' AND v.slot_id IN (' + ','.join('?' for _ in physical) + ')'
+        where += ' AND v.slot_id IN (' + ','.join('?' for _ in physical) + ')'
         args.extend(sorted(physical))
     rows = conn.execute("""SELECT v.*,s.state,i.previous_version_id AS identity_previous_version_id
         FROM workflow_versions v JOIN workflow_version_states s ON s.version_id=v.id
@@ -108,6 +121,8 @@ def adopted(conn, project, slot_id):
         choice = conn.execute('SELECT version_id FROM workflow_adoptions WHERE project=? AND slot_id=?',(project,slot_id)).fetchone()
     if not choice:
         return None
+    if invalidation(conn, choice[0]):
+        return None
     row = conn.execute('''SELECT v.*,s.state FROM workflow_versions v JOIN workflow_version_states s ON s.version_id=v.id
         WHERE v.id=? AND v.project=? AND s.state IN ('confirmed','legacy')''',(choice[0],project)).fetchone()
     result = logical_row(row,overlays(conn,project)) if row else None
@@ -117,10 +132,14 @@ def adopted(conn, project, slot_id):
 def adoption_choices(conn, project):
     result = dict(conn.execute('SELECT slot_id,version_id FROM workflow_adoptions WHERE project=?',(project,)))
     result.update(dict(conn.execute('SELECT slot_id,version_id FROM workflow_identity_adoptions WHERE project=?',(project,))))
-    return result
+    invalidated = {row[0] for row in conn.execute(
+        'SELECT version_id FROM workflow_invalidated_versions WHERE project=?', (project,)
+    )}
+    return {slot: version for slot, version in result.items() if version not in invalidated}
 
 
 def set_adoption(conn, project, slot_id, version_id):
+    require_valid_version(conn, version_id)
     linked = any(RecordKey.model_validate(v['key']).slot_id == slot_id for v in overlays(conn,project).values())
     table = 'workflow_identity_adoptions' if linked else 'workflow_adoptions'
     conn.execute(f'INSERT INTO {table} VALUES (?,?,?) ON CONFLICT(project,slot_id) DO UPDATE SET version_id=excluded.version_id',

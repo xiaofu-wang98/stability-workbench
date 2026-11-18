@@ -43,8 +43,11 @@ def test_launcher_allocates_real_isolated_port_and_identifies_preview(launcher):
             from stability_hub import __version__
             assert health and health['delivery_state']=='release' and health['version']==__version__
             with opener.open(f'http://127.0.0.1:{port}/api/v1/projects',timeout=2) as response:
-                assert json.load(response)==[]
+                assert json.load(response) == [{'project': 'TEST', 'revision': 0, 'name': 'TEST', 'purpose': 'sandbox'}]
             with opener.open(f'http://127.0.0.1:{port}/',timeout=2) as response:
+                assert response.url.endswith('/workbench/')
+                assert '<title>稳研工作台</title>' in response.read().decode('utf-8')
+            with opener.open(f'http://127.0.0.1:{port}/legacy',timeout=2) as response:
                 assert 'V5 worksheet commands' in response.read().decode('utf-8')
             assert (home/'history.sqlite').is_file()
         finally:

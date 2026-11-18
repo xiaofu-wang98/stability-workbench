@@ -39,11 +39,14 @@ class Workflow:
         require(actor, Capability.CONFIRM_FACT)
         if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,79}', request.project):
             raise WorkflowError('invalid_project', '项目编号仅允许字母、数字、点、横线和下划线，最长80字符。')
-        config = ProjectConfig(project=request.project, name=request.name)
+        from .workflow_common import resolve_canonical_project
+        clean_code = request.project.strip()
+        config = ProjectConfig(project=clean_code, name=request.name)
         with self.store.connect() as conn:
             conn.execute('BEGIN IMMEDIATE')
-            if conn.execute('SELECT 1 FROM workflow_projects WHERE project=?', (config.project,)).fetchone():
-                raise WorkflowError('project_exists', '项目已存在，请选择已有项目。', 409)
+            canonical = resolve_canonical_project(conn, clean_code)
+            if conn.execute('SELECT 1 FROM workflow_projects WHERE UPPER(project)=UPPER(?)', (canonical,)).fetchone():
+                raise WorkflowError('project_exists', f'项目或其别名已存在（主项目：{canonical}），请直接选择已有项目。', 409)
             if self.store.snapshot(config.project) or self.store.issues(config.project):
                 raise WorkflowError('legacy_project', '存在历史项目，请先通过既有项目配置激活。', 409)
             conn.execute('INSERT INTO workflow_projects(project,config_json,startup_config_json) VALUES (?,?,?)',
@@ -298,7 +301,8 @@ class Workflow:
         anchor = raw.evidence.get('batch') or raw.evidence.get('test_item') or raw.location
         return upload['id'] + ':' + digest([raw.location.section,anchor.row,anchor.column])[:12]
 
-    def upload(self, project, filename, data, context: ImportContext, idempotency_key, *, actor: Actor, _parsed=None, deduplicate=False, _legacy_compatibility=False):
+    def upload(self, project, filename, data, context: ImportContext, idempotency_key, *, actor: Actor, _parsed=None,
+               deduplicate=False, _legacy_compatibility=False, progress=None):
         require(actor, Capability.PREVIEW)
         filename = Path(filename.replace("\\", "/")).name
         suffix = Path(filename).suffix.lower()
@@ -309,10 +313,12 @@ class Workflow:
         if not idempotency_key or not idempotency_key.strip():
             raise WorkflowError("idempotency_required", "上传需要幂等键。")
         sha = hashlib.sha256(data).hexdigest()
-        request_hash = digest({"sha": sha, "context": context.model_dump(), "filename": filename})
+        request_hash = digest({"sha": sha, "context": context.model_dump(exclude={"sample_id"} if context.sample_id is None else set()), "filename": filename})
         with self.store.connect() as conn:
             conn.execute('BEGIN')
-            project_row(conn, project)
+            config = project_row(conn, project)
+            if config["purpose"] == "sandbox" and context.role == "stability_source":
+                raise WorkflowError("sandbox_history_import", "历史结果请导入正式项目。沙盒可手工建表、录入放行并回传系统模板。", 409)
             prior = conn.execute("SELECT * FROM workflow_uploads WHERE project=? AND uploaded_by=? AND client_key=?",
                                  (project, actor.id, idempotency_key)).fetchone()
             if prior:
@@ -325,7 +331,10 @@ class Workflow:
         with TemporaryDirectory(prefix="hub-upload-") as temp:
             path = Path(temp) / ("source" + suffix)
             path.write_bytes(data)
-            parsed = _parsed if _parsed is not None else parse_source(path,allow_partial=True)
+            options = {"progress": progress} if progress else {}
+            parsed = _parsed if _parsed is not None else parse_source(path, allow_partial=True, **options)
+        if progress:
+            progress("archiving", None, None, len(parsed.observations), None)
         frozen = self.store.home / "sources" / (sha + suffix)
         try:
             with frozen.open("xb") as target:
@@ -344,6 +353,16 @@ class Workflow:
                 if prior["request_hash"] != request_hash:
                     raise WorkflowError("idempotency_conflict", "上传幂等键冲突。", 409)
                 return self._preview(conn, prior, actor)
+            if context.sample_id:
+                sample = conn.execute("SELECT * FROM sample_entities WHERE project=? AND id=? AND deleted_at IS NULL", (project, context.sample_id)).fetchone()
+                if sample is None:
+                    raise WorkflowError("sample_scope", "找不到当前项目下所选的样品。")
+                frozen_fields = {field: sample[field] for field in ("batch", "sample_type", "presentation") if sample[field]}
+                if sample["material_stage"] == "参考品":
+                    frozen_fields["purpose"] = "reference"
+                if any(context.defaults.get(field) not in (None, "", value) for field, value in frozen_fields.items()):
+                    raise WorkflowError("sample_scope", "上传上下文与样品的已登记属性不符。")
+                context = context.model_copy(update={"defaults": {**context.defaults, **frozen_fields}})
             conn.execute("INSERT OR IGNORE INTO documents VALUES (?,?,?)", (sha, filename, str(frozen)))
             upload_id = uid("upload")
             conn.execute("""INSERT INTO workflow_uploads(sequence,id,project,source_hash,filename,context_json,uploaded_by,client_key,request_hash)
@@ -660,6 +679,37 @@ class Workflow:
             raise WorkflowError("invalid_page", "分页范围无效。")
         with self.store.connect() as conn:
             conn.execute("BEGIN")
-            cells = cells_from_rows(selected_rows(conn, project, filters or ResultFilter()))
+            from .specification_limits import worksheet_assessment
+            from .workflow_contracts import StandardAssessment
+            pairs = selected_rows(conn, project, filters or ResultFilter())
+            cells = cells_from_rows(pairs)
+            page = cells[offset:offset + limit]
+            if page:
+                slots = tuple(cell.slot_id for cell in page)
+                placeholders = ','.join('?' for _ in slots)
+                linked = {row["slot_id"]: row for row in conn.execute(f"""
+                    SELECT s.slot_id, s.sheet_id, r.row_id, p.plan_json
+                    FROM business_worksheet_slots s
+                    JOIN business_worksheets w ON w.id=s.sheet_id AND w.deleted_at IS NULL
+                    JOIN business_worksheet_plans p ON p.sheet_id=w.id AND p.version=w.plan_version
+                    LEFT JOIN worksheet_result_positions r ON r.slot_id=s.slot_id
+                    WHERE s.slot_id IN ({placeholders})""", slots)}
+                plans = {}
+                updated = []
+                for cell, (_, adopted) in zip(page, pairs[offset:offset + limit], strict=True):
+                    position = linked.get(cell.slot_id)
+                    standard_row = None
+                    if position:
+                        sheet_id = position["sheet_id"]
+                        if sheet_id not in plans:
+                            plans[sheet_id] = {row["id"]: row for row in json.loads(position["plan_json"])["rows"]}
+                        standard_row = plans[sheet_id].get(position["row_id"])
+                    assessment = worksheet_assessment(
+                        StabilityRecord.model_validate_json(adopted["record_json"]), standard_row) if adopted else None
+                    updated.append(cell.model_copy(update={
+                        "worksheet_id": position["sheet_id"] if position else None,
+                        "standard_assessment": StandardAssessment.model_validate(assessment) if assessment else None,
+                    }))
+                page = tuple(updated)
             return ResultPage(project=project, base_revision=project_row(conn, project)["revision"],
-                              total=len(cells), offset=offset, limit=limit, cells=cells[offset:offset+limit])
+                              total=len(cells), offset=offset, limit=limit, cells=page)

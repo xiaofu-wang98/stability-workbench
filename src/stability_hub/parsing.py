@@ -79,13 +79,15 @@ def add_metadata(rows: list[list[str]], metadata: dict, section: str) -> None:
         metadata[key] = row[1]
 
 
-def parse_xlsx(path: Path, *, allow_partial=False) -> ParsedDocument:
+def parse_xlsx(path: Path, *, allow_partial=False, progress=None) -> ParsedDocument:
     book = load_workbook(path, data_only=False, rich_text=True)
     observations: list[RawObservation] = []
     metadata: dict[str, str] = {}
     coverage = []
     try:
-        for sheet in book:
+        for index, sheet in enumerate(book):
+            if progress:
+                progress("parsing", index, len(book.worksheets), len(observations), sheet.title)
             try:
                 matrix = parse_matrix_sheet(sheet)
             except ValueError as exc:
@@ -251,10 +253,10 @@ def parse_docx(path: Path) -> ParsedDocument:
     return ParsedDocument(metadata, observations)
 
 
-def parse_source(path: Path, *, allow_partial=False) -> ParsedDocument:
+def parse_source(path: Path, *, allow_partial=False, progress=None) -> ParsedDocument:
     suffix = path.suffix.lower()
     if suffix == ".xlsx":
-        parsed = parse_xlsx(path,allow_partial=allow_partial)
+        parsed = parse_xlsx(path,allow_partial=allow_partial, progress=progress)
     elif suffix == ".docx":
         parsed = parse_docx(path)
     else:

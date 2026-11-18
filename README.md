@@ -1,16 +1,25 @@
 # 稳研工作台（Stability Workbench）0.1.0 开发版
 
-在 Stability Data Hub 0.2.0 的业务核心上新增研究工作表。保留 V3 页面，从项目导航打开「研究工作表」，选择项目已配置的检项、研究条件和应检时间点。可查阅匹配的历史结果，取得占用后直接录入、粘贴、更正或新增独立复测。
+稳研工作台复用 Stability Data Hub 0.2.0 的数据和解析逻辑。首页可直接进入导入文件、新建研究表、查看项目数据、趋势和交付。研究表支持粘贴结果和单表独占编辑，结果也可从已核对的 Excel 导入。Word 方案可识别矩阵或用于人工建表，交付页可生成确认表和 Word 报告。
 
-Windows 上使用 Python 3.12 和 Node.js 24 运行 `setup.cmd`，然后运行 `start.cmd --port 8781`。内置启动器使用本地身份，供开发验收。导出验证可用 `start.cmd --port 8781 --role admin` 启动隔离数据目录。共享试点需接入真实身份。
+Python/FastAPI 提供 Office 解析、业务规则和接口，SQLite 保存来源、研究计划、正式结果与版本。主界面在 `frontend/workbench/`，使用 Vue 3、TypeScript 和 Vite。旧版来源核对页面从 `frontend/v3/` 构建，可在 `/legacy` 访问。代码审查从 [架构说明](ARCHITECTURE.md) 和 [AI 审查指南](AI_REVIEW_GUIDE.md) 开始。
 
-研究表使用 schema 10。测试升级时先复制数据库与原件，再以 `start.cmd --home <副本目录> --port 8781` 打开。旧版程序只能打开它支持的数据库版本。详见 [研究工作表开发记录](docs/workbench-0.1.0-dev.md)。
+## 当前进度
+
+- 已在隔离库用真实 Word 验证原液与制剂方案建表、标准原文关联、样品登记，以及 COA 在线录入与 Word/Excel 回传。
+- 已联验 0M 从正确样品引用放行值、COA 更新后的复核提示、改引新版和旧 Word 报告保留；亦覆盖模板回传冲突、检项停检和正式结果留痕作废。
+- 整体 MVP 仍在验收。部分历史 Excel 的方法与子结果冲突需人工确认，原液与制剂标准仍有条款适用性待逐条核对，旧日常库的项目归属与恢复切换仍待演练。实际原件与详细验收日志在本机保存。
+- 2026-11-16 审查快照准备期间，全量后端测试 446 项通过，前端类型检查和构建通过。真实文件专项验收在独立库运行。
+
+在 Windows 安装 Python 3.12 和 Node.js 24，从仓库根目录依次运行 `setup.cmd` 和 `start.cmd`。安装脚本通过 `requirements.lock` 和两份 npm 锁文件安装依赖，并构建工作台及旧版页面。工作台默认地址为 `http://127.0.0.1:8772/`。独立验收可使用 `start.cmd --home "隔离数据目录" --no-browser`。
+
+当前数据库使用 schema 16，新增样品身份、COA 版本、研究结果位置和标准子结果引用。验收旧库升级时先备份数据库与原件，再用 `start.cmd --home "副本目录"` 打开。详见 [研究工作表开发记录](docs/workbench-0.1.0-dev.md)。
 
 ## Stability Data Hub 0.2.0 核心
 
 0.2.0 改善陌生方案编号、汇报语义与中英文业务备注的识别；备注按真实检项和时间点定位，无法确定的范围仍保留原文供核对。新增查询索引并在事务内复用撤销集合。普通改单值优先显示结果、单位和说明，其余字段按需展开。未引入AI。详见 [0.2.0 发布说明](docs/release-0.2.0.md)。
 
-本版分支为 `codex/0.2.0`，从0.1.5提交 `a105c2a` 开始；旧分支与提交保留。数据库升级到schema 9仅新增索引，并自动备份旧库。若需并行使用0.1.5，先用 `scripts/backup.py` 创建独立数据副本，并以 `start.cmd --home 副本目录` 启动0.2.0；旧程序不支持打开升级后的schema 9。开发验收均使用隔离数据，未迁移日常data。
+历史分支 `codex/0.2.0` 从 0.1.5 提交 `a105c2a` 开始，当时数据库升级至 schema 9。开发验收均使用隔离数据目录。
 
 本项目承接V5.6，本轮V5.7功能升级后独立整理为0.1.1，使用全新Git仓库。保留既有页面布局，新增人工工作副本兜底模式，并优化重复刷新。
 
@@ -26,11 +35,15 @@ Windows 上使用 Python 3.12 和 Node.js 24 运行 `setup.cmd`，然后运行 `
 
 ## 启动
 
+扫描 PDF 识别使用独立的 Windows Python 环境。运行 `setup-ocr.cmd` 后，从「导入文件 → 识别扫描 PDF」归档原件并开始识别。首次运行需要下载 PaddleOCR 模型，识别在本机执行。识别结果可按页对照原件核对。
+
 Windows / Python 3.12：首次安装双击setup.cmd；日常使用双击start.cmd，打开 http://127.0.0.1:8772/ 。当前目录已安装独立.venv，启动不依赖旧项目目录。
 
 默认业务目录是data/，首次启动没有项目或业务数据。旧V5.6目录及其业务库未迁移、未删除。要携带既有数据，先用scripts/backup.py建立独立副本并核对报告，再用start.cmd --home 副本目录启动；不要覆盖旧库。
 
-命令选项：--port 8772、--home 路径、--no-browser、--role technician/senior_technician/project_lead/admin。角色由可信本地启动器注入，前端不能自行授予权限。默认technician；只监听127.0.0.1。端口占用时直接退出，不打开已有服务。
+在项目目录运行 `.venv\Scripts\python.exe scripts\backup.py --source "原数据目录" --target "新数据目录"`，目标目录须尚未创建。查看目标内 `migration.json`，确认数据库完整性、业务行和文件校验通过后，可用 `start.cmd --home "新数据目录"` 启动。备份会更新文件在新数据目录中的存储路径，迁移到其他位置时可再运行备份命令。Word 方案随数据库保存，确认表、Word 交付和扫描原件随目录复制。备份时仍在识别的扫描件会标为中断，保留已完整写出的识别页。
+
+命令选项：--port 8772、--home 路径、--no-browser、--role technician/senior_technician/project_lead/admin。默认使用 admin 对应的本地操作能力，只监听 127.0.0.1。端口占用时直接退出。
 
 ## 人工兜底编辑
 
@@ -57,7 +70,16 @@ Windows / Python 3.12：首次安装双击setup.cmd；日常使用双击start.cm
 
 ## 开发验证
 
-python -m pip install -e ".[dev]" playwright
+```powershell
+.venv\Scripts\python.exe -m pip install -e ".[dev]" playwright
+.venv\Scripts\python.exe -m pytest -q
+npm run --prefix frontend/workbench typecheck
+npm run --prefix frontend/workbench build
+```
+
+修改旧版界面、接口契约或人工核对逻辑时，可在激活的环境中运行相关检查。
+
+```powershell
 python frontend/v3/build.py
 python scripts/generate_contracts.py
 python frontend/v3/check.py
@@ -66,5 +88,6 @@ python -m pytest -q
 python frontend/v3/test_manual_sheet_browser.py
 python frontend/v3/test_v020_edit_browser.py
 python frontend/v3/test_v5_intake_e2e.py
+```
 
 浏览器验收需要先安装Chromium：python -m playwright install chromium。测试只使用临时目录或outputs中的隔离副本。data、outputs、.venv及缓存都不进入Git。

@@ -312,3 +312,97 @@ def test_workflow_examples_and_openapi_match(tmp_path):
         model.model_validate_json((root / 'examples/workflow' / (name + '.json')).read_text(encoding='utf-8'))
     app = create_app(Store(tmp_path / 'schema'), [], TECH)
     assert json.loads((root / 'openapi.json').read_text(encoding='utf-8')) == app.openapi()
+
+
+def test_project_alias_sample_registration_and_legacy_conflict(tmp_path):
+    from stability_hub.models import ProjectConfig
+
+    admin = actor_for_role("local", "Local", Role.ADMIN)
+    store = Store(tmp_path / "store")
+    with TestClient(create_app(store, [ProjectConfig(project="IP501")], admin)) as client:
+        sample = {"batch": "QA-1", "material_stage": "原液", "sample_type": "DS", "purpose": "常规"}
+        created = client.post("/api/v1/projects/501/samples", json=sample)
+        assert created.status_code == 201, created.text
+        assert created.json()["project"] == "IP501"
+        duplicate = client.post("/api/v1/projects/ip501/samples", json=sample)
+        assert duplicate.json()["id"] == created.json()["id"]
+        listed = client.get("/api/v1/projects/IP501/samples", params={"batch": "QA-1"}).json()
+        assert [entry["id"] for entry in listed] == [created.json()["id"]]
+        assert client.post("/api/v1/projects", json={"project": "501", "name": "Duplicate"}).json()["code"] == "project_exists"
+
+    with TestClient(create_app(store, [ProjectConfig(project="501")], admin)) as client:
+        for code in ("501", "ip501"):
+            response = client.get(f"/api/v1/projects/{code}/configuration")
+            assert response.status_code == 409
+            assert response.json()["code"] == "project_identity_conflict"
+            blocked = client.post(f"/api/v1/projects/{code}/samples", json=sample)
+            assert blocked.status_code == 409
+        with store.connect() as conn:
+            conn.execute("INSERT INTO project_aliases(alias,canonical_project) VALUES('501','IP501')")
+        for code in ("501", "ip501"):
+            resolved = client.get(f"/api/v1/projects/{code}/configuration")
+            assert resolved.is_success, resolved.text
+            deduplicated = client.post(f"/api/v1/projects/{code}/samples", json=sample)
+            assert deduplicated.json()["id"] == created.json()["id"]
+        assert [p["project"] for p in client.get("/api/v1/projects").json() if p["purpose"] == "formal"] == ["IP501"]
+    with store.read() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM sample_entities").fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM workflow_projects WHERE purpose='formal'").fetchone()[0] == 2
+
+
+def test_p0_3_formal_result_invalidation_and_audit(flow, xlsx, context):
+    """P0-3 业务验收：正式结果留痕作废、采用取消、缺口保留、审计事件记录与不可逆性"""
+    from stability_hub.workflow_contracts import InvalidateRequest
+    from stability_hub.identity_associations import adopted
+
+    first = confirm(flow, upload(flow, xlsx([['Purity', '0M', '98', '%']]), context))
+    version_id = first.result_version_ids[0]
+
+    with flow.store.connect() as conn:
+        row = conn.execute("SELECT slot_id, project FROM workflow_versions WHERE id=?", (version_id,)).fetchone()
+        slot_id = row["slot_id"]
+        project = row["project"]
+        ad = adopted(conn, project, slot_id)
+        assert ad is not None and ad["id"] == version_id
+        current_rev = conn.execute("SELECT revision FROM workflow_projects WHERE project=?", (project,)).fetchone()[0]
+
+    # 执行作废
+    rv = ResultVersions(flow)
+    res = rv.invalidate(version_id, InvalidateRequest(base_revision=current_rev, idempotency_key="inv-test-1", reason="实验取样污染，整批复核后作废"), actor=TECH)
+    assert res.base_revision == current_rev + 1
+    assert version_id in res.result_version_ids
+
+    # 验证作废后：
+    with flow.store.connect() as conn:
+        # 1. 采用被清除，不回退
+        ad_after = adopted(conn, project, slot_id)
+        assert ad_after is None
+        # 2. 登记在 workflow_invalidated_versions 表中留痕
+        inv = conn.execute("SELECT reason, invalidated_by FROM workflow_invalidated_versions WHERE version_id=?", (version_id,)).fetchone()
+        assert inv is not None
+        assert "实验取样污染" in inv["reason"]
+        # 3. 原始记录还在，没有物理删除
+        cnt = conn.execute("SELECT count(*) FROM workflow_versions WHERE id=?", (version_id,)).fetchone()[0]
+        assert cnt == 1
+        # 4. 留痕审计事件已记录
+        ev = conn.execute("SELECT * FROM workflow_events WHERE subject_id=? AND action='invalidate_result'", (version_id,)).fetchone()
+        assert ev is not None
+        assert "实验取样污染" in ev["reason"]
+
+    from stability_hub.identity_associations import versions
+
+    with flow.store.connect() as conn:
+        assert versions(conn, project, slot_id) == []
+        assert [row["id"] for row in versions(conn, project, slot_id, include_invalidated=True)] == [version_id]
+
+    with pytest.raises(WorkflowError, match="已作废"):
+        rv.review(version_id, ReviewRequest(
+            action="adopt", base_revision=res.base_revision,
+            idempotency_key="adopt-invalid", reason="尝试重新采用",
+        ), actor=SENIOR)
+
+    with pytest.raises(WorkflowError, match="已作废"):
+        rv.invalidate(version_id, InvalidateRequest(
+            base_revision=res.base_revision, idempotency_key="replace-invalidation",
+            reason="尝试覆盖原作废原因",
+        ), actor=TECH)

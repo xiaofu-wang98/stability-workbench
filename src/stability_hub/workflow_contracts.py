@@ -184,6 +184,13 @@ class UploadPreview(Model):
     parsing_summary: tuple[dict, ...] = ()
 
 
+class WorkspacePreview(Model):
+    preview: UploadPreview
+    sections: tuple[str, ...]
+    section: str | None
+    preflight: dict | None = None
+
+
 class ExternalReference(Model):
     kind: Literal["CC", "OOE", "OOS", "OTHER"]
     number: Text
@@ -233,6 +240,14 @@ class WithdrawRequest(Model):
     reason: Text
 
 
+class InvalidateRequest(Model):
+    """P0-3: 正式结果留痕作废请求"""
+    base_revision: int = Field(ge=0)
+    idempotency_key: Text
+    reason: Text
+    references: tuple[ExternalReference, ...] = ()
+
+
 class MutationResult(Model):
     project: Text
     base_revision: int
@@ -240,10 +255,18 @@ class MutationResult(Model):
     pending_confirmation_ids: tuple[str, ...] = ()
 
 
+class StandardAssessment(Model):
+    status: Literal["within", "outside", "undetermined"]
+    criterion: str = ""
+    version: str = ""
+
+
 class WorkflowResultCell(ResultCell):
     slot_key: RecordKey
     display_status: Literal["pending", "confirmed", "legacy"]
     upload_sequence: int
+    worksheet_id: str | None = None
+    standard_assessment: StandardAssessment | None = None
 
 
 class ResultPage(Model):
@@ -258,9 +281,10 @@ class ResultPage(Model):
 class ResultFilter(Model):
     day: int | None = Field(default=None,ge=0)
     batch: str | None = None
+    sample_id: str | None = Field(default=None, exclude_if=lambda value: value is None)
     reporting_basis: str | None = None
     purpose: Literal["unknown", "routine", "reference"] | None = None
-    sample_type: Literal["DS", "DP"] | None = None
+    sample_type: Literal["DS", "DP", "placebo"] | None = None
     presentation: str | None = None
     study: Literal["release", "long_term", "accelerated", "stress"] | None = None
     study_id: str | None = None
@@ -278,6 +302,7 @@ class AxisOptions(Model):
 
 
 class ExportRequest(AxisOptions):
+    format: Literal["detail", "stability_summary"] = "detail"
     slot_ids: tuple[str, ...] = ()
     include_png: bool = False
     project: Text

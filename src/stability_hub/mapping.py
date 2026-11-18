@@ -124,6 +124,7 @@ def map_observation(raw: RawObservation, context: ImportContext, config: Project
                 for k in ("project", "sample_type", "batch", "presentation", "study", "study_id", "condition")
             },
             purpose=fields.get("purpose") or "unknown",
+            sample_id=context.sample_id,
             reporting_basis=fields.get("reporting_basis", ""),
             month=month, day=day,
             item=item.id,
@@ -158,7 +159,14 @@ def map_corrected(raw, context, config, changes, acknowledge_warning=False, *, s
     ))
     acknowledged = acknowledge_warning and "result" in changes
     effective = retained_fields(raw) if raw.revisions else raw.fields
-    interpreted = interpreted_fields if interpreted_fields is not None else interpret_raw(raw, effective) if raw.adapter == "stability_matrix" else effective
+    interpreted = interpreted_fields
+    if interpreted is None:
+        if raw.adapter == "stability_matrix":
+            # A corrected method or subresult can change the derived item name.
+            matrix_fields = {**effective, **changes} if changes.keys() & {'method', 'criterion', 'subresult'} else effective
+            interpreted = interpret_raw(raw, matrix_fields)
+        else:
+            interpreted = effective
     if raw.subresult_hint:
         interpreted = {**interpreted, 'test_item': interpreted.get('test_item', '') + ' · ' + raw.subresult_hint}
     if source_facts:
@@ -176,5 +184,6 @@ def map_corrected(raw, context, config, changes, acknowledge_warning=False, *, s
         "adapter": "long_table", "fields": effective_fields, "hazards": hazards,
         "comment": "" if acknowledged else raw.comment, "formula": "" if acknowledged else raw.formula,
     })
-    context = context.model_copy(update={"defaults": {k: v for k, v in context.defaults.items() if k not in changes}})
+    protected = {"batch", "sample_type", "presentation", "purpose"} if context.sample_id else set()
+    context = context.model_copy(update={"defaults": {k: v for k, v in context.defaults.items() if k not in changes or k in protected}})
     return map_observation(corrected, context, config, source_facts=source_facts, source_scope=source_scope)

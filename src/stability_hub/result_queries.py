@@ -10,20 +10,23 @@ from .workflow_contracts import WorkflowResultCell
 from .identity_associations import versions, current, adoption_choices
 
 
-def result_value(row):
+def result_value(row, *, preserve_special_text=False):
     record = StabilityRecord.model_validate_json(row["record_json"])
     unit = record.result.unit
     suffix = ("%" if unit == "%" else " " + unit) if unit and record.result.status == "numeric" else ""
+    text = display(record.result.model_dump(mode="json"))
+    if preserve_special_text and record.result.status in {"na", "nd", "complies"}:
+        text = record.result.raw_text or text
     return ResultValue(
         result_version_id=row["id"], detection_id=row["detection_id"],
-        text=display(record.result.model_dump(mode="json")) + suffix,
+        text=text + suffix,
         pending_confirmation=row["state"] == "pending",
         source_ids=tuple(s["source_id"] for s in json.loads(row["source_json"])),
     )
 
 
 def selected_rows(conn, project, filters):
-    project_row(conn, project)
+    project = project_row(conn, project)["project"]
     rows = versions(conn,project)
     adoptions = adoption_choices(conn,project)
     all_by_id = {row["id"]: row for row in rows}
@@ -31,7 +34,7 @@ def selected_rows(conn, project, filters):
     for row in rows:
         record = StabilityRecord.model_validate_json(row["record_json"])
         key = record.key.model_dump()
-        if any(key[k] != v for k, v in filters.model_dump(exclude_none=True).items()):
+        if any(key.get(k) != v for k, v in filters.model_dump(exclude_none=True).items()):
             continue
         by_slot.setdefault(row['slot_id'],[]).append(row)
     return [(current(members), all_by_id.get(adoptions.get(slot))) for slot,members in sorted(by_slot.items())]

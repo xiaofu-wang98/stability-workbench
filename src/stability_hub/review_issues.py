@@ -235,6 +235,13 @@ def resolved_raw(conn,candidate_id,raw,decisions=None,corrections=None):
     # while already-resolved issues with unchanged IDs remain resolved.
     field_codes = {'identity_ambiguity','numeric_format','method_conflict'}
     remaining = [i for i in original_issues.values() if i.id not in resolved and i.code not in field_codes]
+    if any(original_issues[iid].source_field == 'criterion' and decision['action'] == 'keep_active'
+           for iid, decision in resolved.items()):
+        from .matrix_fields import appearance_component
+        fields = effective.fields
+        if appearance_component(fields.get('test_item', ''), fields.get('criterion', '')):
+            duplicate_hints = {hint['text'] for hint in raw.system_hints if hint['kind'] == 'missing_subresult'}
+            remaining = [i for i in remaining if not (i.source_kind == 'system_hint' and i.detail in duplicate_hints)]
     probe = effective.model_copy(update={'fields':{**effective.fields,**corrections}})
     if 'result' in corrections:
         probe = probe.model_copy(update={'number_format':'General','source_value':{**{k:v for k,v in effective.source_value.items() if k.endswith('_rule_version')}, 'raw_type':'s'}})

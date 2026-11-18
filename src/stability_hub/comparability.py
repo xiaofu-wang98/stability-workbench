@@ -22,7 +22,7 @@ def sample_identity(record):
 
 
 def sample_id(record):
-    return digest([record.key.project, sample_identity(record)])
+    return record.key.sample_id or digest([record.key.project, sample_identity(record)])
 
 
 class Member(Model):

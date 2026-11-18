@@ -4,31 +4,36 @@ import json
 import re
 import hashlib
 import secrets
+from contextlib import asynccontextmanager
 from tempfile import TemporaryDirectory
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 from zipfile import BadZipFile
 
 from fastapi import Depends, FastAPI, File, Form, Header, Query, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, Response
-from pydantic import ValidationError
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field, StringConstraints, ValidationError
 from lxml.etree import XMLSyntaxError
 
 from .source_tables import SourceTables
+from .business_worksheets import ArchiveStudyObject, EditPointMetadata, LinkWorksheetSample, RemoveWorksheetRow, StopWorksheetChecks
+from .assay_catalog import RegisterComponents, catalog, register_components
 from .source_contracts import ArchiveInfo, ArchiveView, ArchiveTablePage, SourcePackage, SourcePreviewRequest
 from .models import ImportContext
 from .parsing import parse_source
 from .permissions import Actor, Capability, require
 from .result_versions import ResultVersions
 from .workflow import Workflow
-from .business_worksheets import BusinessWorksheets, CreateWorksheet, ExtendPlan, LeaseToken, SaveWorksheet
-from .workflow_common import WorkflowError
+from .business_worksheets import AddWorksheetEvent, AttachProtocol, BusinessWorksheets, ConfirmProtocolStandards, CopyCoaToZero, CreateWorksheet, ExtendPlan, IncludeHistoricalRows, LeaseToken, SaveWorksheet, SetWorksheetStandards, SetReleaseReference, CustomWorksheetItem, WorksheetCriteria
+from .workflow_common import WorkflowError, active_project_code, unique_project_code
 from .workflow_contracts import (
+    InvalidateRequest,
     ConfigurationChange, ConfigurationView, CandidateEdit, CandidateMapping, ConfirmRequest, ExportRequest, ExportResult, MutationResult, ResultFilter,
     ProjectCreation, NewItems, SharedEdit, ResultChange,
-    PreviewSummary, ResultPage, ResultQuery, ReviewRequest, UploadPreview, WithdrawRequest,
+    PreviewSummary, ResultPage, ResultQuery, ReviewRequest, UploadPreview, WithdrawRequest, WorkspacePreview,
 )
 from .workflow_excel import ExcelExports
 from .ledger_review import LedgerReview
@@ -46,9 +51,63 @@ def get_actor(request: Request) -> Actor:
 ActorDependency = Annotated[Actor, Depends(get_actor)]
 
 
-def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, origins=()):
+class OcrPageReview(BaseModel):
+    revision: int = Field(ge=0)
+    lines: dict[int, Annotated[str, StringConstraints(max_length=4000)]] = Field(max_length=3000)
+
+
+class ScanCriterion(BaseModel):
+    table: int = Field(ge=0)
+    row: int = Field(ge=1)
+    column: int = Field(ge=0)
+    item: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+    method: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+    sop: Annotated[str, StringConstraints(max_length=200)] = ''
+    criterion: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]
+
+
+class ScanSpecification(BaseModel):
+    page: int = Field(ge=1)
+    manual_page: bool = False
+    material_scope: Literal['reference', 'DS', 'DP', 'placebo']
+    scope: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
+    rows: list[ScanCriterion] = Field(min_length=1, max_length=100)
+
+
+class CurrentSpecification(BaseModel):
+    specification_id: str
+    revision: int = Field(ge=0)
+    idempotency_key: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+
+
+class DraftWorksheetItem(CustomWorksheetItem):
+    method: str = Field(default="", max_length=4000)
+
+
+class WorksheetDraftInput(BaseModel):
+    custom_items: list[DraftWorksheetItem] = Field(default_factory=list, max_length=150)
+    row_criteria: dict[str, WorksheetCriteria] = Field(default_factory=dict, max_length=150)
+    fields: dict[str, Annotated[str, StringConstraints(max_length=4000)]] = Field(max_length=140)
+    selected: list[str] = Field(default_factory=list, max_length=150)
+    row_items: dict[int, str | list[str]] = Field(default_factory=dict, max_length=150)
+    required: dict[int, list[str]] = Field(default_factory=dict, max_length=120)
+    protocol_draft: str = Field(default='', max_length=64)
+    protocol_table: str = Field(default='', max_length=10)
+    copy_source: str = Field(default='', max_length=100)
+
+
+def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, workbench=None, origins=(),
+               enforce_formal_sample_binding=False):
     from . import __version__
-    app = FastAPI(title="Stability Data Hub", version=__version__)
+
+    @asynccontextmanager
+    async def lifespan(_app):
+        try:
+            yield
+        finally:
+            ocr.close()
+
+    app = FastAPI(title="Stability Data Hub", version=__version__, lifespan=lifespan)
     import subprocess
     code_root = Path(__file__).resolve().parents[2]
     try:
@@ -60,7 +119,9 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
     for config in configs:
         workflow.configure(config)
     versions, exports = ResultVersions(workflow), ExcelExports(workflow)
-    worksheets = BusinessWorksheets(workflow, versions)
+    worksheets = BusinessWorksheets(workflow, versions, enforce_formal_sample_binding=enforce_formal_sample_binding)
+    from .pdf_ocr import PdfOcr
+    ocr = PdfOcr(store.home, code_root)
     app.state.actor, app.state.api_token, app.state.workflow = actor, api_token, workflow
 
     @app.get('/health', include_in_schema=False)
@@ -90,6 +151,13 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
             return JSONResponse({"code": "origin_denied", "message": "请求来源未授权。", "details": {}}, status_code=403)
         return await call_next(request)
 
+    def canonical_project(project: str, operator: ActorDependency):
+        require(operator, Capability.VIEW)
+        with store.read() as conn:
+            return unique_project_code(conn, project)
+
+    ProjectDependency = Annotated[str, Depends(canonical_project)]
+
     @app.exception_handler(WorkflowError)
     async def workflow_error(request, exc):
         return JSONResponse({"code": exc.code, "message": str(exc), "details": {}}, status_code=exc.status)
@@ -108,12 +176,78 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
 
     source_tables = SourceTables(workflow)
 
+    @app.get("/api/v1/worksheets/{sheet_id}/protocol-standards")
+    def preview_protocol_standards(sheet_id: str, operator: ActorDependency):
+        return worksheets.preview_protocol_standards(sheet_id, operator)
+
+    @app.post("/api/v1/worksheets/{sheet_id}/protocol-standards")
+    def confirm_protocol_standards(sheet_id: str, command: ConfirmProtocolStandards, operator: ActorDependency):
+        return worksheets.confirm_protocol_standards(sheet_id, command, operator)
+
+    @app.get("/api/v1/projects/{project}/assays")
+    def project_assays(project: ProjectDependency, operator: ActorDependency):
+        return catalog(store, project, operator)
+
+    @app.post("/api/v1/projects/{project}/specifications/{specification_id}/components")
+    def confirm_specification_components(project: ProjectDependency, specification_id: str, command: RegisterComponents, operator: ActorDependency):
+        return register_components(store, project, specification_id, command, operator)
+    from .coa import router_for as coa_router
+    app.include_router(coa_router(store, ActorDependency, ProjectDependency))
+    from .worksheet_roundtrip import router_for as study_workbook_router
+    app.include_router(study_workbook_router(store, worksheets, ActorDependency))
+
+    @app.get("/api/v1/worksheets/{sheet_id}/historical-rows")
+    def preview_historical_rows(sheet_id: str, operator: ActorDependency):
+        return worksheets.preview_historical_rows(sheet_id, operator)
+
+    @app.post("/api/v1/worksheets/{sheet_id}/historical-rows")
+    def include_historical_rows(sheet_id: str, fingerprint: str, command: IncludeHistoricalRows, operator: ActorDependency):
+        return worksheets.include_historical_rows(sheet_id, command, fingerprint, operator)
+
+    @app.get("/api/v1/projects/{project}/batch-overview")
+    def batch_overview(project: ProjectDependency, batch: str, operator: ActorDependency):
+        require(operator, Capability.VIEW)
+        from .workflow_common import project_row
+        with store.read() as conn:
+            project_row(conn, project)
+            samples = [dict(row) for row in conn.execute(
+                "SELECT * FROM sample_entities WHERE project=? AND batch=? AND deleted_at IS NULL ORDER BY id", (project, batch))]
+            studies = [dict(row) for row in conn.execute("""
+                SELECT w.id,w.name,w.sample_id,w.plan_version,w.identity_json,p.plan_json
+                FROM business_worksheets w JOIN business_worksheet_plans p ON p.sheet_id=w.id AND p.version=w.plan_version
+                WHERE w.project=? AND w.deleted_at IS NULL AND json_extract(w.identity_json,'$.batch')=? ORDER BY w.name,w.id
+            """, (project, batch))]
+            for study in studies:
+                study["identity"] = json.loads(study.pop("identity_json"))
+                plan = json.loads(study.pop("plan_json"))
+                study["points"] = [point["label"] for point in plan["points"]]
+                study["protocol_draft_id"] = plan.get("protocol_draft_id")
+                study["standards"] = list({link["specification_id"]: link["filename"]
+                                           for row in plan["rows"] for link in row.get("standards", [])}.items())
+            return {"batch": batch, "samples": samples, "studies": studies}
+
+    @app.get("/api/v1/worksheets/{sheet_id}/archive-impact")
+    def worksheet_archive_impact(sheet_id: str, operator: ActorDependency):
+        return worksheets.archive_object(sheet_id, "worksheet", operator)
+
+    @app.delete("/api/v1/worksheets/{sheet_id}")
+    def archive_worksheet(sheet_id: str, command: ArchiveStudyObject, operator: ActorDependency):
+        return worksheets.archive_object(sheet_id, "worksheet", operator, command)
+
+    @app.get("/api/v1/samples/{sample_id}/archive-impact")
+    def sample_archive_impact(sample_id: str, operator: ActorDependency):
+        return worksheets.archive_object(sample_id, "sample", operator)
+
+    @app.delete("/api/v1/samples/{sample_id}")
+    def archive_sample(sample_id: str, command: ArchiveStudyObject, operator: ActorDependency):
+        return worksheets.archive_object(sample_id, "sample", operator, command)
+
     @app.get("/api/v1/projects/{project}/worksheets")
-    def list_worksheets(project: str, operator: ActorDependency):
+    def list_worksheets(project: ProjectDependency, operator: ActorDependency):
         return worksheets.list(project, operator)
 
     @app.post("/api/v1/projects/{project}/worksheets", status_code=201)
-    def create_worksheet(project: str, command: CreateWorksheet, operator: ActorDependency):
+    def create_worksheet(project: ProjectDependency, command: CreateWorksheet, operator: ActorDependency):
         return worksheets.create(project, command, operator)
 
     @app.get("/api/v1/worksheets/{sheet_id}")
@@ -136,17 +270,73 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
     def save_worksheet(sheet_id: str, command: SaveWorksheet, operator: ActorDependency):
         return worksheets.save(sheet_id, command, operator)
 
+    @app.post("/api/v1/worksheets/{sheet_id}/point-metadata")
+    def edit_worksheet_point(sheet_id: str, command: EditPointMetadata, operator: ActorDependency):
+        return worksheets.edit_point_metadata(sheet_id, command, operator)
+
     @app.post("/api/v1/worksheets/{sheet_id}/plan")
     def extend_worksheet(sheet_id: str, command: ExtendPlan, operator: ActorDependency):
         return worksheets.extend(sheet_id, command, operator)
+
+    @app.post("/api/v1/worksheets/{sheet_id}/standards")
+    def set_worksheet_standards(sheet_id: str, command: SetWorksheetStandards, operator: ActorDependency):
+        return worksheets.set_standards(sheet_id, command, operator)
+
+    @app.get("/api/v1/worksheets/{sheet_id}/remove-row")
+    def preview_remove_worksheet_row(sheet_id: str, row_id: str, operator: ActorDependency):
+        return worksheets.preview_remove_row(sheet_id, row_id, operator)
+
+    @app.post("/api/v1/worksheets/{sheet_id}/remove-row")
+    def remove_worksheet_row(sheet_id: str, command: RemoveWorksheetRow, operator: ActorDependency):
+        return worksheets.remove_row(sheet_id, command, operator)
+
+    @app.post("/api/v1/worksheets/{sheet_id}/stop-checks")
+    def stop_worksheet_checks(sheet_id: str, command: StopWorksheetChecks, operator: ActorDependency):
+        return worksheets.stop_checks(sheet_id, command, operator)
+
+    @app.post("/api/v1/worksheets/{sheet_id}/events")
+    def add_worksheet_event(sheet_id: str, command: AddWorksheetEvent, operator: ActorDependency):
+        return worksheets.add_event(sheet_id, command, operator)
+
+    @app.post("/api/v1/worksheets/{sheet_id}/protocol")
+    def attach_worksheet_protocol(sheet_id: str, command: AttachProtocol, operator: ActorDependency):
+        return worksheets.attach_protocol(sheet_id, command, operator)
+
+    @app.post("/api/v1/worksheets/{sheet_id}/release-reference")
+    def set_release_reference(sheet_id: str, command: SetReleaseReference, operator: ActorDependency):
+        return worksheets.set_release_reference(sheet_id, command, operator)
+
+    @app.post("/api/v1/worksheets/{sheet_id}/copy-coa-to-0m")
+    def copy_coa_to_zero(sheet_id: str, command: CopyCoaToZero, operator: ActorDependency):
+        return worksheets.copy_coa_to_zero(sheet_id, command, operator)
+
+    @app.get("/api/v1/worksheets/{sheet_id}/coa-release-options")
+    def coa_release_options(sheet_id: str, row_id: str, operator: ActorDependency):
+        return worksheets.coa_release_options(sheet_id, row_id, operator)
+
+    @app.get("/api/v1/worksheets/{sheet_id}/sample-candidates")
+    def worksheet_sample_candidates(sheet_id: str, operator: ActorDependency):
+        return worksheets.sample_candidates(sheet_id, operator)
+
+    @app.post("/api/v1/worksheets/{sheet_id}/sample")
+    def link_worksheet_sample(sheet_id: str, command: LinkWorksheetSample, operator: ActorDependency):
+        return worksheets.link_sample(sheet_id, command, operator)
 
     @app.post("/api/v1/worksheets/{sheet_id}/confirmation")
     def export_worksheet_confirmation(
         sheet_id: str, operator: ActorDependency, revision: Annotated[int, Query(ge=1)],
         selection_id: Annotated[str, Query(min_length=64, max_length=64)],
+        point_ids: Annotated[list[str] | None, Query(max_length=120)] = None,
+        scan_id: Annotated[str | None, Query(pattern=r'^[a-f0-9]{64}$')] = None,
     ):
         from .worksheet_confirmation import create_confirmation
-        return create_confirmation(worksheets, sheet_id, revision, selection_id, operator)
+        require(operator, Capability.EXPORT)
+        attachment = None
+        if scan_id:
+            ocr.original(scan_id)
+            attachment = {'id': scan_id, 'filename': ocr.filename(scan_id)}
+        return create_confirmation(worksheets, sheet_id, revision, selection_id, operator,
+                                   point_ids=point_ids, attachment=attachment)
 
     @app.get('/api/v1/previews/{preview_id}/file')
     def upload_original(preview_id: str,operator: ActorDependency):
@@ -154,7 +344,7 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
         return FileResponse(path,filename=filename)
 
     @app.get('/api/v1/projects/{project}/v5/rules')
-    def project_rules(project: str,operator: ActorDependency):
+    def project_rules(project: ProjectDependency,operator: ActorDependency):
         require(operator,Capability.VIEW)
         from .file_rules import list_rules
         with store.connect() as conn:
@@ -178,6 +368,26 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
     @app.post('/api/v1/previews/{preview_id}/v5/source-structure')
     def source_structure_apply(preview_id: str,command: SourceStructureApply,operator: ActorDependency):
         return source_structure.apply(workflow,preview_id,command,actor=operator)
+
+    @app.get('/api/v1/previews/{preview_id}/v5/review-actions')
+    def source_review_actions(preview_id: str, section: str, operator: ActorDependency):
+        require(operator, Capability.VIEW)
+        from .review_tasks import build_action_groups, current_review
+        with store.read() as conn:
+            upload = workflow._upload(conn, preview_id)
+            preview, sheets, flights, tasks, _ = current_review(workflow, conn, upload, operator, _shared=True)
+            if not any(flight.section == section for flight in flights):
+                raise WorkflowError('unknown_sheet', '该来源中不存在此工作表。', 404)
+            manual = [
+                {'id': task.id, 'detail': task.detail, 'fields': task.fields, 'evidence': task.evidence,
+                 'affected_results': len(task.members),
+                 'identity_options': task.proposal.get('identity_options', {}),
+                 'guidance': task.proposal.get('guidance')}
+                for task in tasks if task.section == section and task.fields and task.members
+                and (task.code == 'identity' or ('manual' in task.actions
+                     and all('issue_id' in member for member in task.members)))
+            ]
+            return {'groups': build_action_groups(tasks, sheets, section, preview), 'manual': manual}
 
     @app.post('/api/v1/previews/{preview_id}/v5/tasks/preview')
     def source_task_preview(preview_id: str,command: TaskBatchScope,operator: ActorDependency):
@@ -240,13 +450,13 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
     from .identity_associations import preview as preview_association, apply as apply_association
 
     @app.post('/api/v1/projects/{project}/v5/identity-associations/preview')
-    def identity_association_preview(project: str, command: IdentityAssociationScope, operator: ActorDependency):
+    def identity_association_preview(project: ProjectDependency, command: IdentityAssociationScope, operator: ActorDependency):
         require(operator,Capability.VIEW)
         with store.connect() as conn:
             return preview_association(conn,project,command)
 
     @app.post('/api/v1/projects/{project}/v5/identity-associations/apply',response_model=MutationResult)
-    def identity_association_apply(project: str, command: IdentityAssociationApply, operator: ActorDependency):
+    def identity_association_apply(project: ProjectDependency, command: IdentityAssociationApply, operator: ActorDependency):
         return apply_association(workflow,project,command,actor=operator)
 
     @app.post('/api/v1/previews/{preview_id}/v5/region-parse/preview')
@@ -318,7 +528,7 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
     from .file_rules import rule_impact, save_rule, reinterpret_preview, reinterpret, retire_rule
 
     @app.post('/api/v1/projects/{project}/v5/rules/retire',response_model=MutationResult)
-    def retire_project_rule(project: str,command: RuleRetirement,operator: ActorDependency):
+    def retire_project_rule(project: ProjectDependency,command: RuleRetirement,operator: ActorDependency):
         return retire_rule(workflow,project,command,actor=operator)
 
     @app.get('/api/v1/previews/{preview_id}/v5/reinterpret')
@@ -332,29 +542,29 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
         return reinterpret(workflow,preview_id,command,actor=operator)
 
     @app.post('/api/v1/projects/{project}/v5/rules/preview')
-    def project_rule_preview(project: str, command: ProjectRule, operator: ActorDependency):
+    def project_rule_preview(project: ProjectDependency, command: ProjectRule, operator: ActorDependency):
         require(operator,Capability.VIEW)
         with store.connect() as conn:
             return rule_impact(conn,project,command)
 
     @app.post('/api/v1/projects/{project}/v5/rules', response_model=MutationResult)
-    def project_rule_save(project: str, command: ProjectRule, operator: ActorDependency):
+    def project_rule_save(project: ProjectDependency, command: ProjectRule, operator: ActorDependency):
         return save_rule(workflow,project,command,actor=operator)
     from .v5_contracts import IdentityLink
     from .identity_links import link_preview, apply_link
 
     @app.get('/api/v1/projects/{project}/v5/identity-link')
-    def identity_link_preview(project: str, item_id: str, historical_item: str, operator: ActorDependency):
+    def identity_link_preview(project: ProjectDependency, item_id: str, historical_item: str, operator: ActorDependency):
         require(operator, Capability.VIEW)
         with store.connect() as conn:
             return link_preview(conn,project,item_id,historical_item)
 
     @app.post('/api/v1/projects/{project}/v5/identity-link', response_model=MutationResult)
-    def identity_link(project: str, command: IdentityLink, operator: ActorDependency):
+    def identity_link(project: ProjectDependency, command: IdentityLink, operator: ActorDependency):
         return apply_link(workflow,project,command,actor=operator)
 
     @app.post('/api/v1/projects/{project}/source-imports', response_model=ArchiveInfo)
-    def archive_source(project: str, operator: ActorDependency, file: Annotated[UploadFile, File()],
+    def archive_source(project: ProjectDependency, operator: ActorDependency, file: Annotated[UploadFile, File()],
                        package: Annotated[UploadFile, File()],
                        idempotency_key: Annotated[str, Header(alias='Idempotency-Key', min_length=1, max_length=200)]):
         require(operator, Capability.PREVIEW)
@@ -373,7 +583,7 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
             package.file.close()
 
     @app.get('/api/v1/projects/{project}/source-imports', response_model=list[ArchiveInfo])
-    def archives(project: str, operator: ActorDependency):
+    def archives(project: ProjectDependency, operator: ActorDependency):
         return source_tables.list(project, actor=operator)
 
     @app.get('/api/v1/source-imports/{import_id}', response_model=ArchiveView)
@@ -419,7 +629,7 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
         return LedgerReview(workflow).decide(preview_id, command, actor=operator)
 
     @app.get('/api/v1/projects/{project}/ledger-sources')
-    def ledger_sources(project: str, operator: ActorDependency):
+    def ledger_sources(project: ProjectDependency, operator: ActorDependency):
         return LedgerReview(workflow).uploads(project, actor=operator)
 
     from .manual_sheet import state as manual_state, preview as manual_preview, apply as manual_apply, undo as manual_undo
@@ -457,13 +667,307 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
     def projects(operator: ActorDependency):
         require(operator, Capability.VIEW)
         with store.connect() as conn:
-            return [{'project': row['project'], 'revision': row['revision'],
+            return [{'project': row['project'], 'revision': row['revision'], 'purpose': row['purpose'],
                      'name': json.loads(row['config_json']).get('name', '')} for row in
-                    conn.execute("SELECT project,revision,config_json FROM workflow_projects ORDER BY project")]
+                    conn.execute("SELECT project,revision,config_json,purpose FROM workflow_projects ORDER BY project")
+                    if active_project_code(conn, row['project'])]
 
     @app.post('/api/v1/projects', response_model=ConfigurationView)
     def create_project(command: ProjectCreation, operator: ActorDependency):
         return workflow.create_project(command, actor=operator)
+
+    @app.post('/api/v1/intake/protocol')
+    def inspect_stability_protocol(operator: ActorDependency, file: Annotated[UploadFile, File()]):
+        require(operator, Capability.PREVIEW)
+        from .protocol_preview import inspect_protocol
+        try:
+            data = file.file.read(20 * 1024 * 1024 + 1)
+            if len(data) > 20 * 1024 * 1024 or Path(file.filename or '').suffix.lower() != '.docx':
+                raise WorkflowError('invalid_document', '请选择不超过20MB的Word方案。')
+            result = inspect_protocol(data)
+            draft_id = hashlib.sha256(data).hexdigest()
+            with store.connect() as conn:
+                conn.execute(
+                    'INSERT INTO protocol_drafts(id,filename,source,preview_json) VALUES (?,?,?,?) '
+                    'ON CONFLICT(id) DO UPDATE SET preview_json=excluded.preview_json',
+                    (draft_id, Path(file.filename).name, data, json.dumps(result, ensure_ascii=False)),
+                )
+            return {'draft_id': draft_id, **result}
+        except (BadZipFile, KeyError, ValueError, XMLSyntaxError) as exc:
+            raise WorkflowError('invalid_document', '无法读取Word方案。') from exc
+        finally:
+            file.file.close()
+
+    @app.get('/api/v1/projects/{project}/worksheet-drafts')
+    def worksheet_draft_list(project: ProjectDependency, operator: ActorDependency):
+        require(operator, Capability.VIEW)
+        with store.read() as conn:
+            return [dict(row) for row in conn.execute(
+                """SELECT id,name,created_at,json_extract(draft_json,'$.protocol_draft') AS protocol_draft,
+                          json_extract(draft_json,'$.protocol_table') AS protocol_table,
+                          json_extract(draft_json,'$.copy_source') AS copy_source
+                   FROM worksheet_drafts d WHERE d.project=? AND NOT EXISTS (
+                       SELECT 1 FROM workflow_events e WHERE e.project=d.project AND e.subject_id=d.id
+                       AND e.action='worksheet_draft_converted'
+                   ) ORDER BY d.created_at DESC,d.rowid DESC LIMIT 100""",
+                (project,),
+            )]
+
+    @app.post('/api/v1/projects/{project}/worksheet-drafts', status_code=201)
+    def save_worksheet_draft(project: ProjectDependency, command: WorksheetDraftInput, operator: ActorDependency):
+        require(operator, Capability.CONFIRM_FACT)
+        from .workflow_common import project_row
+        payload = json.dumps(command.model_dump(mode='json'), ensure_ascii=False, sort_keys=True)
+        if len(payload.encode('utf-8')) > 256 * 1024:
+            raise WorkflowError('worksheet_draft_size', '待补全计划超过可保存大小。')
+        identifier = hashlib.sha256((project + '\n' + payload).encode('utf-8')).hexdigest()
+        with store.connect() as conn:
+            project_row(conn, project)
+            conn.execute('INSERT OR IGNORE INTO worksheet_drafts(id,project,name,draft_json) VALUES (?,?,?,?)',
+                         (identifier, project, command.fields.get('name', '').strip() or '未命名研究表', payload))
+        return {'id': identifier}
+
+    @app.get('/api/v1/projects/{project}/worksheet-drafts/{draft_id}')
+    def worksheet_draft(project: ProjectDependency, draft_id: str, operator: ActorDependency):
+        require(operator, Capability.VIEW)
+        with store.read() as conn:
+            row = conn.execute('SELECT draft_json FROM worksheet_drafts WHERE project=? AND id=?', (project, draft_id)).fetchone()
+        if row is None:
+            raise WorkflowError('not_found', '找不到此项目的待补全计划。', 404)
+        return json.loads(row['draft_json'])
+
+    @app.get('/api/v1/plan-drafts')
+    def protocol_drafts(operator: ActorDependency):
+        require(operator, Capability.VIEW)
+        with store.read() as conn:
+            return [dict(row) for row in conn.execute(
+                'SELECT id,filename,created_at FROM protocol_drafts ORDER BY created_at DESC,id LIMIT 100'
+            )]
+
+    def protocol_draft_row(draft_id):
+        with store.read() as conn:
+            row = conn.execute('SELECT * FROM protocol_drafts WHERE id=?', (draft_id,)).fetchone()
+        if row is None:
+            raise WorkflowError('not_found', '方案草稿不存在。', 404)
+        return row
+
+    @app.get('/api/v1/plan-drafts/{draft_id}')
+    def protocol_draft(draft_id: str, operator: ActorDependency):
+        require(operator, Capability.VIEW)
+        row = protocol_draft_row(draft_id)
+        return {'draft_id': row['id'], 'filename': row['filename'], **json.loads(row['preview_json'])}
+
+    @app.get('/api/v1/projects/{project}/plan-drafts/{draft_id}/standards')
+    def protocol_standard_links(project: ProjectDependency, draft_id: str, operator: ActorDependency):
+        require(operator, Capability.VIEW)
+        from .specification_preview import matching_standards, protocol_numbers
+        numbers = protocol_numbers(protocol_draft_row(draft_id))
+        with store.read() as conn:
+            found = matching_standards(conn, project, numbers)
+        return {'missing': [number for number in numbers if not any(item['number'] == number for item in found)], 'found': found}
+
+    @app.get('/api/v1/plan-drafts/{draft_id}/file')
+    def protocol_draft_file(draft_id: str, operator: ActorDependency):
+        require(operator, Capability.VIEW)
+        from urllib.parse import quote
+        row = protocol_draft_row(draft_id)
+        if hashlib.sha256(row['source']).hexdigest() != draft_id:
+            raise WorkflowError('source_integrity', '方案原件校验失败。', 409)
+        return Response(row['source'], media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                        headers={'Content-Disposition': "attachment; filename*=UTF-8''" + quote(row['filename'], safe='')})
+
+    @app.post('/api/v1/specifications')
+    def upload_specification(operator: ActorDependency, file: Annotated[UploadFile, File()]):
+        require(operator, Capability.PREVIEW)
+        from .specification_preview import inspect_specification
+        try:
+            data = file.file.read(20 * 1024 * 1024 + 1)
+            if len(data) > 20 * 1024 * 1024 or Path(file.filename or '').suffix.lower() != '.docx':
+                raise WorkflowError('invalid_document', '请选择不超过20MB的Word质量标准。')
+            preview = inspect_specification(data, file.filename or "")
+            if not preview['rows']:
+                raise WorkflowError('specification_table_missing', '未识别到质量标准表。')
+            identifier = hashlib.sha256(data).hexdigest()
+            with store.connect() as conn:
+                conn.execute('''
+                    INSERT INTO specifications(id,filename,source,preview_json) VALUES (?,?,?,?)
+                    ON CONFLICT(id) DO NOTHING
+                ''', (identifier, Path(file.filename).name, data, json.dumps(preview, ensure_ascii=False)))
+            return get_specification(identifier, operator)
+        except WorkflowError:
+            raise
+        except (BadZipFile, KeyError, ValueError, XMLSyntaxError) as exc:
+            raise WorkflowError('invalid_document', '无法读取Word质量标准。') from exc
+        finally:
+            file.file.close()
+
+    @app.get("/api/v1/projects/{project}/current-specifications")
+    def current_specifications(project: ProjectDependency, operator: ActorDependency):
+        require(operator, Capability.VIEW)
+        with store.read() as conn:
+            return [dict(row) for row in conn.execute("""SELECT c.material_scope,c.specification_id,s.filename
+                FROM current_specifications c JOIN specifications s ON s.id=c.specification_id
+                WHERE c.project=? ORDER BY c.material_scope""", (project,))]
+
+    @app.post("/api/v1/projects/{project}/current-specifications")
+    def set_current_specification(project: ProjectDependency, command: CurrentSpecification, operator: ActorDependency):
+        require(operator, Capability.CONFIRM_FACT)
+        from .specification_preview import specification_material_scope
+        from .workflow_common import bump, check_revision, event, remember, replay
+        with store.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            payload = {"current_specification": command.model_dump()}
+            prior = replay(conn, project, operator, command.idempotency_key, payload)
+            if prior is not None:
+                return prior
+            check_revision(conn, project, command.revision)
+            source = conn.execute("""SELECT filename,preview_json FROM specifications s WHERE s.id=? AND EXISTS (
+                SELECT 1 FROM specification_assay_components a WHERE a.specification_id=s.id AND a.project=?)""",
+                (command.specification_id, project)).fetchone()
+            if source is None:
+                raise WorkflowError("specification_scope", "请先核对并登记此项目的标准条款。", 409)
+            scope = specification_material_scope(source["filename"], json.loads(source["preview_json"]))
+            if scope not in {"DS", "DP", "placebo", "reference"}:
+                raise WorkflowError("specification_scope", "标准原件的适用材料尚未明确。", 409)
+            previous = conn.execute("SELECT specification_id FROM current_specifications WHERE project=? AND material_scope=?",
+                                    (project, scope)).fetchone()
+            conn.execute("""INSERT INTO current_specifications VALUES (?,?,?) ON CONFLICT(project,material_scope)
+                DO UPDATE SET specification_id=excluded.specification_id""", (project, scope, command.specification_id))
+            event(conn, project, command.specification_id, "current_specification", operator, "确认当前适用标准",
+                  {"material_scope": scope, "previous": previous[0] if previous else None})
+            result = {"material_scope": scope, "specification_id": command.specification_id, "revision": bump(conn, project)}
+            remember(conn, project, operator, command.idempotency_key, payload, result)
+            return result
+
+    @app.get('/api/v1/specifications')
+    def specifications(operator: ActorDependency):
+        require(operator, Capability.VIEW)
+        from .specification_preview import specification_material_scope
+        with store.read() as conn:
+            projects = {}
+            for row in conn.execute('SELECT DISTINCT specification_id,project FROM specification_assay_components ORDER BY project'):
+                projects.setdefault(row["specification_id"], []).append(row["project"])
+            return [{"id": row["id"], "filename": row["filename"], "created_at": row["created_at"],
+                     "material_scope": specification_material_scope(row["filename"], json.loads(row["preview_json"])),
+                     "registered_projects": projects.get(row["id"], [])} for row in conn.execute(
+                'SELECT id,filename,created_at,preview_json FROM specifications ORDER BY created_at DESC,id LIMIT 100'
+            )]
+
+    def specification_row(specification_id, *, source=False):
+        columns = 'id,filename,source,preview_json' if source else 'id,filename,preview_json'
+        with store.read() as conn:
+            row = conn.execute(f'SELECT {columns} FROM specifications WHERE id=?', (specification_id,)).fetchone()
+        if row is None:
+            raise WorkflowError('not_found', '质量标准不存在。', 404)
+        return row
+
+    @app.get('/api/v1/specifications/{specification_id}')
+    def get_specification(specification_id: str, operator: ActorDependency):
+        require(operator, Capability.VIEW)
+        row = specification_row(specification_id, source=True)
+        preview = json.loads(row['preview_json'])
+        # 兼容旧版本预览或未补充完整字段的规格：自动利用原件重新解析并持久化
+        needs_refresh = (
+            not preview.get('rows')
+            or any('result_type' not in r or not r.get('component') or ('item_zh' not in r) for r in preview['rows'])
+        )
+        if row['source'] and needs_refresh and str(row['filename']).lower().endswith('.docx'):
+            try:
+                from .specification_preview import inspect_specification
+                fresh = inspect_specification(row['source'], row['filename'] or "")
+                if fresh.get('rows'):
+                    preview = fresh
+                    with store.connect() as conn:
+                        conn.execute("UPDATE specifications SET preview_json=? WHERE id=?",
+                                     (json.dumps(fresh, ensure_ascii=False), specification_id))
+            except Exception:
+                pass
+        with store.read() as conn:
+            linked_projects = [dict(entry) for entry in conn.execute(
+                """SELECT a.project,COUNT(*) AS count, EXISTS (
+                       SELECT 1 FROM current_specifications c
+                       WHERE c.project=a.project AND c.specification_id=a.specification_id) AS is_current
+                   FROM specification_assay_components a WHERE a.specification_id=? GROUP BY a.project""",
+                (specification_id,)) if active_project_code(conn, entry['project'])]
+        from .specification_preview import specification_material_scope
+        return {'id': row['id'], 'filename': row['filename'], **preview, 'linked_projects': linked_projects,
+                'material_scope': specification_material_scope(row['filename'], preview)}
+
+    @app.get('/api/v1/specifications/{specification_id}/file')
+    def specification_file(specification_id: str, operator: ActorDependency):
+        require(operator, Capability.VIEW)
+        from urllib.parse import quote
+        row = specification_row(specification_id, source=True)
+        source_hash = json.loads(row['preview_json']).get('scan_id', specification_id)
+        if hashlib.sha256(row['source']).hexdigest() != source_hash:
+            raise WorkflowError('source_integrity', '质量标准原件校验失败。', 409)
+        media_type = 'application/pdf' if source_hash != specification_id else 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        return Response(row['source'], media_type=media_type,
+                        headers={'Content-Disposition': "attachment; filename*=UTF-8''" + quote(row['filename'], safe='')})
+
+    @app.get('/api/v1/pdf-ocr')
+    def list_ocr(operator: ActorDependency):
+        require(operator, Capability.VIEW)
+        return ocr.list()
+
+    @app.post('/api/v1/pdf-ocr', status_code=201)
+    def archive_scan(operator: ActorDependency, file: Annotated[UploadFile, File()]):
+        require(operator, Capability.PREVIEW)
+        try:
+            return {'id': ocr.archive(file.file.read(20 * 1024 * 1024 + 1), file.filename or 'scan.pdf')}
+        finally:
+            file.file.close()
+
+    @app.get('/api/v1/pdf-ocr/{identifier}')
+    def read_ocr(identifier: str, operator: ActorDependency):
+        require(operator, Capability.VIEW)
+        return ocr.read(identifier)
+
+    @app.post('/api/v1/pdf-ocr/{identifier}/start')
+    def start_ocr(identifier: str, operator: ActorDependency):
+        require(operator, Capability.PREVIEW)
+        return ocr.start(identifier)
+
+    @app.post('/api/v1/pdf-ocr/{identifier}/cancel')
+    def cancel_ocr(identifier: str, operator: ActorDependency):
+        require(operator, Capability.PREVIEW)
+        return ocr.cancel(identifier)
+
+    @app.put('/api/v1/pdf-ocr/{identifier}/pages/{number}/review')
+    def save_ocr_page_review(identifier: str, number: int, command: OcrPageReview, operator: ActorDependency):
+        require(operator, Capability.PREVIEW)
+        return ocr.save_review(identifier, number, command.revision, command.lines)
+
+    @app.post('/api/v1/pdf-ocr/{identifier}/specification', status_code=201)
+    def save_scan_specification(identifier: str, command: ScanSpecification, operator: ActorDependency):
+        require(operator, Capability.PREVIEW)
+        from .specification_preview import reviewed_scan_criteria
+        scan = ocr.read(identifier)
+        page = next((page for page in scan['pages'] if page['page'] == command.page), None)
+        if command.manual_page:
+            if any(row.table or row.column for row in command.rows):
+                raise WorkflowError('ocr_cell_missing', '手工核对只能登记手工条款，不能引用 OCR 单元格。')
+            page = {'page': command.page, 'tables': []}
+        if page is None:
+            raise WorkflowError('ocr_page_missing', '找不到对应的识别页。', 404)
+        rows = reviewed_scan_criteria(page, command.rows)
+        preview = {'scan_id': identifier, 'scope': command.scope, 'material_scope': command.material_scope,
+                   'rows': rows}
+        if command.manual_page:
+            preview['manual_page_review'] = True
+        encoded_preview = json.dumps(preview, ensure_ascii=False, sort_keys=True)
+        version = hashlib.sha256(encoded_preview.encode('utf-8')).hexdigest()
+        original = ocr.original(identifier).read_bytes()
+        filename = scan['filename']
+        with store.connect() as conn:
+            conn.execute('INSERT OR IGNORE INTO specifications(id,filename,source,preview_json) VALUES (?,?,?,?)',
+                         (version, filename, original, encoded_preview))
+        return get_specification(version, operator)
+
+    @app.get('/api/v1/pdf-ocr/{identifier}/file')
+    def scan_file(identifier: str, operator: ActorDependency):
+        require(operator, Capability.VIEW)
+        return FileResponse(ocr.original(identifier), media_type='application/pdf')
 
     @app.post('/api/v1/intake/inspect')
     def inspect_upload(operator: ActorDependency, file: Annotated[UploadFile, File()]):
@@ -527,46 +1031,131 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
             file.file.close()
 
     @app.post('/api/v1/projects/{project}/items', response_model=MutationResult)
-    def add_items(project: str, command: NewItems, operator: ActorDependency):
+    def add_items(project: ProjectDependency, command: NewItems, operator: ActorDependency):
         return workflow.add_items(project, command, actor=operator)
 
     from .v5_contracts import ItemDisplayName
     from .item_identity import rename as rename_item
 
     @app.post('/api/v1/projects/{project}/items/{item_id}/display-name',response_model=MutationResult)
-    def rename_item_display(project: str, item_id: str, command: ItemDisplayName, operator: ActorDependency):
+    def rename_item_display(project: ProjectDependency, item_id: str, command: ItemDisplayName, operator: ActorDependency):
         return rename_item(workflow,project,item_id,command,actor=operator)
 
     @app.get("/api/v1/projects/{project}/configuration", response_model=ConfigurationView)
-    def configuration(project: str, operator: ActorDependency):
+    def configuration(project: ProjectDependency, operator: ActorDependency):
         return workflow.configuration(project, actor=operator)
 
     @app.post("/api/v1/projects/{project}/configuration", response_model=MutationResult)
-    def change_configuration(project: str, command: ConfigurationChange, operator: ActorDependency):
+    def change_configuration(project: ProjectDependency, command: ConfigurationChange, operator: ActorDependency):
         return workflow.change_configuration(project, command, actor=operator)
 
     @app.get("/api/v1/projects/{project}/previews", response_model=list[PreviewSummary])
-    def previews(project: str, operator: ActorDependency, offset: int = Query(0, ge=0),
+    def previews(project: ProjectDependency, operator: ActorDependency, offset: int = Query(0, ge=0),
                  limit: int = Query(20, ge=1, le=100)):
         return workflow.list_previews(project, offset, limit, actor=operator)
 
-    @app.post("/api/v1/projects/{project}/previews", response_model=UploadPreview)
-    def upload(project: str, operator: ActorDependency, file: Annotated[UploadFile, File()],
-               idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=200)],
-               context: Annotated[str, Form()] = "{}"):
+    from threading import Lock
+    upload_progress = {}
+    upload_progress_lock = Lock()
+
+    @app.get("/api/v1/projects/{project}/preview-progress/{progress_id}")
+    def read_upload_progress(project: ProjectDependency, progress_id: str, operator: ActorDependency):
         require(operator, Capability.PREVIEW)
+        with upload_progress_lock:
+            return upload_progress.get((project, operator.id, progress_id), {"phase": "waiting"})
+
+    @app.post("/api/v1/projects/{project}/previews", response_model=UploadPreview)
+    def upload(project: ProjectDependency, operator: ActorDependency, file: Annotated[UploadFile, File()],
+               idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=200)],
+               context: Annotated[str, Form()] = "{}",
+               progress_id: Annotated[str | None, Header(alias="Upload-Progress-Id", max_length=80)] = None,
+               compact: bool = False):
+        require(operator, Capability.PREVIEW)
+        key = (project, operator.id, progress_id)
+
+        def update(phase, completed=None, total=None, candidates=None, section=None):
+            with upload_progress_lock:
+                upload_progress[key] = {"phase": phase, "completed": completed, "total": total,
+                                        "candidates": candidates, "section": section}
+
+        if progress_id:
+            with upload_progress_lock:
+                if key in upload_progress:
+                    raise WorkflowError("upload_in_progress", "此上传仍在处理，请等待。", 409)
+                upload_progress[key] = {"phase": "reading"}
         try:
             ctx = ImportContext.model_validate_json(context)
             data = file.file.read(20 * 1024 * 1024 + 1)
-            return workflow.upload(project, file.filename or "input", data, ctx, idempotency_key, actor=operator, deduplicate=True)
+            result = workflow.upload(project, file.filename or "input", data, ctx, idempotency_key,
+                                     actor=operator, deduplicate=True, progress=update if progress_id else None)
+            return result.model_copy(update={"candidates": ()}) if compact else result
         except (BadZipFile, KeyError, ValidationError) as exc:
             raise WorkflowError("invalid_document", "文件结构或上传上下文不符合支持格式。") from exc
         finally:
             file.file.close()
+            if progress_id:
+                with upload_progress_lock:
+                    upload_progress.pop(key, None)
 
     @app.get("/api/v1/previews/{preview_id}", response_model=UploadPreview)
     def preview(preview_id: str, operator: ActorDependency):
         return workflow.preview(preview_id, actor=operator)
+
+    @app.get("/api/v1/previews/{preview_id}/workspace", response_model=WorkspacePreview)
+    def preview_workspace(preview_id: str, operator: ActorDependency, section: str | None = None):
+        require(operator, Capability.VIEW)
+        with store.read() as conn:
+            upload = workflow._upload(conn, preview_id)
+            result = workflow._preview(conn, upload, operator, fresh=True)
+            physical = coverage(conn, upload) if result.sheet_confirmation_required else []
+            sections = [sheet["section"] for sheet in physical]
+            if section is not None and section not in sections:
+                raise WorkflowError("unknown_sheet", "链接中的工作表已无法定位，请重新选择工作表。", 404)
+            selected = section if section is not None else next(iter(sections), None)
+            view = None
+            if selected is not None:
+                from .review_tasks import enrich_sheet_preflight
+                view = preflight(workflow, conn, upload, selected, operator, preview=result, sheets=physical)[0]
+                view = enrich_sheet_preflight(conn, upload, result, view, physical_sheets=physical)
+            if result.sheet_confirmation_required:
+                result = result.model_copy(update={"candidates": tuple(
+                    candidate for candidate in result.candidates if candidate.location.section == selected)})
+            return {"preview": result, "sections": sections, "section": selected,
+                    "preflight": view.model_dump(mode="json") if view else None}
+
+    @app.post('/api/v1/previews/{preview_id}/sync-worksheets')
+    def sync_confirmed_worksheets(preview_id: str, operator: ActorDependency, section: str | None = None):
+        require(operator, Capability.CONFIRM_FACT)
+        from .worksheet_seed import provision_from_results
+        with store.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            upload = workflow._upload(conn, preview_id)
+            rows = conn.execute("""SELECT detail_json FROM workflow_events
+                WHERE project=? AND subject_id=? AND action='confirm_sheet'
+                  AND (? IS NULL OR json_extract(detail_json,'$.section')=?)""",
+                (upload["project"], preview_id, section, section))
+            ids = [version_id for row in rows for version_id in
+                   json.loads(row["detail_json"]).get("result_version_ids", [])]
+            return {"worksheet_sync": provision_from_results(conn, worksheets, upload["project"], ids, operator)}
+
+    @app.get('/api/v1/previews/{preview_id}/worksheets')
+    def worksheets_for_import(preview_id: str, operator: ActorDependency, section: str | None = None):
+        require(operator, Capability.VIEW)
+        with store.read() as conn:
+            workflow._upload(conn, preview_id)
+            return [dict(row) for row in conn.execute(
+                """SELECT DISTINCT sheet.id, sheet.name
+                   FROM workflow_candidates candidate
+                   LEFT JOIN workflow_events receipt ON receipt.subject_id = candidate.id
+                       AND receipt.project = candidate.project AND receipt.action = 'repeat_source_reference'
+                   JOIN workflow_versions version ON version.candidate_id = candidate.id
+                       OR version.id = json_extract(receipt.detail_json, '$.previous_version_id')
+                   JOIN business_worksheet_slots slot ON slot.slot_id = version.slot_id
+                   JOIN business_worksheets sheet ON sheet.id = slot.sheet_id AND sheet.project = version.project
+                   WHERE candidate.upload_id = ? AND candidate.lifecycle = 'submitted'
+                     AND (? IS NULL OR json_extract(candidate.raw_json, '$.location.section') = ?)
+                   ORDER BY sheet.name, sheet.id""", (preview_id, section, section),
+            )]
 
     @app.patch("/api/v1/previews/{preview_id}/mapping", response_model=MutationResult)
     def map_items(preview_id: str, command: CandidateMapping, operator: ActorDependency):
@@ -596,13 +1185,32 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
     def result_change(version_id: str, command: ResultChange, operator: ActorDependency):
         return versions.change(version_id, command, actor=operator)
 
+    @app.post('/api/v1/results/{version_id}/invalidate', response_model=MutationResult)
+    def invalidate_result(version_id: str, command: InvalidateRequest, operator: ActorDependency):
+        """P0-3: 正式结果留痕作废接口"""
+        return versions.invalidate(version_id, command, actor=operator)
+
+    @app.get('/api/v1/results/{version_id}/invalidate')
+    def preview_invalidation(version_id: str, operator: ActorDependency):
+        return versions.preview_invalidation(version_id, actor=operator)
+
     @app.get("/api/v1/projects/{project}/result-cells", response_model=ResultPage)
-    def results(project: str, operator: ActorDependency, query: Annotated[ResultQuery, Query()]):
+    def results(project: ProjectDependency, operator: ActorDependency, query: Annotated[ResultQuery, Query()]):
         filters = ResultFilter.model_validate(query.model_dump(exclude={'offset', 'limit'}))
         return workflow.results(project, filters, query.offset, query.limit, actor=operator)
 
+    @app.get('/api/v1/projects/{project}/worksheet-seed')
+    def worksheet_seed(project: ProjectDependency, operator: ActorDependency, batch: str = "", slot_id: str = "",
+                       source: Literal["blank", "standard", "protocol", "results", "copy"] | None = None,
+                       source_id: str = "", table: int | None = None):
+        require(operator, Capability.VIEW)
+        from .worksheet_seed import plan_seed
+        with store.read() as conn:
+            return plan_seed(conn, worksheets, project, operator, source=source or ("results" if slot_id else "blank"),
+                             batch=batch, slot_id=slot_id, source_id=source_id, table=table)
+
     @app.get('/api/v1/projects/{project}/result-display')
-    def result_display(project: str, operator: ActorDependency, filters: Annotated[ResultFilter, Query()]):
+    def result_display(project: ProjectDependency, operator: ActorDependency, filters: Annotated[ResultFilter, Query()]):
         require(operator, Capability.VIEW)
         from .result_display import display_results
         with store.read() as conn:
@@ -611,7 +1219,7 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
     from .workflow_contracts import ResultTrendQuery
 
     @app.get('/api/v1/projects/{project}/result-trend')
-    def result_trend(project: str, operator: ActorDependency, query: Annotated[ResultTrendQuery, Query()]):
+    def result_trend(project: ProjectDependency, operator: ActorDependency, query: Annotated[ResultTrendQuery, Query()]):
         require(operator, Capability.VIEW)
         from .result_display import trend_results
         with store.read() as conn:
@@ -630,17 +1238,17 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
         return versions.source(source_id, actor=operator)
 
     @app.get("/api/v1/projects/{project}/history")
-    def history(project: str, operator: ActorDependency):
+    def history(project: ProjectDependency, operator: ActorDependency):
         return versions.history(project, actor=operator)
 
     @app.get("/api/v1/projects/{project}/detections")
-    def detections(project: str, operator: ActorDependency):
+    def detections(project: ProjectDependency, operator: ActorDependency):
         require(operator, Capability.VIEW)
         with store.connect() as conn:
             return [dict(row) for row in conn.execute("SELECT id,source_number,created_at FROM workflow_detections WHERE project=? ORDER BY rowid", (project,))]
 
     @app.get("/api/v1/projects/{project}/pending-results")
-    def pending(project: str, operator: ActorDependency):
+    def pending(project: ProjectDependency, operator: ActorDependency):
         require(operator, Capability.VIEW)
         with store.connect() as conn:
             from .identity_associations import versions as logical_versions
@@ -652,7 +1260,10 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
 
     @app.post("/api/v1/exports", response_model=ExportResult)
     def export(command: ExportRequest, operator: ActorDependency):
-        return exports.create(command, actor=operator)
+        require(operator, Capability.EXPORT)
+        with store.read() as conn:
+            project = unique_project_code(conn, command.project)
+        return exports.create(command.model_copy(update={"project": project}), actor=operator)
 
     @app.get("/api/v1/exports/{export_id}/file")
     def download(export_id: str, operator: ActorDependency):
@@ -664,25 +1275,35 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
     def download_image(export_id: str,operator: ActorDependency):
         return FileResponse(exports.download_image(export_id,actor=operator),filename='trend.png',media_type='image/png')
 
+    @app.get('/api/v1/exports/{export_id}/attachment')
+    def download_export_attachment(export_id: str, operator: ActorDependency):
+        require(operator, Capability.EXPORT)
+        with store.read() as conn:
+            row = conn.execute('SELECT snapshot_json FROM workflow_exports WHERE id=?', (export_id,)).fetchone()
+        attachment = json.loads(row['snapshot_json']).get('attachment') if row else None
+        if not attachment:
+            raise WorkflowError('export_attachment_missing', '此交付没有扫描附件。', 404)
+        return FileResponse(ocr.original(attachment['id']), filename=attachment['filename'], media_type='application/pdf')
+
     from .comparability import StudySave, StudyQuery, QuickCompare
     from .study_reports import ReportRequest
 
     @app.get('/api/v1/projects/{project}/comparison-catalog')
-    def comparison_catalog(project: str, operator: ActorDependency):
+    def comparison_catalog(project: ProjectDependency, operator: ActorDependency):
         require(operator, Capability.VIEW)
         from .quick_comparison import catalog
         with store.read() as conn:
             return catalog(conn,project)
 
     @app.post('/api/v1/projects/{project}/comparison-preview')
-    def comparison_preview(project: str, command: QuickCompare, operator: ActorDependency):
+    def comparison_preview(project: ProjectDependency, command: QuickCompare, operator: ActorDependency):
         require(operator, Capability.VIEW)
         from .quick_comparison import quick_compare
         with store.read() as conn:
             return quick_compare(conn,project,command)
 
     @app.get('/api/v1/projects/{project}/comparison-studies')
-    def comparison_studies(project: str, operator: ActorDependency):
+    def comparison_studies(project: ProjectDependency, operator: ActorDependency):
         require(operator, Capability.VIEW)
         from .comparability import studies, inventory
         from .workflow_common import project_row
@@ -691,12 +1312,12 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
                     'studies':studies(conn,project),'samples':inventory(conn,project)}
 
     @app.post('/api/v1/projects/{project}/comparison-studies/{study_id}')
-    def save_comparison(project: str, study_id: str, command: StudySave, operator: ActorDependency):
+    def save_comparison(project: ProjectDependency, study_id: str, command: StudySave, operator: ActorDependency):
         from .comparability import save
         return save(workflow,project,study_id,command,operator)
 
     @app.get('/api/v1/projects/{project}/comparison-studies/{study_id}/results')
-    def comparison_results(project: str, study_id: str, operator: ActorDependency, query: Annotated[StudyQuery, Query()]):
+    def comparison_results(project: ProjectDependency, study_id: str, operator: ActorDependency, query: Annotated[StudyQuery, Query()]):
         require(operator, Capability.VIEW)
         from .comparability import compare
         with store.read() as conn:
@@ -705,7 +1326,10 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
     @app.post('/api/v1/reports')
     def report_export(command: ReportRequest, operator: ActorDependency):
         from .study_reports import create_report
-        return create_report(workflow,command,operator)
+        require(operator, Capability.EXPORT)
+        with store.read() as conn:
+            project = unique_project_code(conn, command.project)
+        return create_report(workflow, command.model_copy(update={"project": project}), operator)
 
     @app.get('/api/v1/reports/{export_id}/file')
     def report_download(export_id: str, operator: ActorDependency):
@@ -725,9 +1349,42 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
         return Response(content,media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
                         headers={'Content-Disposition':'attachment; filename="report.docx"'})
 
-    if frontend:
-        frontend_path = Path(frontend).resolve()
+    @app.get('/api/v1/deliveries')
+    def deliveries(operator: ActorDependency, limit: Annotated[int, Query(ge=1, le=200)] = 50):
+        require(operator, Capability.EXPORT)
+        with store.read() as conn:
+            rows = conn.execute(
+                "SELECT id, project, created_at, path, "
+                "json_extract(snapshot_json, '$.attachment.filename') AS attachment_filename, "
+                "json_extract(snapshot_json, '$.stability_document.version') AS report_version, "
+                "json_extract(snapshot_json, '$.stability_document.change_history') AS report_changes "
+                'FROM workflow_exports ORDER BY created_at DESC, id DESC LIMIT ?',
+                (limit,),
+            ).fetchall()
+        return [{'id': row['id'], 'project': row['project'], 'created_at': row['created_at'],
+                 'filename': Path(row['path']).name, 'attachment_filename': row['attachment_filename'],
+                 'report_version': row['report_version'], 'report_changes': row['report_changes']} for row in rows]
 
+    @app.get('/api/v1/deliveries/{export_id}/compare')
+    def compare_delivery(export_id: str, baseline: str, operator: ActorDependency):
+        require(operator, Capability.EXPORT)
+        from .study_reports import compare_result_snapshots
+        with store.read() as conn:
+            rows = {row['id']: row for row in conn.execute(
+                'SELECT id, project, path, snapshot_json FROM workflow_exports WHERE id IN (?, ?)',
+                (export_id, baseline),
+            )}
+        if len(rows) != 2 or any(Path(row['path']).name != 'report.zip' for row in rows.values()):
+            raise WorkflowError('report_comparison_missing', '请选择两个不同的 Word 报告版本。')
+        if rows[export_id]['project'] != rows[baseline]['project']:
+            raise WorkflowError('report_comparison_scope', '请选择同一项目的报告。')
+        return compare_result_snapshots(json.loads(rows[baseline]['snapshot_json']),
+                                        json.loads(rows[export_id]['snapshot_json']))
+
+    if workbench:
+        app.mount('/workbench', StaticFiles(directory=workbench, html=True), name='workbench')
+
+    if frontend or workbench:
         @app.get("/assets/worksheet/{filename}", include_in_schema=False)
         def worksheet_asset(filename: str):
             directory = code_root / "frontend" / "v3" / "univer" / "dist"
@@ -735,7 +1392,15 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, o
                 raise WorkflowError("worksheet_editor_unavailable", "研究工作表组件尚未构建。", 404)
             return FileResponse(directory / filename)
 
-        @app.get("/", include_in_schema=False)
+    if frontend:
+        frontend_path = Path(frontend).resolve()
+
+        @app.get("/legacy" if workbench else "/", include_in_schema=False)
         def index():
             return FileResponse(frontend_path, media_type="text/html")
+
+    if workbench:
+        @app.get('/', include_in_schema=False)
+        def workbench_home():
+            return RedirectResponse('/workbench/')
     return app

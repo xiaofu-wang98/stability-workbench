@@ -18,7 +18,7 @@ from .workflow_contracts import ExportResult
 
 PENDING_SUFFIX = "（待确认）"
 PENDING_COLOR = "FFDC2626"
-GROUP_FIELDS = ("project", "sample_type", "presentation", "study", "study_id", "condition", "purpose", "reporting_basis")
+GROUP_FIELDS = ("project", "sample_type", "presentation", "study", "study_id", "condition", "purpose", "reporting_basis", "sample_id")
 RECORD_HEADERS = (
     "slot_id", "project", "sample_type", "batch", "presentation", "study", "study_id", "condition", "month",
     "item", "method", "method_version", "display", "display_version", "display_state", "adopted", "adopted_version",
@@ -85,7 +85,7 @@ def write_workbook(path, snapshot):
         release = group[3] == "release"
         for adopted in (False, True):
             sheet = book.create_sheet(("Adopted" if adopted else "Display") + str(index))
-            metadata = [(field,value) for field,value in zip(GROUP_FIELDS, group, strict=True) if (field != "purpose" or value != "unknown") and (field != "reporting_basis" or value)]
+            metadata = [(field,value) for field,value in zip(GROUP_FIELDS, group, strict=True) if (field != "purpose" or value != "unknown") and (field not in {"reporting_basis", "sample_id"} or value)]
             for field,value in metadata:
                 text_row(sheet, (field, value))
             header_row = len(metadata)+2
@@ -186,6 +186,9 @@ class ExcelExports:
             conn.execute("BEGIN")
             check_revision(conn, request.project, request.base_revision)
             snapshot = create_snapshot(self.workflow,conn,request)
+            if request.format == "stability_summary":
+                from .stability_summary import freeze_summary
+                snapshot["stability_summary"] = freeze_summary(self.workflow, conn, snapshot, actor)
             snapshot['axis'] = {k:getattr(request,k) for k in ('axis_mode','axis_min','axis_max')}
             from .models import digest
             snapshot['snapshot_id'] = digest({k:v for k,v in snapshot.items() if k!='snapshot_id'})
@@ -194,10 +197,14 @@ class ExcelExports:
         export_id = uid("export")
         folder = self.store.home / "workflow-exports" / export_id
         folder.mkdir(parents=True)
-        path = folder / "results.xlsx"
-        write_workbook(path, snapshot)
-        from .workflow_excel_verify import verify_workbook
-        errors = verify_workbook(path, snapshot)
+        path = folder / ("stability-summary.xlsx" if request.format == "stability_summary" else "results.xlsx")
+        if request.format == "stability_summary":
+            from .stability_summary import write_summary
+            errors = write_summary(path, snapshot["stability_summary"])
+        else:
+            write_workbook(path, snapshot)
+            from .workflow_excel_verify import verify_workbook
+            errors = verify_workbook(path, snapshot)
         (folder / "snapshot.json").write_text(encoded(snapshot), encoding="utf-8")
         (folder / "verification.json").write_text(encoded({"passed": not errors, "errors": errors}), encoding="utf-8")
         if errors:
@@ -213,7 +220,7 @@ class ExcelExports:
                          (export_id, request.project, request.base_revision, str(path), sha, encoded(snapshot), actor.id))
         return ExportResult(export_id=export_id, project=request.project, base_revision=request.base_revision,
                             image_download_url=f'/api/v1/exports/{export_id}/image' if request.include_png else None,
-                            filename="results.xlsx", download_url=f"/api/v1/exports/{export_id}/file")
+                            filename=path.name, download_url=f"/api/v1/exports/{export_id}/file")
 
     def download(self, export_id, *, actor):
         require(actor, Capability.EXPORT)

@@ -50,6 +50,14 @@ def month_token(text):
     return int(match[1]) if match and int(match[1]) <= 240 else None
 
 
+def timepoint_token(text):
+    day = re.match(r'^\s*(\d{1,4})\s*(?:天|[Dd]|days?)(?=\s|[（(]|$)', str(text), re.I)
+    if day and int(day[1]) <= 3650:
+        return f'{int(day[1])}D'
+    month = month_token(text)
+    return f'{month}M' if month is not None else None
+
+
 def purity_subresults(criterion):
     return [name for pattern, name in [(r'单体|\bMonomer\b', 'Monomer'),
             (r'聚合体|高分子量|\bHMW\b', 'HMW'), (r'低分子量|\bLMW\b', 'LMW')]
@@ -94,6 +102,16 @@ def reporting_basis(text):
     return set(re.findall(r'^\s*(CHP|EP|USP)\s*[:：]', str(text), re.I | re.M))
 
 
+def appearance_component(parent, criterion):
+    if not re.search(r'外观|\bappearance\b', parent, re.I):
+        return ''
+    solid = bool(re.search(r'块状疏松体|粉末|\b(?:porous mass|powder|lyophilized cake)\b', criterion, re.I))
+    solution = bool(re.search(r'复溶后溶液|\b(?:reconstituted|recovered) solution\b', criterion, re.I))
+    if solid == solution:
+        return ''
+    return '固体外观' if solid else '复溶液外观'
+
+
 def item_text(parent, criterion, method='', subresult='', result=''):
     """Labels distinguish explicit subresults without importing their acceptance limits."""
     parent = re.sub(r'^\s*\d+[.、．]\s*', '', parent).strip()
@@ -134,6 +152,8 @@ def item_text(parent, criterion, method='', subresult='', result=''):
         sub = '图谱一致性'
     if not sub and re.search(r'^\s*纯度\s*[%％]?\s*[:：]', criterion):
         sub = '主峰纯度'
+    if not sub and subresult:
+        sub = appearance_component(first, criterion)
     if not sub:
         if '中国申报' in criterion or 'for China' in criterion:
             sub = '中国申报'
@@ -153,6 +173,13 @@ def item_text(parent, criterion, method='', subresult='', result=''):
             sub = '图谱一致性'
     criterion_basis = {b.upper() for b in reporting_basis(criterion)}
     result_basis = {b.upper() for b in reporting_basis(result)}
+    if re.search(r'澄清度|\bclarity\b', first, re.I):
+        # In separate clarity rows, an explicit parenthetical qualifier on
+        # the result identifies the reporting basis even with a shared limit.
+        result_basis.update(
+            basis for basis, marker in {"CHP": "中国|ChP", "USP": "美国|USP", "EP": "欧洲|EP"}.items()
+            if re.search(r'[（(]\s*(?:' + marker + r')\s*[）)]\s*$', result, re.I | re.M)
+        )
     basis = criterion_basis | result_basis
     # Only an unambiguous explicit label can separate rows. A combined result stays combined.
     basis_label = {'CHP': 'ChP', 'EP': 'EP', 'USP': 'USP'}.get(next(iter(basis))) if len(basis) == 1 else ''
@@ -239,7 +266,7 @@ def interpret_matrix_fields(source, section, *, reference_rules=True, explicit_p
     dp = bool(re.search(r'制剂|注射液|注射器|注射笔|(?<![A-Za-z])DPX?(?![A-Za-z])', kind_text, re.I))
     fields['sample_type'] = 'placebo' if re.search(r'安慰剂|placebo', product, re.I) else 'DS' if ds and not dp else 'DP' if dp and not ds else ''
     batch = compact(re.sub(r'(?<=-)\s*[\r\n]+\s*|\s*[\r\n]+\s*(?=-)', '', source.get('batch', '')))
-    batch = re.sub(r'^批号\s*[:：]\s*', '', batch)
+    batch = re.sub(r'^(?:样品|产品)?批号\s*[:：]\s*', '', batch)
     # Alternative identifiers in parentheses are left for explicit identity correction.
     fields['batch'] = batch if re.fullmatch(r'[A-Za-z0-9_-]+', batch) else ''
     study_text = source.get('study', '') or (title + ' ' + section)
@@ -247,6 +274,9 @@ def interpret_matrix_fields(source, section, *, reference_rules=True, explicit_p
         fields['study'] = 'long_term'
     elif re.search(r'[R√✓☑]\s*加速', study_text):
         fields['study'] = 'accelerated'
+    elif (re.search(r'强力破坏|应力试验|\bstress\b', study_text, re.I)
+          and not re.search(r'长期|加速|long.term|accelerated|[□£]', study_text, re.I)):
+        fields['study'] = 'stress'
     elif '□' not in study_text and '£' not in study_text:
         fields['study'] = 'accelerated' if '加速' in study_text else 'long_term' if '长期' in study_text or (not reference_rules and '稳定性研究' in study_text) else ''
     else:
@@ -265,8 +295,7 @@ def interpret_matrix_fields(source, section, *, reference_rules=True, explicit_p
     if time is None and source.get('sample_info'):
         times = re.findall(r'(?<![\d.])(\d{1,3})\s*M\b', source['sample_info'], re.I)
         time = int(times[0]) if len(times) == 1 else None
-    day = re.fullmatch(r'\s*(\d+)\s*(?:天|[Dd]|days?)\s*', source.get('time_point', ''), re.I)
-    fields['time_point'] = f'{int(day[1])}D' if day else f'{time}M' if time is not None else ''
+    fields['time_point'] = timepoint_token(source.get('time_point', '')) or (f'{time}M' if time is not None else '')
     method_source = source.get('method', '') or source.get('test_item', '')
     method = explicit_method(source['method']) if source.get('method') else method_text(method_source, embedded=True)
     fields['method'] = method

@@ -29,7 +29,7 @@ function clipboardRows(text) {
   return rows;
 }
 
-export function mountWorksheet(container, values, layout, editable, { onChange, onError, canEdit }) {
+export function mountWorksheet(container, values, layout, editable, { onChange, onError, canEdit, fixedColumns = 1 }) {
   const { univer, univerAPI } = createUniver({
     locale: LocaleType.ZH_CN,
     locales: { [LocaleType.ZH_CN]: mergeLocales(zhCN) },
@@ -40,13 +40,14 @@ export function mountWorksheet(container, values, layout, editable, { onChange, 
   });
   const sheetId = 'study';
   const cellData = Object.fromEntries(values.map((row, r) => [r, Object.fromEntries(
-    row.map((value, c) => [c, { v: value, t: CellValueType.STRING, s: r < 2 || c === 0 ? 'heading' : 'entry' }])
+    row.map((value, c) => [c, { v: value, t: CellValueType.STRING, s: r === 0 || (r === 1 && c < fixedColumns) ? 'heading' : r === 1 || c < fixedColumns ? 'option' : 'entry' }])
   )]));
   const workbook = univerAPI.createWorkbook({
     id: 'stability-worksheet',
     sheetOrder: [sheetId],
     styles: {
-      heading: { bl: 1, bg: { rgb: '#edf3f8' }, tb: 3, n: { pattern: '@' } },
+      option: { bg: { rgb: '#d5e7f4' }, tb: 3, n: { pattern: '@' } },
+      heading: { bl: 1, bg: { rgb: '#9ec4e2' }, tb: 3, n: { pattern: '@' } },
       entry: { tb: 3, n: { pattern: '@' } },
     },
     sheets: {

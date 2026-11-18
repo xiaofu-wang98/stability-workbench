@@ -1,7 +1,7 @@
 import pytest
 from openpyxl import Workbook, load_workbook
 
-from stability_hub.matrix_fields import interpret_matrix_fields, month_token
+from stability_hub.matrix_fields import interpret_matrix_fields, item_text, month_token
 from stability_hub.models import ImportContext, ItemDefinition, ProjectConfig
 from stability_hub.parsing import parse_source
 from stability_hub.permissions import Role, actor_for_role
@@ -9,6 +9,39 @@ from stability_hub.storage import Store
 from stability_hub.verification import check_original_fields, reread_source_rows
 from stability_hub.workflow import Workflow
 from stability_hub.workflow_contracts import CandidateMapping
+
+
+def test_clarity_component_uses_agreeing_explicit_result_qualifiers():
+    assert item_text("澄清度", "不得高于3号", "目视", result="小于1号（中国）").endswith(" · ChP")
+    assert item_text("Clarity", "No higher than No.3", "Visual", result="小于Ⅰ号（美国）\nLess than No.Ⅰ(USP)").endswith(" · USP")
+    mixed = item_text("Clar ity", "", "Visual", result="小于1号（中国）\nLess than No.Ⅰ(USP)")
+    assert mixed == "Clar ity · Visual"
+    assert item_text("Clarity", "", "Visual", result="小于1号（中国）\nLess than No.Ⅰ(USP)") == "Clarity · Visual"
+
+
+def test_appearance_component_names_come_from_explicit_forms():
+    solid = "应为白色至微黄色块状疏松体。 White or yellow powder or porous mass."
+    liquid = "复溶后溶液，呈澄清至微乳光。 The recovered solution is clear to opalescent."
+    assert item_text("外观", solid, "目视法", solid).endswith(" · 固体外观")
+    assert item_text("外观", liquid, "目视法", liquid).endswith(" · 复溶液外观")
+    assert not item_text("外观", solid, "目视法").endswith(" · 固体外观")
+    assert not item_text("外观", solid + liquid, "目视法", solid + liquid).endswith(" · 固体外观")
+
+
+def test_inline_batch_and_stress_keep_original_cell_evidence(bilingual):
+    book = load_workbook(bilingual)
+    sheet = book.active
+    sheet.title = "DS 强力破坏"
+    sheet["A1"] = "原液强力破坏稳定性研究实验数据"
+    sheet["A2"] = "样品批号：LOT-123"
+    sheet["B2"] = None
+    book.save(bilingual)
+    book.close()
+    raw = parse_source(bilingual).observations[0]
+    assert raw.fields["batch"] == "样品批号：LOT-123"
+    assert (raw.evidence["batch"].row, raw.evidence["batch"].column) == (2, 1)
+    fields = interpret_matrix_fields(raw.fields, raw.location.section)
+    assert (fields["batch"], fields["study"], fields["sample_type"]) == ("LOT-123", "stress", "DS")
 
 
 @pytest.fixture

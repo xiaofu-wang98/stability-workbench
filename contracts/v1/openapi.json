@@ -21,6 +21,1052 @@
         }
       }
     },
+    "/api/v1/worksheets/{sheet_id}/protocol-standards": {
+      "get": {
+        "summary": "Preview Protocol Standards",
+        "operationId": "preview_protocol_standards_api_v1_worksheets__sheet_id__protocol_standards_get",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Confirm Protocol Standards",
+        "operationId": "confirm_protocol_standards_api_v1_worksheets__sheet_id__protocol_standards_post",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmProtocolStandards"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/assays": {
+      "get": {
+        "summary": "Project Assays",
+        "operationId": "project_assays_api_v1_projects__project__assays_get",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/specifications/{specification_id}/components": {
+      "post": {
+        "summary": "Confirm Specification Components",
+        "operationId": "confirm_specification_components_api_v1_projects__project__specifications__specification_id__components_post",
+        "parameters": [
+          {
+            "name": "specification_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Specification Id"
+            }
+          },
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterComponents"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/samples": {
+      "get": {
+        "summary": "Samples",
+        "operationId": "samples_api_v1_projects__project__samples_get",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project"
+            }
+          },
+          {
+            "name": "batch",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Batch"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Add Sample",
+        "operationId": "add_sample_api_v1_projects__project__samples_post",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SampleInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/samples/{sample_id}/coa/{specification_id}": {
+      "get": {
+        "summary": "Get Coa",
+        "operationId": "get_coa_api_v1_samples__sample_id__coa__specification_id__get",
+        "parameters": [
+          {
+            "name": "sample_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sample Id"
+            }
+          },
+          {
+            "name": "specification_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Specification Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Save Coa",
+        "operationId": "save_coa_api_v1_samples__sample_id__coa__specification_id__post",
+        "parameters": [
+          {
+            "name": "sample_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sample Id"
+            }
+          },
+          {
+            "name": "specification_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Specification Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CoaSave"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/samples/{sample_id}/coa/{specification_id}/file": {
+      "get": {
+        "summary": "Download",
+        "operationId": "download_api_v1_samples__sample_id__coa__specification_id__file_get",
+        "parameters": [
+          {
+            "name": "sample_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sample Id"
+            }
+          },
+          {
+            "name": "specification_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Specification Id"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "docx",
+                "xlsx"
+              ],
+              "type": "string",
+              "default": "docx",
+              "title": "Format"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/coa-sources/{source_id}/file": {
+      "get": {
+        "summary": "Coa Original",
+        "operationId": "coa_original_api_v1_coa_sources__source_id__file_get",
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/samples/{sample_id}/coa/{specification_id}/preview": {
+      "post": {
+        "summary": "Preview Upload",
+        "operationId": "preview_upload_api_v1_samples__sample_id__coa__specification_id__preview_post",
+        "parameters": [
+          {
+            "name": "sample_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sample Id"
+            }
+          },
+          {
+            "name": "specification_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Specification Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_preview_upload_api_v1_samples__sample_id__coa__specification_id__preview_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worksheets/{sheet_id}/study-workbook": {
+      "post": {
+        "summary": "Export Study",
+        "operationId": "export_study_api_v1_worksheets__sheet_id__study_workbook_post",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          },
+          {
+            "name": "filled",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Filled"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/controlled-workbook": {
+      "post": {
+        "summary": "Export Controlled",
+        "operationId": "export_controlled_api_v1_projects__project__controlled_workbook_post",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ControlledWorkbook"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/study-workbooks/preview": {
+      "post": {
+        "summary": "Preview",
+        "operationId": "preview_api_v1_study_workbooks_preview_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_preview_api_v1_study_workbooks_preview_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worksheets/{sheet_id}/study-workbooks/{source_id}": {
+      "post": {
+        "summary": "Commit",
+        "operationId": "commit_api_v1_worksheets__sheet_id__study_workbooks__source_id__post",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          },
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkbookCommit"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worksheets/{sheet_id}/historical-rows": {
+      "get": {
+        "summary": "Preview Historical Rows",
+        "operationId": "preview_historical_rows_api_v1_worksheets__sheet_id__historical_rows_get",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Include Historical Rows",
+        "operationId": "include_historical_rows_api_v1_worksheets__sheet_id__historical_rows_post",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          },
+          {
+            "name": "fingerprint",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Fingerprint"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IncludeHistoricalRows"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/batch-overview": {
+      "get": {
+        "summary": "Batch Overview",
+        "operationId": "batch_overview_api_v1_projects__project__batch_overview_get",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project"
+            }
+          },
+          {
+            "name": "batch",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Batch"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worksheets/{sheet_id}/archive-impact": {
+      "get": {
+        "summary": "Worksheet Archive Impact",
+        "operationId": "worksheet_archive_impact_api_v1_worksheets__sheet_id__archive_impact_get",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worksheets/{sheet_id}": {
+      "delete": {
+        "summary": "Archive Worksheet",
+        "operationId": "archive_worksheet_api_v1_worksheets__sheet_id__delete",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveStudyObject"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Read Worksheet",
+        "operationId": "read_worksheet_api_v1_worksheets__sheet_id__get",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/samples/{sample_id}/archive-impact": {
+      "get": {
+        "summary": "Sample Archive Impact",
+        "operationId": "sample_archive_impact_api_v1_samples__sample_id__archive_impact_get",
+        "parameters": [
+          {
+            "name": "sample_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sample Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/samples/{sample_id}": {
+      "delete": {
+        "summary": "Archive Sample",
+        "operationId": "archive_sample_api_v1_samples__sample_id__delete",
+        "parameters": [
+          {
+            "name": "sample_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sample Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveStudyObject"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/projects/{project}/worksheets": {
       "get": {
         "summary": "List Worksheets",
@@ -83,43 +1129,6 @@
         },
         "responses": {
           "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/worksheets/{sheet_id}": {
-      "get": {
-        "summary": "Read Worksheet",
-        "operationId": "read_worksheet_api_v1_worksheets__sheet_id__get",
-        "parameters": [
-          {
-            "name": "sheet_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Sheet Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
@@ -318,6 +1327,53 @@
         }
       }
     },
+    "/api/v1/worksheets/{sheet_id}/point-metadata": {
+      "post": {
+        "summary": "Edit Worksheet Point",
+        "operationId": "edit_worksheet_point_api_v1_worksheets__sheet_id__point_metadata_post",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditPointMetadata"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/worksheets/{sheet_id}/plan": {
       "post": {
         "summary": "Extend Worksheet",
@@ -339,6 +1395,509 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ExtendPlan"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worksheets/{sheet_id}/standards": {
+      "post": {
+        "summary": "Set Worksheet Standards",
+        "operationId": "set_worksheet_standards_api_v1_worksheets__sheet_id__standards_post",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetWorksheetStandards"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worksheets/{sheet_id}/remove-row": {
+      "get": {
+        "summary": "Preview Remove Worksheet Row",
+        "operationId": "preview_remove_worksheet_row_api_v1_worksheets__sheet_id__remove_row_get",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          },
+          {
+            "name": "row_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Row Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Remove Worksheet Row",
+        "operationId": "remove_worksheet_row_api_v1_worksheets__sheet_id__remove_row_post",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoveWorksheetRow"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worksheets/{sheet_id}/stop-checks": {
+      "post": {
+        "summary": "Stop Worksheet Checks",
+        "operationId": "stop_worksheet_checks_api_v1_worksheets__sheet_id__stop_checks_post",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StopWorksheetChecks"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worksheets/{sheet_id}/events": {
+      "post": {
+        "summary": "Add Worksheet Event",
+        "operationId": "add_worksheet_event_api_v1_worksheets__sheet_id__events_post",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddWorksheetEvent"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worksheets/{sheet_id}/protocol": {
+      "post": {
+        "summary": "Attach Worksheet Protocol",
+        "operationId": "attach_worksheet_protocol_api_v1_worksheets__sheet_id__protocol_post",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachProtocol"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worksheets/{sheet_id}/release-reference": {
+      "post": {
+        "summary": "Set Release Reference",
+        "operationId": "set_release_reference_api_v1_worksheets__sheet_id__release_reference_post",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetReleaseReference"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worksheets/{sheet_id}/copy-coa-to-0m": {
+      "post": {
+        "summary": "Copy Coa To Zero",
+        "operationId": "copy_coa_to_zero_api_v1_worksheets__sheet_id__copy_coa_to_0m_post",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CopyCoaToZero"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worksheets/{sheet_id}/coa-release-options": {
+      "get": {
+        "summary": "Coa Release Options",
+        "operationId": "coa_release_options_api_v1_worksheets__sheet_id__coa_release_options_get",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          },
+          {
+            "name": "row_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Row Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worksheets/{sheet_id}/sample-candidates": {
+      "get": {
+        "summary": "Worksheet Sample Candidates",
+        "operationId": "worksheet_sample_candidates_api_v1_worksheets__sheet_id__sample_candidates_get",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/worksheets/{sheet_id}/sample": {
+      "post": {
+        "summary": "Link Worksheet Sample",
+        "operationId": "link_worksheet_sample_api_v1_worksheets__sheet_id__sample_post",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkWorksheetSample"
               }
             }
           }
@@ -398,6 +1957,43 @@
               "minLength": 64,
               "maxLength": 64,
               "title": "Selection Id"
+            }
+          },
+          {
+            "name": "point_ids",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 120
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Point Ids"
+            }
+          },
+          {
+            "name": "scan_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scan Id"
             }
           }
         ],
@@ -604,6 +2200,52 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/previews/{preview_id}/v5/review-actions": {
+      "get": {
+        "summary": "Source Review Actions",
+        "operationId": "source_review_actions_api_v1_previews__preview_id__v5_review_actions_get",
+        "parameters": [
+          {
+            "name": "preview_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Preview Id"
+            }
+          },
+          {
+            "name": "section",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Section"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2876,6 +4518,813 @@
         }
       }
     },
+    "/api/v1/intake/protocol": {
+      "post": {
+        "summary": "Inspect Stability Protocol",
+        "operationId": "inspect_stability_protocol_api_v1_intake_protocol_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_inspect_stability_protocol_api_v1_intake_protocol_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/worksheet-drafts": {
+      "get": {
+        "summary": "Worksheet Draft List",
+        "operationId": "worksheet_draft_list_api_v1_projects__project__worksheet_drafts_get",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Save Worksheet Draft",
+        "operationId": "save_worksheet_draft_api_v1_projects__project__worksheet_drafts_post",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorksheetDraftInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/worksheet-drafts/{draft_id}": {
+      "get": {
+        "summary": "Worksheet Draft",
+        "operationId": "worksheet_draft_api_v1_projects__project__worksheet_drafts__draft_id__get",
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Draft Id"
+            }
+          },
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/plan-drafts": {
+      "get": {
+        "summary": "Protocol Drafts",
+        "operationId": "protocol_drafts_api_v1_plan_drafts_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/plan-drafts/{draft_id}": {
+      "get": {
+        "summary": "Protocol Draft",
+        "operationId": "protocol_draft_api_v1_plan_drafts__draft_id__get",
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Draft Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/plan-drafts/{draft_id}/standards": {
+      "get": {
+        "summary": "Protocol Standard Links",
+        "operationId": "protocol_standard_links_api_v1_projects__project__plan_drafts__draft_id__standards_get",
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Draft Id"
+            }
+          },
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/plan-drafts/{draft_id}/file": {
+      "get": {
+        "summary": "Protocol Draft File",
+        "operationId": "protocol_draft_file_api_v1_plan_drafts__draft_id__file_get",
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Draft Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/specifications": {
+      "get": {
+        "summary": "Specifications",
+        "operationId": "specifications_api_v1_specifications_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Upload Specification",
+        "operationId": "upload_specification_api_v1_specifications_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_specification_api_v1_specifications_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/current-specifications": {
+      "get": {
+        "summary": "Current Specifications",
+        "operationId": "current_specifications_api_v1_projects__project__current_specifications_get",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Set Current Specification",
+        "operationId": "set_current_specification_api_v1_projects__project__current_specifications_post",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CurrentSpecification"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/specifications/{specification_id}": {
+      "get": {
+        "summary": "Get Specification",
+        "operationId": "get_specification_api_v1_specifications__specification_id__get",
+        "parameters": [
+          {
+            "name": "specification_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Specification Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/specifications/{specification_id}/file": {
+      "get": {
+        "summary": "Specification File",
+        "operationId": "specification_file_api_v1_specifications__specification_id__file_get",
+        "parameters": [
+          {
+            "name": "specification_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Specification Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pdf-ocr": {
+      "get": {
+        "summary": "List Ocr",
+        "operationId": "list_ocr_api_v1_pdf_ocr_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Archive Scan",
+        "operationId": "archive_scan_api_v1_pdf_ocr_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_archive_scan_api_v1_pdf_ocr_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pdf-ocr/{identifier}": {
+      "get": {
+        "summary": "Read Ocr",
+        "operationId": "read_ocr_api_v1_pdf_ocr__identifier__get",
+        "parameters": [
+          {
+            "name": "identifier",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Identifier"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pdf-ocr/{identifier}/start": {
+      "post": {
+        "summary": "Start Ocr",
+        "operationId": "start_ocr_api_v1_pdf_ocr__identifier__start_post",
+        "parameters": [
+          {
+            "name": "identifier",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Identifier"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pdf-ocr/{identifier}/cancel": {
+      "post": {
+        "summary": "Cancel Ocr",
+        "operationId": "cancel_ocr_api_v1_pdf_ocr__identifier__cancel_post",
+        "parameters": [
+          {
+            "name": "identifier",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Identifier"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pdf-ocr/{identifier}/pages/{number}/review": {
+      "put": {
+        "summary": "Save Ocr Page Review",
+        "operationId": "save_ocr_page_review_api_v1_pdf_ocr__identifier__pages__number__review_put",
+        "parameters": [
+          {
+            "name": "identifier",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Identifier"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OcrPageReview"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pdf-ocr/{identifier}/specification": {
+      "post": {
+        "summary": "Save Scan Specification",
+        "operationId": "save_scan_specification_api_v1_pdf_ocr__identifier__specification_post",
+        "parameters": [
+          {
+            "name": "identifier",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Identifier"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScanSpecification"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pdf-ocr/{identifier}/file": {
+      "get": {
+        "summary": "Scan File",
+        "operationId": "scan_file_api_v1_pdf_ocr__identifier__file_get",
+        "parameters": [
+          {
+            "name": "identifier",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Identifier"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/intake/inspect": {
       "post": {
         "summary": "Inspect Upload",
@@ -2967,21 +5416,21 @@
         "operationId": "rename_item_display_api_v1_projects__project__items__item_id__display_name_post",
         "parameters": [
           {
-            "name": "project",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Project"
-            }
-          },
-          {
             "name": "item_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
               "title": "Item Id"
+            }
+          },
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project"
             }
           }
         ],
@@ -3184,6 +5633,16 @@
             }
           },
           {
+            "name": "compact",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Compact"
+            }
+          },
+          {
             "name": "Idempotency-Key",
             "in": "header",
             "required": true,
@@ -3192,6 +5651,23 @@
               "minLength": 1,
               "maxLength": 200,
               "title": "Idempotency-Key"
+            }
+          },
+          {
+            "name": "Upload-Progress-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 80
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Upload-Progress-Id"
             }
           }
         ],
@@ -3213,6 +5689,52 @@
                 "schema": {
                   "$ref": "#/components/schemas/UploadPreview"
                 }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/preview-progress/{progress_id}": {
+      "get": {
+        "summary": "Read Upload Progress",
+        "operationId": "read_upload_progress_api_v1_projects__project__preview_progress__progress_id__get",
+        "parameters": [
+          {
+            "name": "progress_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Progress Id"
+            }
+          },
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -3252,6 +5774,167 @@
                 "schema": {
                   "$ref": "#/components/schemas/UploadPreview"
                 }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/previews/{preview_id}/workspace": {
+      "get": {
+        "summary": "Preview Workspace",
+        "operationId": "preview_workspace_api_v1_previews__preview_id__workspace_get",
+        "parameters": [
+          {
+            "name": "preview_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Preview Id"
+            }
+          },
+          {
+            "name": "section",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Section"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspacePreview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/previews/{preview_id}/sync-worksheets": {
+      "post": {
+        "summary": "Sync Confirmed Worksheets",
+        "operationId": "sync_confirmed_worksheets_api_v1_previews__preview_id__sync_worksheets_post",
+        "parameters": [
+          {
+            "name": "preview_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Preview Id"
+            }
+          },
+          {
+            "name": "section",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Section"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/previews/{preview_id}/worksheets": {
+      "get": {
+        "summary": "Worksheets For Import",
+        "operationId": "worksheets_for_import_api_v1_previews__preview_id__worksheets_get",
+        "parameters": [
+          {
+            "name": "preview_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Preview Id"
+            }
+          },
+          {
+            "name": "section",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Section"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -3611,6 +6294,91 @@
         }
       }
     },
+    "/api/v1/results/{version_id}/invalidate": {
+      "post": {
+        "summary": "Invalidate Result",
+        "description": "P0-3: 正式结果留痕作废接口",
+        "operationId": "invalidate_result_api_v1_results__version_id__invalidate_post",
+        "parameters": [
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Version Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvalidateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MutationResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Preview Invalidation",
+        "operationId": "preview_invalidation_api_v1_results__version_id__invalidate_get",
+        "parameters": [
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Version Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/projects/{project}/result-cells": {
       "get": {
         "summary": "Results",
@@ -3659,6 +6427,22 @@
             }
           },
           {
+            "name": "sample_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sample Id"
+            }
+          },
+          {
             "name": "reporting_basis",
             "in": "query",
             "required": false,
@@ -3704,7 +6488,8 @@
                 {
                   "enum": [
                     "DS",
-                    "DP"
+                    "DP",
+                    "placebo"
                   ],
                   "type": "string"
                 },
@@ -3898,6 +6683,112 @@
         }
       }
     },
+    "/api/v1/projects/{project}/worksheet-seed": {
+      "get": {
+        "summary": "Worksheet Seed",
+        "operationId": "worksheet_seed_api_v1_projects__project__worksheet_seed_get",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project"
+            }
+          },
+          {
+            "name": "batch",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Batch"
+            }
+          },
+          {
+            "name": "slot_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Slot Id"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "blank",
+                    "standard",
+                    "protocol",
+                    "results",
+                    "copy"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
+          },
+          {
+            "name": "source_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Source Id"
+            }
+          },
+          {
+            "name": "table",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Table"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/projects/{project}/result-display": {
       "get": {
         "summary": "Result Display",
@@ -3946,6 +6837,22 @@
             }
           },
           {
+            "name": "sample_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sample Id"
+            }
+          },
+          {
             "name": "reporting_basis",
             "in": "query",
             "required": false,
@@ -3991,7 +6898,8 @@
                 {
                   "enum": [
                     "DS",
-                    "DP"
+                    "DP",
+                    "placebo"
                   ],
                   "type": "string"
                 },
@@ -4255,6 +7163,22 @@
             }
           },
           {
+            "name": "sample_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sample Id"
+            }
+          },
+          {
             "name": "reporting_basis",
             "in": "query",
             "required": false,
@@ -4300,7 +7224,8 @@
                 {
                   "enum": [
                     "DS",
-                    "DP"
+                    "DP",
+                    "placebo"
                   ],
                   "type": "string"
                 },
@@ -4798,6 +7723,43 @@
         }
       }
     },
+    "/api/v1/exports/{export_id}/attachment": {
+      "get": {
+        "summary": "Download Export Attachment",
+        "operationId": "download_export_attachment_api_v1_exports__export_id__attachment_get",
+        "parameters": [
+          {
+            "name": "export_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Export Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/projects/{project}/comparison-catalog": {
       "get": {
         "summary": "Comparison Catalog",
@@ -4925,21 +7887,21 @@
         "operationId": "save_comparison_api_v1_projects__project__comparison_studies__study_id__post",
         "parameters": [
           {
-            "name": "project",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Project"
-            }
-          },
-          {
             "name": "study_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
               "title": "Study Id"
+            }
+          },
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project"
             }
           }
         ],
@@ -4981,21 +7943,21 @@
         "operationId": "comparison_results_api_v1_projects__project__comparison_studies__study_id__results_get",
         "parameters": [
           {
-            "name": "project",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Project"
-            }
-          },
-          {
             "name": "study_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
               "title": "Study Id"
+            }
+          },
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project"
             }
           },
           {
@@ -5227,6 +8189,92 @@
           }
         }
       }
+    },
+    "/api/v1/deliveries": {
+      "get": {
+        "summary": "Deliveries",
+        "operationId": "deliveries_api_v1_deliveries_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/deliveries/{export_id}/compare": {
+      "get": {
+        "summary": "Compare Delivery",
+        "operationId": "compare_delivery_api_v1_deliveries__export_id__compare_get",
+        "parameters": [
+          {
+            "name": "export_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Export Id"
+            }
+          },
+          {
+            "name": "baseline",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Baseline"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5270,6 +8318,95 @@
           "capabilities"
         ],
         "title": "Actor"
+      },
+      "AddWorksheetEvent": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Token"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "异常调查",
+              "复测",
+              "方法变更",
+              "标准变更",
+              "设备转移",
+              "备注"
+            ],
+            "title": "Category"
+          },
+          "reference": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Reference",
+            "default": ""
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Description"
+          },
+          "row_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Id"
+          },
+          "point_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Point Id"
+          },
+          "scan_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scan Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token",
+          "idempotency_key",
+          "revision",
+          "category",
+          "description"
+        ],
+        "title": "AddWorksheetEvent"
       },
       "ArchiveCell": {
         "properties": {
@@ -5425,6 +8562,33 @@
           "summary"
         ],
         "title": "ArchiveInfo"
+      },
+      "ArchiveStudyObject": {
+        "properties": {
+          "basis": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Basis"
+          },
+          "fingerprint": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Fingerprint"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Idempotency Key"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "basis",
+          "fingerprint",
+          "idempotency_key"
+        ],
+        "title": "ArchiveStudyObject"
       },
       "ArchiveSummary": {
         "properties": {
@@ -5697,6 +8861,82 @@
         ],
         "title": "ArchiveView"
       },
+      "AttachProtocol": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Token"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision"
+          },
+          "protocol_draft_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Protocol Draft Id"
+          },
+          "protocol_table": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Protocol Table"
+          },
+          "basis": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Basis"
+          },
+          "row_mapping": {
+            "additionalProperties": {
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "maxProperties": 150,
+            "title": "Row Mapping"
+          },
+          "add_months": {
+            "type": "boolean",
+            "title": "Add Months",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token",
+          "idempotency_key",
+          "revision",
+          "protocol_draft_id",
+          "protocol_table",
+          "basis"
+        ],
+        "title": "AttachProtocol"
+      },
+      "Body_archive_scan_api_v1_pdf_ocr_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_archive_scan_api_v1_pdf_ocr_post"
+      },
       "Body_archive_source_api_v1_projects__project__source_imports_post": {
         "properties": {
           "file": {
@@ -5717,6 +8957,20 @@
         ],
         "title": "Body_archive_source_api_v1_projects__project__source_imports_post"
       },
+      "Body_inspect_stability_protocol_api_v1_intake_protocol_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_inspect_stability_protocol_api_v1_intake_protocol_post"
+      },
       "Body_inspect_upload_api_v1_intake_inspect_post": {
         "properties": {
           "file": {
@@ -5730,6 +8984,39 @@
           "file"
         ],
         "title": "Body_inspect_upload_api_v1_intake_inspect_post"
+      },
+      "Body_preview_api_v1_study_workbooks_preview_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          },
+          "sheet_id": {
+            "type": "string",
+            "title": "Sheet Id",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_preview_api_v1_study_workbooks_preview_post"
+      },
+      "Body_preview_upload_api_v1_samples__sample_id__coa__specification_id__preview_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_preview_upload_api_v1_samples__sample_id__coa__specification_id__preview_post"
       },
       "Body_upload_api_v1_projects__project__previews_post": {
         "properties": {
@@ -5749,6 +9036,20 @@
           "file"
         ],
         "title": "Body_upload_api_v1_projects__project__previews_post"
+      },
+      "Body_upload_specification_api_v1_specifications_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_specification_api_v1_specifications_post"
       },
       "BulkApply": {
         "properties": {
@@ -6253,7 +9554,6 @@
           "value": {
             "type": "string",
             "maxLength": 8000,
-            "minLength": 1,
             "title": "Value"
           },
           "intent": {
@@ -6275,6 +9575,49 @@
           "intent"
         ],
         "title": "CellChange"
+      },
+      "CoaSave": {
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Revision"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Version"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 250,
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "values": {
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 4000
+            },
+            "type": "object",
+            "maxProperties": 500,
+            "title": "Values"
+          },
+          "upload_id": {
+            "type": "string",
+            "maxLength": 250,
+            "title": "Upload Id",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "revision",
+          "version",
+          "idempotency_key",
+          "values"
+        ],
+        "title": "CoaSave"
       },
       "ConfigurationChange": {
         "properties": {
@@ -6416,6 +9759,45 @@
         ],
         "title": "ConfirmItem"
       },
+      "ConfirmProtocolStandards": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Token"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision"
+          },
+          "basis": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Basis"
+          },
+          "fingerprint": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Fingerprint"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token",
+          "idempotency_key",
+          "revision",
+          "basis",
+          "fingerprint"
+        ],
+        "title": "ConfirmProtocolStandards"
+      },
       "ConfirmRequest": {
         "properties": {
           "base_revision": {
@@ -6447,8 +9829,121 @@
         ],
         "title": "ConfirmRequest"
       },
+      "ControlledWorkbook": {
+        "properties": {
+          "base_revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Base Revision"
+          },
+          "sheet_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 120,
+            "minItems": 1,
+            "title": "Sheet Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "base_revision",
+          "sheet_ids"
+        ],
+        "title": "ControlledWorkbook"
+      },
+      "CopyCoaToZero": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Token"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision"
+          },
+          "row_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Row Id"
+          },
+          "coa_fingerprint": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Coa Fingerprint"
+          },
+          "expected_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Version Id"
+          },
+          "intent": {
+            "type": "string",
+            "enum": [
+              "initial",
+              "correction",
+              "retest",
+              "keep"
+            ],
+            "title": "Intent"
+          },
+          "basis": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Basis",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token",
+          "idempotency_key",
+          "revision",
+          "row_id",
+          "coa_fingerprint",
+          "intent"
+        ],
+        "title": "CopyCoaToZero"
+      },
       "CreateWorksheet": {
         "properties": {
+          "custom_items": {
+            "items": {
+              "$ref": "#/components/schemas/CustomWorksheetItem"
+            },
+            "type": "array",
+            "maxItems": 150,
+            "title": "Custom Items",
+            "default": []
+          },
+          "equipment": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Equipment",
+            "default": ""
+          },
+          "location": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Location",
+            "default": ""
+          },
           "idempotency_key": {
             "type": "string",
             "minLength": 1,
@@ -6490,6 +9985,138 @@
             "maxItems": 120,
             "minItems": 1,
             "title": "Points"
+          },
+          "protocol_draft_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protocol Draft Id"
+          },
+          "protocol_table": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protocol Table"
+          },
+          "copy_source_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Copy Source Id"
+          },
+          "copy_source_plan_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Copy Source Plan Version"
+          },
+          "copy_standards": {
+            "type": "boolean",
+            "title": "Copy Standards",
+            "default": false
+          },
+          "worksheet_draft_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worksheet Draft Id"
+          },
+          "seed_slot_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed Slot Id"
+          },
+          "sample_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Id"
+          },
+          "material_stage": {
+            "type": "string",
+            "maxLength": 250,
+            "title": "Material Stage",
+            "default": ""
+          },
+          "packaging": {
+            "type": "string",
+            "maxLength": 250,
+            "title": "Packaging",
+            "default": ""
+          },
+          "item_standards": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/SpecificationCriterion"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "maxProperties": 150,
+            "title": "Item Standards"
+          },
+          "row_criteria": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/WorksheetCriteria"
+            },
+            "type": "object",
+            "maxProperties": 150,
+            "title": "Row Criteria"
+          },
+          "protocol_row_items": {
+            "additionalProperties": {
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "maxProperties": 150,
+            "title": "Protocol Row Items"
           }
         },
         "additionalProperties": false,
@@ -6503,6 +10130,103 @@
           "points"
         ],
         "title": "CreateWorksheet"
+      },
+      "CurrentSpecification": {
+        "properties": {
+          "specification_id": {
+            "type": "string",
+            "title": "Specification Id"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Revision"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Idempotency Key"
+          }
+        },
+        "type": "object",
+        "required": [
+          "specification_id",
+          "revision",
+          "idempotency_key"
+        ],
+        "title": "CurrentSpecification"
+      },
+      "CustomWorksheetItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Label"
+          },
+          "aliases": {
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "type": "array",
+            "title": "Aliases",
+            "default": []
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit",
+            "default": ""
+          },
+          "result_type": {
+            "type": "string",
+            "enum": [
+              "numeric",
+              "qualitative"
+            ],
+            "title": "Result Type",
+            "default": "numeric"
+          },
+          "method": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Method"
+          },
+          "method_version": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Method Version",
+            "default": "not_reported"
+          },
+          "specification_links": {
+            "items": {
+              "$ref": "#/components/schemas/SpecificationCriterion"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Specification Links",
+            "default": []
+          },
+          "criteria_text": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Criteria Text",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "method"
+        ],
+        "title": "CustomWorksheetItem"
       },
       "DraftDecision": {
         "properties": {
@@ -6616,6 +10340,126 @@
         ],
         "title": "DraftReview"
       },
+      "DraftWorksheetItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Label"
+          },
+          "aliases": {
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "type": "array",
+            "title": "Aliases",
+            "default": []
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit",
+            "default": ""
+          },
+          "result_type": {
+            "type": "string",
+            "enum": [
+              "numeric",
+              "qualitative"
+            ],
+            "title": "Result Type",
+            "default": "numeric"
+          },
+          "method": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Method",
+            "default": ""
+          },
+          "method_version": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Method Version",
+            "default": "not_reported"
+          },
+          "specification_links": {
+            "items": {
+              "$ref": "#/components/schemas/SpecificationCriterion"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Specification Links",
+            "default": []
+          },
+          "criteria_text": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Criteria Text",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "DraftWorksheetItem"
+      },
+      "EditPointMetadata": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Token"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision"
+          },
+          "point_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Point Id"
+          },
+          "planned_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Planned Date"
+          },
+          "signed_status": {
+            "type": "string",
+            "enum": [
+              "",
+              "已签",
+              "已签报告"
+            ],
+            "title": "Signed Status",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token",
+          "idempotency_key",
+          "revision",
+          "point_id",
+          "planned_date"
+        ],
+        "title": "EditPointMetadata"
+      },
       "ExportRequest": {
         "properties": {
           "axis_mode": {
@@ -6649,6 +10493,15 @@
               }
             ],
             "title": "Axis Max"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "detail",
+              "stability_summary"
+            ],
+            "title": "Format",
+            "default": "detail"
           },
           "slot_ids": {
             "items": {
@@ -6955,6 +10808,18 @@
             "title": "Role",
             "default": "stability_source"
           },
+          "sample_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Id"
+          },
           "defaults": {
             "additionalProperties": {
               "type": "string"
@@ -6966,6 +10831,75 @@
         "additionalProperties": false,
         "type": "object",
         "title": "ImportContext"
+      },
+      "IncludeHistoricalRows": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Token"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision"
+          },
+          "basis": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Basis"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token",
+          "idempotency_key",
+          "revision",
+          "basis"
+        ],
+        "title": "IncludeHistoricalRows"
+      },
+      "InvalidateRequest": {
+        "properties": {
+          "base_revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Base Revision"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Reason"
+          },
+          "references": {
+            "items": {
+              "$ref": "#/components/schemas/ExternalReference"
+            },
+            "type": "array",
+            "title": "References",
+            "default": []
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "base_revision",
+          "idempotency_key",
+          "reason"
+        ],
+        "title": "InvalidateRequest",
+        "description": "P0-3: 正式结果留痕作废请求"
       },
       "IssueBatchApply": {
         "properties": {
@@ -7356,6 +11290,45 @@
         ],
         "title": "LedgerDecision"
       },
+      "LinkWorksheetSample": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Token"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision"
+          },
+          "sample_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Sample Id"
+          },
+          "basis": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Basis"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token",
+          "idempotency_key",
+          "revision",
+          "sample_id",
+          "basis"
+        ],
+        "title": "LinkWorksheetSample"
+      },
       "Location": {
         "properties": {
           "format": {
@@ -7654,6 +11627,30 @@
         ],
         "title": "NewItems"
       },
+      "OcrPageReview": {
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Revision"
+          },
+          "lines": {
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 4000
+            },
+            "type": "object",
+            "maxProperties": 3000,
+            "title": "Lines"
+          }
+        },
+        "type": "object",
+        "required": [
+          "revision",
+          "lines"
+        ],
+        "title": "OcrPageReview"
+      },
       "PlannedPoint": {
         "properties": {
           "unit": {
@@ -7681,6 +11678,16 @@
               }
             ],
             "title": "Planned Date"
+          },
+          "signed_status": {
+            "type": "string",
+            "enum": [
+              "",
+              "已签",
+              "已签报告"
+            ],
+            "title": "Signed Status",
+            "default": ""
           },
           "required_items": {
             "items": {
@@ -8038,6 +12045,18 @@
             "minLength": 1,
             "title": "Project"
           },
+          "sample_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Id"
+          },
           "sample_type": {
             "type": "string",
             "enum": [
@@ -8275,6 +12294,37 @@
         ],
         "title": "RegionParseScope"
       },
+      "RegisterComponents": {
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Revision"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "components": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewedComponent"
+            },
+            "type": "array",
+            "maxItems": 150,
+            "minItems": 1,
+            "title": "Components"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "revision",
+          "idempotency_key",
+          "components"
+        ],
+        "title": "RegisterComponents"
+      },
       "Reinterpret": {
         "properties": {
           "base_revision": {
@@ -8307,6 +12357,50 @@
           "fingerprint"
         ],
         "title": "Reinterpret"
+      },
+      "RemoveWorksheetRow": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Token"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision"
+          },
+          "row_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Row Id"
+          },
+          "basis": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Basis"
+          },
+          "fingerprint": {
+            "type": "string",
+            "title": "Fingerprint",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token",
+          "idempotency_key",
+          "revision",
+          "row_id",
+          "basis"
+        ],
+        "title": "RemoveWorksheetRow"
       },
       "ReportRequest": {
         "properties": {
@@ -8408,6 +12502,16 @@
             "type": "boolean",
             "title": "Include Charts",
             "default": true
+          },
+          "stability_document": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StabilityDocument"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -8562,6 +12666,17 @@
             ],
             "title": "Batch"
           },
+          "sample_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Id"
+          },
           "reporting_basis": {
             "anyOf": [
               {
@@ -8595,7 +12710,8 @@
                 "type": "string",
                 "enum": [
                   "DS",
-                  "DP"
+                  "DP",
+                  "placebo"
                 ]
               },
               {
@@ -8943,6 +13059,87 @@
         ],
         "title": "ReviewRequest"
       },
+      "ReviewedComponent": {
+        "properties": {
+          "table": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Table"
+          },
+          "row": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Row"
+          },
+          "assay_zh": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Assay Zh"
+          },
+          "assay_en": {
+            "type": "string",
+            "title": "Assay En",
+            "default": ""
+          },
+          "component_zh": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Component Zh"
+          },
+          "component_en": {
+            "type": "string",
+            "title": "Component En",
+            "default": ""
+          },
+          "method": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Method"
+          },
+          "method_version": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Method Version",
+            "default": "not_reported"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit",
+            "default": ""
+          },
+          "result_type": {
+            "type": "string",
+            "enum": [
+              "numeric",
+              "qualitative"
+            ],
+            "title": "Result Type"
+          },
+          "reporting_basis": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reporting Basis"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "table",
+          "row",
+          "assay_zh",
+          "component_zh",
+          "method",
+          "result_type"
+        ],
+        "title": "ReviewedComponent"
+      },
       "RevisionResolution": {
         "properties": {
           "base_revision": {
@@ -9039,6 +13236,57 @@
         ],
         "title": "RuleRetirement"
       },
+      "SampleInput": {
+        "properties": {
+          "batch": {
+            "type": "string",
+            "maxLength": 250,
+            "minLength": 1,
+            "title": "Batch"
+          },
+          "material_stage": {
+            "type": "string",
+            "maxLength": 250,
+            "minLength": 1,
+            "title": "Material Stage"
+          },
+          "sample_type": {
+            "type": "string",
+            "enum": [
+              "DS",
+              "DP",
+              "placebo"
+            ],
+            "title": "Sample Type"
+          },
+          "presentation": {
+            "type": "string",
+            "maxLength": 250,
+            "title": "Presentation",
+            "default": ""
+          },
+          "packaging": {
+            "type": "string",
+            "maxLength": 250,
+            "title": "Packaging",
+            "default": ""
+          },
+          "purpose": {
+            "type": "string",
+            "maxLength": 250,
+            "minLength": 1,
+            "title": "Purpose"
+          }
+        },
+        "type": "object",
+        "required": [
+          "batch",
+          "material_stage",
+          "sample_type",
+          "purpose"
+        ],
+        "title": "SampleInput"
+      },
       "SaveWorksheet": {
         "properties": {
           "token": {
@@ -9090,6 +13338,253 @@
           "revision"
         ],
         "title": "SaveWorksheet"
+      },
+      "ScanCriterion": {
+        "properties": {
+          "table": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Table"
+          },
+          "row": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Row"
+          },
+          "column": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Column"
+          },
+          "item": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Item"
+          },
+          "method": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Method"
+          },
+          "sop": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Sop",
+            "default": ""
+          },
+          "criterion": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Criterion"
+          }
+        },
+        "type": "object",
+        "required": [
+          "table",
+          "row",
+          "column",
+          "item",
+          "method",
+          "criterion"
+        ],
+        "title": "ScanCriterion"
+      },
+      "ScanSpecification": {
+        "properties": {
+          "page": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Page"
+          },
+          "manual_page": {
+            "type": "boolean",
+            "title": "Manual Page",
+            "default": false
+          },
+          "material_scope": {
+            "type": "string",
+            "enum": [
+              "reference",
+              "DS",
+              "DP",
+              "placebo"
+            ],
+            "title": "Material Scope"
+          },
+          "scope": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Scope"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/ScanCriterion"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Rows"
+          }
+        },
+        "type": "object",
+        "required": [
+          "page",
+          "material_scope",
+          "scope",
+          "rows"
+        ],
+        "title": "ScanSpecification"
+      },
+      "SetReleaseReference": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Token"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision"
+          },
+          "row_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Row Id"
+          },
+          "basis": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Basis"
+          },
+          "result_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Version Id"
+          },
+          "release_completed": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Completed"
+          },
+          "coa_specification_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coa Specification Id"
+          },
+          "coa_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coa Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token",
+          "idempotency_key",
+          "revision",
+          "row_id",
+          "basis"
+        ],
+        "title": "SetReleaseReference"
+      },
+      "SetWorksheetStandards": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Token"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision"
+          },
+          "row_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Row Id"
+          },
+          "basis": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Basis"
+          },
+          "criteria": {
+            "items": {
+              "$ref": "#/components/schemas/SpecificationCriterion"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Criteria"
+          },
+          "criteria_text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Criteria Text"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token",
+          "idempotency_key",
+          "revision",
+          "row_id",
+          "basis",
+          "criteria"
+        ],
+        "title": "SetWorksheetStandards"
       },
       "SharedEdit": {
         "properties": {
@@ -9218,6 +13713,17 @@
             "const": "committed",
             "title": "State",
             "default": "committed"
+          },
+          "worksheet_sync": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Worksheet Sync",
+            "default": []
           }
         },
         "additionalProperties": false,
@@ -9479,6 +13985,99 @@
         ],
         "title": "SourceStructureApply"
       },
+      "SpecificationCriterion": {
+        "properties": {
+          "specification_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Specification Id"
+          },
+          "table": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Table"
+          },
+          "row": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Row"
+          },
+          "lower": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lower"
+          },
+          "upper": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upper"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "specification_id",
+          "table",
+          "row"
+        ],
+        "title": "SpecificationCriterion"
+      },
+      "StabilityDocument": {
+        "properties": {
+          "purpose": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Purpose",
+            "default": ""
+          },
+          "equipment": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Equipment",
+            "default": ""
+          },
+          "events": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Events",
+            "default": ""
+          },
+          "evaluation": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Evaluation",
+            "default": ""
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Version",
+            "default": "草稿"
+          },
+          "change_history": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Change History",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "StabilityDocument"
+      },
       "StabilityRecord": {
         "properties": {
           "key": {
@@ -9543,6 +14142,90 @@
           "source"
         ],
         "title": "StandardApplicability"
+      },
+      "StandardAssessment": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "within",
+              "outside",
+              "undetermined"
+            ],
+            "title": "Status"
+          },
+          "criterion": {
+            "type": "string",
+            "title": "Criterion",
+            "default": ""
+          },
+          "version": {
+            "type": "string",
+            "title": "Version",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "StandardAssessment"
+      },
+      "StopWorksheetChecks": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Token"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision"
+          },
+          "row_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Row Id"
+          },
+          "basis": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Basis"
+          },
+          "fingerprint": {
+            "type": "string",
+            "title": "Fingerprint",
+            "default": ""
+          },
+          "point_ids": {
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 120,
+            "minItems": 1,
+            "title": "Point Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token",
+          "idempotency_key",
+          "revision",
+          "row_id",
+          "basis",
+          "point_ids"
+        ],
+        "title": "StopWorksheetChecks"
       },
       "StructuralDecision": {
         "properties": {
@@ -9632,6 +14315,18 @@
       },
       "StudyIdentity": {
         "properties": {
+          "sample_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Id"
+          },
           "sample_type": {
             "type": "string",
             "enum": [
@@ -10121,6 +14816,73 @@
         ],
         "title": "WithdrawRequest"
       },
+      "WorkbookCommit": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Token"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision"
+          },
+          "fingerprint": {
+            "type": "string",
+            "title": "Fingerprint"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Reason"
+          },
+          "decisions": {
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "keep",
+                "correct",
+                "retest"
+              ]
+            },
+            "type": "object",
+            "maxProperties": 5000,
+            "title": "Decisions"
+          },
+          "coordinates": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "maxItems": 5000,
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coordinates"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token",
+          "idempotency_key",
+          "revision",
+          "fingerprint",
+          "reason"
+        ],
+        "title": "WorkbookCommit"
+      },
       "WorkflowResultCell": {
         "properties": {
           "slot_id": {
@@ -10163,6 +14925,27 @@
           "upload_sequence": {
             "type": "integer",
             "title": "Upload Sequence"
+          },
+          "worksheet_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worksheet Id"
+          },
+          "standard_assessment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StandardAssessment"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -10176,6 +14959,117 @@
           "upload_sequence"
         ],
         "title": "WorkflowResultCell"
+      },
+      "WorksheetCriteria": {
+        "properties": {
+          "specification_links": {
+            "items": {
+              "$ref": "#/components/schemas/SpecificationCriterion"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Specification Links",
+            "default": []
+          },
+          "criteria_text": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Criteria Text",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "WorksheetCriteria"
+      },
+      "WorksheetDraftInput": {
+        "properties": {
+          "custom_items": {
+            "items": {
+              "$ref": "#/components/schemas/DraftWorksheetItem"
+            },
+            "type": "array",
+            "maxItems": 150,
+            "title": "Custom Items"
+          },
+          "row_criteria": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/WorksheetCriteria"
+            },
+            "type": "object",
+            "maxProperties": 150,
+            "title": "Row Criteria"
+          },
+          "fields": {
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 4000
+            },
+            "type": "object",
+            "maxProperties": 140,
+            "title": "Fields"
+          },
+          "selected": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 150,
+            "title": "Selected"
+          },
+          "row_items": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              ]
+            },
+            "type": "object",
+            "maxProperties": 150,
+            "title": "Row Items"
+          },
+          "required": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "maxProperties": 120,
+            "title": "Required"
+          },
+          "protocol_draft": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Protocol Draft",
+            "default": ""
+          },
+          "protocol_table": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Protocol Table",
+            "default": ""
+          },
+          "copy_source": {
+            "type": "string",
+            "maxLength": 100,
+            "title": "Copy Source",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "fields"
+        ],
+        "title": "WorksheetDraftInput"
       },
       "WorksheetDraftState": {
         "properties": {
@@ -10227,6 +15121,51 @@
         "additionalProperties": false,
         "type": "object",
         "title": "WorksheetLayout"
+      },
+      "WorkspacePreview": {
+        "properties": {
+          "preview": {
+            "$ref": "#/components/schemas/UploadPreview"
+          },
+          "sections": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sections"
+          },
+          "section": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section"
+          },
+          "preflight": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preflight"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "preview",
+          "sections",
+          "section"
+        ],
+        "title": "WorkspacePreview"
       }
     }
   }

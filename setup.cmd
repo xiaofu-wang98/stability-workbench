@@ -11,4 +11,8 @@ call npm ci --prefix frontend\v3\univer
 if errorlevel 1 exit /b 1
 call npm run --prefix frontend\v3\univer build
 if errorlevel 1 exit /b 1
+call npm ci --prefix frontend\workbench
+if errorlevel 1 exit /b 1
+call npm run --prefix frontend\workbench build
+if errorlevel 1 exit /b 1
 .venv\Scripts\python.exe frontend\v3\build.py

@@ -6,6 +6,7 @@ import pytest
 from openpyxl import load_workbook
 
 from stability_hub.matrix_fields import item_text
+from stability_hub.models import Location, RawObservation
 from stability_hub.review_batches import preview_batch, undo_batch
 from stability_hub.review_issues import source_issues, resolved_raw, validate_selection
 from stability_hub.review_tasks import saved_changes, checked_sources
@@ -14,6 +15,36 @@ from stability_hub.workflow_common import WorkflowError
 from test_v52_review_tasks import matrix_file, view, apply
 from test_v5_regressions import TECH, preview
 from test_v51_interpretation import receive
+
+
+@pytest.mark.parametrize("active,missing", [
+    ("复溶后溶液呈澄清液体", False),
+    ("固体为白色粉末；复溶后溶液呈澄清液体", True),
+])
+def test_appearance_name_rechecked_only_after_criterion_revision(active, missing):
+    location = Location(format="xlsx", section="Results", row=8, column=3)
+    source = Location(format="xlsx", section="Results", row=8, column=2)
+    removed = "应为白色粉末。"
+    raw = RawObservation(
+        location=location,
+        fields={"test_item": "外观", "criterion": removed + active, "result": "澄清"},
+        evidence={"criterion": source, "result": location},
+        revisions={"criterion": {"active_text": active, "all_deleted": False, "deleted_word": False, "segments": [
+            {"text": removed, "struck": True}, {"text": active, "struck": False},
+        ]}},
+        system_hints=({"kind": "missing_subresult",
+                       "text": "B8: 多行子结果未提供可区分的名称，请核对并明确检测项目及结果。",
+                       "source": source.model_dump()},),
+    )
+    issues = source_issues("candidate", raw)
+    assert any(issue.source_kind == "system_hint" for issue in issues)
+    revision = next(issue for issue in issues if issue.source_field == "criterion")
+    effective, remaining = resolved_raw(None, "candidate", raw, decisions=[
+        {"issue_id": revision.id, "action": "keep_active"},
+    ], corrections={})
+    assert effective.fields["criterion"] == active
+    assert any(issue.source_kind == "system_hint" for issue in remaining) is missing
+    assert raw.fields["criterion"] == removed + active
 
 
 def conflict_file(tmp_path):

@@ -1,5 +1,6 @@
 """Standard report generation only. Existing user reports are never overwritten."""
 
+import json
 from collections import defaultdict
 from pathlib import Path
 
@@ -38,6 +39,31 @@ def display(result: dict) -> str:
         prefix = {"eq": "", "lt": "<", "le": "<=", "gt": ">", "ge": ">="}[result["comparator"]]
         return prefix + result["value"]
     return {"na": "N/A", "nd": "ND", "complies": "Complies"}.get(result["status"], result["raw_text"])
+
+
+def reported_text(result: dict) -> str:
+    """Render interpreted numbers and preserve the original wording of other results."""
+    if result["status"] != "numeric":
+        return result["raw_text"]
+    for comparator, symbol in (("le", "≤"), ("ge", "≥")):
+        if result["comparator"] == comparator and result["raw_text"].lstrip().startswith(symbol):
+            return symbol + result["value"]
+    return display(result)
+
+
+def source_result_notes(version, record):
+    """Keep original comments and explicit report references beside the selected result."""
+    notes = []
+    for source in json.loads(version['source_json']):
+        raw = source.get('raw_json', {})
+        comment = raw.get('comment', '')
+        if comment.strip():
+            location = raw['location']
+            origin = f"{source['filename']} · {location['section']} · 行 {location['row']} 列 {location['column']}"
+            notes.append((origin, comment))
+    if record.result.report_references:
+        notes.append(('结果原文中的报告编号', '、'.join(record.result.report_references)))
+    return tuple(dict.fromkeys(notes))
 
 
 def groups(snapshot: list[dict]):

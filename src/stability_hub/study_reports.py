@@ -7,16 +7,57 @@ from zipfile import ZipFile, ZIP_DEFLATED
 
 from pydantic import Field
 
-from .models import StabilityRecord, digest
+from .models import Model, StabilityRecord, digest
 from .permissions import Capability, require
 from .workflow_contracts import AxisOptions, ExportRequest, ResultFilter
 from .workflow_common import WorkflowError, check_revision, encoded, uid
 from .result_snapshot import create_snapshot
-from .result_queries import cells_from_rows
+from .result_queries import cells_from_rows, selected_rows
+from .reporting import reported_text, source_result_notes
 from .workflow_excel import write_workbook
 from .workflow_excel_verify import verify_workbook
 from .comparability import compare, StudyQuery, QuickCompare, comparison_snapshot, SCOPE_FIELDS, sample_id
 from .trend_export import analysis_scope, chart_data, write_png
+from .stability_matrix_report import TEMPLATE, freeze_worksheet_evidence, validate_stability_scope, write_stability_matrix
+
+
+def compare_result_snapshots(baseline, current):
+    def adopted_text(entry):
+        return StabilityRecord.model_validate_json(entry['record_json']).result.raw_text if entry else None
+
+    before = {entry['display']['slot_id']: entry for entry in baseline['entries']}
+    after = {entry['display']['slot_id']: entry for entry in current['entries']}
+    counts = dict.fromkeys(('added', 'removed', 'changed'), 0)
+    differences = []
+    for slot in sorted(before.keys() | after.keys()):
+        old, new = before.get(slot), after.get(slot)
+        old_adopted = old['adopted'] if old else None
+        new_adopted = new['adopted'] if new else None
+        if old and new and (old_adopted or {}).get('id') == (new_adopted or {}).get('id'):
+            continue
+        change = 'added' if old is None else 'removed' if new is None else 'changed'
+        counts[change] += 1
+        record = StabilityRecord.model_validate_json((new or old)['display']['record_json'])
+        key = record.key
+        labels = (current if new else baseline).get('item_labels', {})
+
+        differences.append({
+            'slot_id': slot, 'change': change, 'batch': key.batch, 'condition': key.condition,
+            'study_id': key.study_id, 'point': key.time_label, 'item': labels.get(key.item, key.item),
+            'method': key.method, 'method_version': key.method_version,
+            'before': adopted_text(old_adopted), 'after': adopted_text(new_adopted),
+        })
+    differences.sort(key=lambda row: (row['batch'], row['condition'], row['item'], row['method']))
+    return {**counts, 'differences': differences}
+
+
+class StabilityDocument(Model):
+    purpose: str = Field(default="", max_length=4000)
+    equipment: str = Field(default="", max_length=4000)
+    events: str = Field(default="", max_length=4000)
+    evaluation: str = Field(default="", max_length=4000)
+    version: str = Field(default="草稿", min_length=1, max_length=50)
+    change_history: str = Field(default="", max_length=4000)
 
 
 class ReportRequest(AxisOptions):
@@ -29,6 +70,7 @@ class ReportRequest(AxisOptions):
     filters: ResultFilter = Field(default_factory=ResultFilter)
     slot_ids: tuple[str,...] = ()
     include_charts: bool = True
+    stability_document: StabilityDocument | None = None
 
 
 def _sha(path):
@@ -40,6 +82,13 @@ def human(value):
         return '原文未注明（独立来源）'
     return {'unknown':'用途未注明','reference':'参考品','routine':'常规样品','not_reported':'版本未注明',
             'long_term':'长期稳定性','accelerated':'加速稳定性','stress':'应力试验','release':'放行'}.get(value,value)
+
+
+def word_result_text(result):
+    text = reported_text(result.model_dump(mode="json"))
+    if result.status != "numeric" or not result.unit:
+        return text
+    return text + ("" if result.unit == "%" else " ") + result.unit
 
 
 def write_document(path,snapshot,charts):
@@ -92,10 +141,22 @@ def write_document(path,snapshot,charts):
     expected = []
     # Narrow, repeating-header tables; identities stay as received even after local plot alignment.
     groups = defaultdict(list)
+    result_notes = {}
     for cell,entry in zip(cells,snapshot['entries'],strict=True):
         rec = StabilityRecord.model_validate_json(entry['display']['record_json'])
         k = rec.key
-        groups[(k.sample_type,k.batch,k.presentation,k.purpose,k.study,k.study_id,k.condition,k.reporting_basis)].append((cell,rec))
+        adopted_entry = entry['adopted']
+        adopted_record = StabilityRecord.model_validate_json(adopted_entry['record_json']) if adopted_entry else None
+        groups[(k.sample_type,k.batch,k.presentation,k.purpose,k.study,k.study_id,k.condition,k.reporting_basis)].append((cell,rec,adopted_record))
+        for version in (entry['display'], entry['adopted']):
+            if not version:
+                continue
+            is_adopted = adopted_entry and version['id'] == adopted_entry['id']
+            record = adopted_record if is_adopted else rec
+            for origin, note in source_result_notes(version, record):
+                result_notes[(version['id'], origin, note)] = (k.batch, k.condition, k.time_label,
+                    snapshot['item_labels'].get(k.item, k.item), k.method,
+                    ('正式采用 · ' if is_adopted else '最新记录 · ') + origin, note)
     for identity,rows in groups.items():
         doc.add_heading(' · '.join(str(human(v)) for v in identity if v),2)
         table = doc.add_table(rows=1, cols=5)
@@ -105,11 +166,15 @@ def write_document(path,snapshot,charts):
             c.paragraphs[0].paragraph_format.keep_with_next = True
         repeat = OxmlElement('w:tblHeader')
         table.rows[0]._tr.get_or_add_trPr().append(repeat)
-        for cell,rec in sorted(rows,key=lambda pair:(pair[1].key.item,pair[1].key.method,pair[1].key.method_version,
+        for cell,rec,adopted_rec in sorted(rows,key=lambda pair:(pair[1].key.item,pair[1].key.method,pair[1].key.method_version,
                                                    pair[1].key.day if pair[1].key.day is not None else pair[1].key.month or 0)):
             label = snapshot['item_labels'].get(rec.key.item,rec.key.item)
-            display = cell.display.text + ('（待确认）' if cell.display.pending_confirmation else '')
-            adopted = cell.adopted.text if cell.adopted else '尚无正式采用值'
+            display = word_result_text(rec.result)
+            if cell.display.pending_confirmation:
+                display += '（待确认）'
+            adopted = '尚无正式采用值'
+            if adopted_rec and cell.adopted:
+                adopted = word_result_text(adopted_rec.result)
             standards = '\n'.join(s.criterion_text for s in rec.standards) or '未关联适用标准'
             item = label + (f'\n{rec.key.method}' if rec.key.method not in label else '')
             if rec.key.method_version != 'not_reported':
@@ -131,6 +196,17 @@ def write_document(path,snapshot,charts):
             scope_note.paragraph_format.keep_with_next = True
             doc.add_picture(str(image),width=Inches(6.6))
             doc.add_paragraph(f"纵轴 {data['axis']['min']:g} 至 {data['axis']['max']:g}。{data['axis']['note']} 未绘制 {len(data['omitted'])} 项。")
+    if result_notes:
+        doc.add_heading('结果来源备注',1)
+        note_table = doc.add_table(rows=1, cols=7)
+        note_table.style = 'Table Grid'
+        for cell, label in zip(note_table.rows[0].cells, ('批号','条件','时间','检项','方法','来源','原文'), strict=True):
+            cell.text = label
+        note_table.rows[0]._tr.get_or_add_trPr().append(OxmlElement('w:tblHeader'))
+        for values in result_notes.values():
+            for cell, value in zip(note_table.add_row().cells, values, strict=True):
+                cell.text = value
+                expected.append(cell.text)
     doc.add_heading('评价与后续处理',1)
     doc.add_paragraph('未评价。请结合适用的质量标准、研究方案及审核结论进行人工评价。来源标准仅按原文列示，未经适用性确认不作为本报告接受限度。')
     doc.save(path)
@@ -177,11 +253,29 @@ def create_report(flow,command,actor):
                 raise WorkflowError('empty_report','当前研究范围没有参与对比的已提交结果。')
         elif command.mode != 'all':
             raise WorkflowError('report_mode','检测台账报告请使用筛选条件确定范围。')
+        report_slots = selected
+        if command.stability_document is not None and command.kind == 'stability' and not selected and command.filters.study is None:
+            report_slots = tuple(row['slot_id'] for row, _ in selected_rows(conn, command.project, command.filters)
+                                 if StabilityRecord.model_validate_json(row['record_json']).key.study != 'release')
+            if not report_slots:
+                raise WorkflowError('empty_report', '所选范围没有已提交的稳定性结果。')
         request = ExportRequest(project=command.project,base_revision=command.base_revision,
-                                slot_ids=selected,filters=command.quick.filters if command.kind=='quick' else command.filters)
+                                slot_ids=report_slots,filters=command.quick.filters if command.kind=='quick' else command.filters)
         snapshot = create_snapshot(flow,conn,request)
+        if command.stability_document is not None and command.kind == 'stability':
+            snapshot['worksheet_evidence'] = freeze_worksheet_evidence(
+                flow, conn, snapshot, actor,
+                include_release=not selected and command.filters.day is None and command.filters.month in (None, 0),
+                include_planned=not selected and command.filters.day is None and command.filters.month is None,
+            )
     if not snapshot['entries']:
         raise WorkflowError('empty_report','所选范围没有已提交结果。')
+    if command.stability_document is not None:
+        if command.kind != 'stability':
+            raise WorkflowError('report_stability_scope', '稳定性考察模板仅用于稳定性报告。')
+        validate_stability_scope(snapshot)
+        snapshot['stability_document'] = command.stability_document.model_dump(mode='json')
+        snapshot['template_version'] = TEMPLATE
     snapshot['comparison_studies'] = configs
     snapshot['axis'] = command.model_dump(include={'axis_mode','axis_min','axis_max'})
     snapshot['snapshot_id'] = digest({k:v for k,v in snapshot.items() if k!='snapshot_id'})
@@ -208,7 +302,8 @@ def create_report(flow,command,actor):
                 image = folder/f'{gid[:16]}.png'
                 data = write_png(image,sub,aligned_fields=aligned)
                 charts.append((data['item_label'],image,data))
-    verification = write_document(folder/'report.docx',snapshot,charts)
+    writer = write_stability_matrix if command.stability_document is not None else write_document
+    verification = writer(folder/'report.docx',snapshot,charts)
     (folder/'snapshot.json').write_text(encoded(snapshot),encoding='utf-8')
     files = {p.name:_sha(p) for p in folder.iterdir() if p.is_file()}
     (folder/'verification.json').write_text(encoded({'passed':True,**verification,'files':files}),encoding='utf-8')

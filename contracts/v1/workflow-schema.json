@@ -617,6 +617,15 @@
           "default": null,
           "title": "Axis Max"
         },
+        "format": {
+          "default": "detail",
+          "enum": [
+            "detail",
+            "stability_summary"
+          ],
+          "title": "Format",
+          "type": "string"
+        },
         "slot_ids": {
           "default": [],
           "items": {
@@ -1189,6 +1198,19 @@
           "title": "Project",
           "type": "string"
         },
+        "sample_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sample Id"
+        },
         "sample_type": {
           "enum": [
             "DS",
@@ -1452,6 +1474,18 @@
           "default": null,
           "title": "Batch"
         },
+        "sample_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sample Id"
+        },
         "reporting_basis": {
           "anyOf": [
             {
@@ -1486,7 +1520,8 @@
             {
               "enum": [
                 "DS",
-                "DP"
+                "DP",
+                "placebo"
               ],
               "type": "string"
             },
@@ -2043,6 +2078,35 @@
       "title": "StandardApplicability",
       "type": "object"
     },
+    "StandardAssessment": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": [
+            "within",
+            "outside",
+            "undetermined"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "criterion": {
+          "default": "",
+          "title": "Criterion",
+          "type": "string"
+        },
+        "version": {
+          "default": "",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "StandardAssessment",
+      "type": "object"
+    },
     "UploadPreview": {
       "additionalProperties": false,
       "properties": {
@@ -2229,6 +2293,29 @@
         "upload_sequence": {
           "title": "Upload Sequence",
           "type": "integer"
+        },
+        "worksheet_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Worksheet Id"
+        },
+        "standard_assessment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StandardAssessment"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
