@@ -97,9 +97,9 @@ def test_controlled_frozen_events_stay_in_the_matched_batch_and_point(tmp_path):
         "rows": [row], "points": [{**point, "id": "p3", "amount": 3, "label": "3M"}, point], "cells": [],
         "source_events": {"p24": [ae, oos], "p3": [ar]},
     }
-    first = controlled_block(sheet, "Test")
+    first = controlled_block(sheet)
     second = controlled_block({**sheet, "identity": {**sheet["identity"], "batch": "second"},
-                               "source_events": {}, "events": []}, "Test")
+                               "source_events": {}, "events": []})
     path = tmp_path / "controlled.xlsx"
     assert not write_controlled_workbook(path, [{"sample_type": "DP", "condition": "5℃±3℃", "blocks": [first, second]}])
     with closing(load_workbook(path)) as book:

@@ -176,7 +176,7 @@ def visible_rows(summary):
 def _write_block(sheet, summary, offset=0):
     rows = visible_rows(summary)
     controlled = "condition" in summary
-    width = max(10 if controlled else 8, 2 + len(summary["points"]))
+    width = max(*(len(row) for row in summary["header"]), 2 + len(summary["points"]))
     edge = Side(style="thin", color="BECFDD")
     for index, row in enumerate(rows, 1):
         for column in range(1, width + 1):
@@ -185,7 +185,7 @@ def _write_block(sheet, summary, offset=0):
             _put_text(cell, value)
             fixed = index == 4 or (index <= 3 and column <= len(row) and column % 2 == 1)
             if controlled and index == 3:
-                fixed = column in {1, 8}
+                fixed = column in {1, 8, 11}
             option = (index == 5 and column >= 3) or (index >= 6 and column <= 2) or (index <= 3 and (index, column) in {(1, 2), (1, 4), (2, 6), (2, 8), (3, 2), (3, 4), (3, 6)})
             if fixed or option:
                 cell.fill = PatternFill("solid", fgColor="9EC4E2" if fixed else "D5E7F4")
@@ -209,8 +209,10 @@ def _write_block(sheet, summary, offset=0):
     return rows, width
 
 
-def controlled_block(sheet, project_name):
-    summary = freeze_worksheet_table(sheet, project_name, filled=True, retain_source_items=True)
+def controlled_block(sheet):
+    summary = freeze_worksheet_table(sheet, sheet.get("product_name", ""), filled=True, retain_source_items=True)
+    summary["header"][0][7] = sheet.get("specification_text", summary["header"][0][7])
+    summary["header"][1][5] = sheet.get("protocol_number", "")
     summary.pop("contract")
     identity = StudyIdentity.model_validate(sheet["identity"])
     condition = identity.record_condition()
@@ -232,6 +234,8 @@ def controlled_block(sheet, project_name):
     summary["header"][2] = [condition_label, "", controlled_conditions(condition, identity.orientation),
                             "", "", "", "", location_label, "",
                             ("☑ " if location else "□ ") + (location or "未填写 / Unspecified")]
+    if storage := sheet.get("storage_location"):
+        summary["header"][2].extend(("存放位置\nStorage Location", storage))
     summary["condition"] = condition
     summary["points"] = ["\n".join(filter(None, (
         point["label"].removesuffix("M") if summary["time_unit"] == "M" else point["label"],

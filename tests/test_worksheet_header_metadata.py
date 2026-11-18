@@ -54,7 +54,7 @@ def create_historical(client, slot, seed, *, confirm_metadata):
                     "required_items": point["items"]} for point in seed["points"]],
     }
     if confirm_metadata:
-        payload.update({field: seed[field] for field in ("equipment", "location", "metadata_fingerprint")})
+        payload.update({field: seed[field] for field in ("equipment", "location", "product_name", "specification_text", "protocol_number", "storage_location", "metadata_fingerprint")})
     response = client.post(PROJECT + "/worksheets", json=payload)
     assert response.status_code == 201, response.text
     return "/api/v1/worksheets/" + response.json()["id"]

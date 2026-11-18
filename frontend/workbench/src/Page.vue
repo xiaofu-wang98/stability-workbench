@@ -173,7 +173,7 @@ async function refreshSheet() {
         @saved="refreshSheet" />
       <HistoricalRows :key="'history-' + sheet.id" :sheet-id="sheet.id" :disabled="editingSheet" @saved="refreshSheet" />
       <WorksheetSample :key="'sample-' + sheet.id" :sheet="sheet" :disabled="editingSheet" @saved="refreshSheet" />
-      <StudyTemplateHeader :sheet="sheet" :product-name="projects.find(project => project.project === sheet?.project)?.name || ''" />
+      <StudyTemplateHeader :sheet="sheet" />
       <WorksheetEditor :key="sheet.id" :sheet="sheet" @saved="sheet = $event; download = ''" @editing="editingSheet = $event" />
       <details v-if="sheet.events?.length && !editingSheet" class="panel worksheet-notes">
         <summary>研究事件 · {{ sheet.events.length }} 项</summary>

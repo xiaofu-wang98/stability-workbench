@@ -11,7 +11,7 @@ from unicodedata import normalize
 
 from openpyxl import load_workbook
 
-from .business_worksheets import CreateWorksheet, StudyIdentity, adopted_scope, historical_row_key, historical_rows, scope_result_entries
+from .business_worksheets import HEADER_METADATA_FIELDS, CreateWorksheet, StudyIdentity, adopted_scope, historical_row_key, historical_rows, scope_result_entries
 from .matrix_fields import timepoint_token
 from .models import ProjectConfig, StabilityRecord, digest
 from .specification_preview import matching_standards, protocol_numbers, specification_material_scope, unambiguous_standard_sources
@@ -49,12 +49,23 @@ def header_date(value):
     return ""
 
 
-METADATA_FIELDS = ("equipment", "location")
 HEADER_FIELDS = {
+    "产品名称": "product_name",
+    "product name": "product_name",
+    "稳定性试验方案编号": "protocol_number",
+    "试验方案编号": "protocol_number",
+    "study protocol no.": "protocol_number",
+    "规格": "specification_text",
+    "specification": "specification_text",
+    "存放位置": "storage_location",
+    "storage location": "storage_location",
     "设备编号": "equipment",
     "设备名称及编号": "equipment",
+    "equipment no.": "equipment",
+    "stability chamber/temperature control equipment name and no.": "equipment",
     "稳定性试验箱/温控设备名称和编号": "equipment",
     "稳定性开展地点": "location",
+    "stability location": "location",
 }
 
 
@@ -97,7 +108,7 @@ def historical_blocks(conn, results, stack):
                 key = (sha, section, start, evidence["row"], block["header_row"])
                 if key not in seen:
                     seen.add(key)
-                    yield version, sha, filename, sheet, block, evidence, start, observations
+                    yield version, sha, filename, sheet, block, evidence, start, observations, raw["evidence"].get("study_title")
 
 
 def header_fields(sheet, start, end):
@@ -134,12 +145,12 @@ def location_value(raw):
 
 def historical_header(conn, results, slot_id=None):
     axes = set()
-    sources = {field: {} for field in HEADER_FIELDS.values()}
+    sources = {field: {} for field in HEADER_METADATA_FIELDS}
     with ExitStack() as stack:
-        for version, sha, filename, sheet, block, evidence, start, observations in historical_blocks(conn, results, stack):
+        for version, sha, filename, sheet, block, evidence, start, observations, title_ref in historical_blocks(conn, results, stack):
             fields = list(header_fields(sheet, start, block["header_row"] - 1))
             for title, cell in fields:
-                field = HEADER_FIELDS.get(title)
+                field = HEADER_FIELDS.get(title.casefold())
                 raw = text(cell).strip()
                 if field and raw:
                     value = raw
@@ -150,6 +161,14 @@ def historical_header(conn, results, slot_id=None):
                     sources[field][sha, sheet.title, cell.coordinate] = {
                         "filename": filename, "sha256": sha, "sheet": sheet.title, "cell": cell.coordinate,
                         "raw": raw, "value": value if len(value) <= 500 else "",
+                    }
+            if title_ref and not any(HEADER_FIELDS.get(title.casefold()) == "product_name" for title, _ in fields):
+                cell = sheet.cell(title_ref["row"], title_ref["column"])
+                raw = text(cell).strip()
+                if cell.row < start and "稳定性" in raw:
+                    sources["product_name"][sha, sheet.title, cell.coordinate] = {
+                        "filename": filename, "sha256": sha, "sheet": sheet.title, "cell": cell.coordinate,
+                        "raw": raw, "value": "", "reference_only": True,
                     }
             if version["slot_id"] != slot_id:
                 continue
@@ -188,7 +207,7 @@ def historical_header(conn, results, slot_id=None):
                                        for values in (dates, stages, packaging))))
     result = {"metadata_sources": {field: [entries[key] for key in sorted(entries)] for field, entries in sources.items()}}
     for field, entries in sources.items():
-        values = {entry["value"] for entry in entries.values()}
+        values = {entry["value"] for entry in entries.values() if not entry.get("reference_only")}
         result[field] = next(iter(values)) if len(values) == 1 else ""
     if len(axes) == 1:
         axis, metadata, start_date, material_stage, packaging = next(iter(axes))
@@ -199,7 +218,7 @@ def historical_header(conn, results, slot_id=None):
 
 
 def metadata_preview(header):
-    data = {key: header[key] for key in (*METADATA_FIELDS, "metadata_sources")}
+    data = {key: header[key] for key in (*HEADER_METADATA_FIELDS, "metadata_sources")}
     return {**data, "metadata_fingerprint": digest(data)}
 
 
@@ -213,9 +232,9 @@ def confirmed_metadata_sources(conn, project, identity, values, fingerprint):
         return {}
     preview = worksheet_metadata_preview(conn, project, identity)
     if preview["metadata_fingerprint"] != fingerprint:
-        raise WorkflowError("worksheet_metadata_source_changed", "设备或地点来源已变化，请重新核对原件。", 409)
-    return {field: preview["metadata_sources"][field] for field, value in values.items()
-            if value and value == preview[field]}
+        raise WorkflowError("worksheet_metadata_source_changed", "研究表头来源已变化，请重新核对原件。", 409)
+    return {field: [source for source in preview["metadata_sources"][field] if source["value"] == value]
+            for field, value in values.items() if value and value == preview[field]}
 
 
 def provision_from_results(conn, worksheets, project, version_ids, actor):

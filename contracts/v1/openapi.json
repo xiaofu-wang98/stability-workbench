@@ -10026,6 +10026,30 @@
             "title": "Location",
             "default": ""
           },
+          "product_name": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Product Name",
+            "default": ""
+          },
+          "protocol_number": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Protocol Number",
+            "default": ""
+          },
+          "specification_text": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Specification Text",
+            "default": ""
+          },
+          "storage_location": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Storage Location",
+            "default": ""
+          },
           "idempotency_key": {
             "type": "string",
             "minLength": 1,
@@ -10580,6 +10604,54 @@
             "type": "string",
             "maxLength": 500,
             "title": "Location"
+          },
+          "product_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Name"
+          },
+          "protocol_number": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protocol Number"
+          },
+          "specification_text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Specification Text"
+          },
+          "storage_location": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Location"
           },
           "basis": {
             "type": "string",

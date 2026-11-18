@@ -31,8 +31,16 @@ export interface Project {
   purpose?: 'formal' | 'sandbox';
 }
 
-export type HeaderField = 'equipment' | 'location';
-export type HeaderSource = { filename: string; sha256: string; sheet: string; cell: string; raw: string };
+export const headerFieldLabels = {
+  product_name: '产品中英文名称',
+  equipment: '设备名称及编号',
+  protocol_number: '稳定性试验方案编号及版本',
+  specification_text: '交付规格',
+  location: '稳定性开展地点',
+  storage_location: '存放位置',
+};
+export type HeaderField = keyof typeof headerFieldLabels;
+export type HeaderSource = { filename: string; sha256: string; sheet: string; cell: string; raw: string; reference_only?: boolean };
 export type HeaderMetadataPreview = Record<HeaderField, string> & {
   metadata_sources: Record<HeaderField, HeaderSource[]>;
   metadata_fingerprint: string;
@@ -63,6 +71,11 @@ export interface Worksheet extends WorksheetSummary {
   start_date: string;
   equipment?: string;
   location?: string;
+  product_name?: string;
+  protocol_number?: string;
+  specification_text?: string;
+  storage_location?: string;
+  legacy_location?: string;
   invalidated_release_rows?: string[];
   stopped_checks?: { row_id: string; point_ids: string[]; basis: string }[];
   pending_release_references?: Record<string, { table: number; row: number; column: number; raw: string }>;

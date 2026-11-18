@@ -209,14 +209,13 @@ def router_for(store, worksheets, actor_dependency):
             config = project_row(conn, project)
             if config["revision"] != command.base_revision:
                 raise WorkflowError("controlled_scope_changed", "项目数据已更新，请重新预览导出范围。", 409)
-            name = json.loads(config["config_json"]).get("name", "")
             groups = {}
             for sheet_id in command.sheet_ids:
                 sheet = worksheets.get(sheet_id, operator, _conn=conn)
                 if sheet["project"] != config["project"]:
                     raise WorkflowError("controlled_scope", "所选研究表不属于当前项目。")
                 identity = sheet["identity"]
-                condition = controlled_block(sheet, name)
+                condition = controlled_block(sheet)
                 key = (identity["sample_type"], identity["purpose"], condition["condition"])
                 group = groups.setdefault(key, {"sample_type": identity["sample_type"], "condition": key[2], "blocks": []})
                 group["blocks"].append(condition)

@@ -2,7 +2,7 @@
 import { nextTick, onBeforeUnmount, ref } from 'vue';
 import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
 import { NAlert, NButton, NInput, NSelect } from 'naive-ui';
-import { api, type Worksheet, type HeaderField, type HeaderMetadataPreview } from './api';
+import { api, headerFieldLabels, type Worksheet, type HeaderField, type HeaderMetadataPreview } from './api';
 import WorksheetStandards from './WorksheetStandards.vue';
 import WorksheetRelease from './WorksheetRelease.vue';
 import WorksheetProtocol from './WorksheetProtocol.vue';
@@ -33,7 +33,8 @@ const releaseForm = ref(false);
 const pointEditor = ref<Worksheet['points'][number]>();
 const protocolForm = ref(false);
 const eventForm = ref(false);
-const headerForm = ref<{ equipment: string; location: string; basis: string; metadata_fingerprint?: string }>();
+const headerFields = Object.keys(headerFieldLabels) as HeaderField[];
+const headerForm = ref<Record<HeaderField, string> & { basis: string; metadata_fingerprint?: string }>();
 const headerPreview = ref<HeaderMetadataPreview>();
 const sourceError = ref('');
 const planItems = ref<string[]>([]);
@@ -430,7 +431,8 @@ function choosePoint(event: Event) {
 }
 
 async function openHeaderMetadata() {
-  headerForm.value = { equipment: current.equipment ?? '', location: current.location ?? '', basis: '' };
+  const fields = Object.fromEntries(headerFields.map(field => [field, current[field] ?? ''])) as Record<HeaderField, string>;
+  headerForm.value = { ...fields, basis: '' };
   const form = headerForm.value;
   headerPreview.value = undefined;
   sourceError.value = '';
@@ -491,7 +493,7 @@ async function submitExtra(input: Event | object, kind: 'stop-checks' | 'remove-
     protocolForm.value = false;
     eventForm.value = false;
     retest.value = undefined;
-    status.value = kind === 'header-metadata' ? '已保存设备与开展地点。' : kind === 'stop-checks' ? '已停检所选时间点，历史结果和计划已保留。' : kind === 'remove-row' ? '已移除检项，旧计划仍保留。' : kind === 'events' ? '已保存研究事件。' : kind === 'protocol' ? '已关联研究方案。' : kind === 'copy-coa-to-0m' ? '已处理 COA 复制。' : kind === 'release-reference' ? '已保存放行引用设置。' : ['standards', 'protocol-standards'].includes(kind) ? '已保存标准关联。' :
+    status.value = kind === 'header-metadata' ? '已保存研究表头。' : kind === 'stop-checks' ? '已停检所选时间点，历史结果和计划已保留。' : kind === 'remove-row' ? '已移除检项，旧计划仍保留。' : kind === 'events' ? '已保存研究事件。' : kind === 'protocol' ? '已关联研究方案。' : kind === 'copy-coa-to-0m' ? '已处理 COA 复制。' : kind === 'release-reference' ? '已保存放行引用设置。' : ['standards', 'protocol-standards'].includes(kind) ? '已保存标准关联。' :
       kind === 'plan' ? '已保存新计划版本。' : '已保存独立复测，当前采用结果保持原值。';
     try { await mount(); }
     catch {
@@ -546,7 +548,7 @@ onBeforeUnmount(() => {
       <NButton :disabled="busy || expired" @click="openRetest">新增复测</NButton>
       <NButton :disabled="busy || expired" @click="openPlan">增加计划时间点</NButton>
       <NButton v-if="current.points.length" :disabled="busy || expired" @click="pointEditor = { ...current.points[0] }">日期与签署状态</NButton>
-      <NButton :disabled="busy || expired" @click="openHeaderMetadata">设备与开展地点</NButton>
+      <NButton :disabled="busy || expired" @click="openHeaderMetadata">核对研究表头</NButton>
       <NButton :disabled="busy || expired" @click="openStandards">标准与检项维护</NButton>
       <NButton :disabled="busy || expired" @click="openProtocol">后补研究方案</NButton>
       <NButton :disabled="busy || expired" @click="openEvent">记录研究事件</NButton>
@@ -586,14 +588,22 @@ onBeforeUnmount(() => {
     <NButton :disabled="busy" @click="pointEditor = undefined">取消</NButton>
   </form>
   <form v-if="editing && headerForm" class="extra-form" @submit.prevent="submitExtra(headerForm, 'header-metadata')">
-    <label>设备名称及编号 <input v-model="headerForm.equipment" maxlength="500" :disabled="busy"></label>
-    <NButton v-if="headerPreview?.equipment" :disabled="busy || expired" @click="applyHeaderSuggestion('equipment')">带入来源设备</NButton>
-    <label>稳定性开展地点 <input v-model="headerForm.location" maxlength="500" :disabled="busy"></label>
-    <NButton v-if="headerPreview?.location" :disabled="busy || expired" @click="applyHeaderSuggestion('location')">带入来源地点</NButton>
+    <p v-if="current.legacy_location" class="pending">
+      旧计划的地点字段待核对：{{ current.legacy_location }}。请按原件确认其归属。
+    </p>
+    <div v-for="field in headerFields" :key="field">
+      <label>{{ headerFieldLabels[field] }}
+        <textarea v-if="field === 'product_name'" v-model="headerForm[field]" rows="2" maxlength="500" placeholder="待确认" :disabled="busy"></textarea>
+        <input v-else v-model="headerForm[field]" maxlength="500" placeholder="待确认" :disabled="busy">
+      </label>
+      <NButton v-if="headerPreview?.[field]" :disabled="busy || expired" @click="applyHeaderSuggestion(field)">
+        带入来源{{ headerFieldLabels[field] }}
+      </NButton>
+    </div>
     <WorksheetHeaderSources v-if="headerPreview" :preview="headerPreview" />
     <p v-if="sourceError" role="status">{{ sourceError }}</p>
     <label>修改依据 <input v-model="headerForm.basis" required :disabled="busy"></label>
-    <NButton attr-type="submit" type="primary" :disabled="busy || expired">保存设备与地点</NButton>
+    <NButton attr-type="submit" type="primary" :disabled="busy || expired">保存研究表头</NButton>
     <NButton :disabled="busy" @click="headerForm = undefined">取消</NButton>
   </form>
   <WorksheetStandards v-if="editing && standards" :sheet="current" :busy="busy || expired"

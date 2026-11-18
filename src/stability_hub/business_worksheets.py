@@ -25,6 +25,10 @@ from .workflow_contracts import ResultFilter
 LEASE_SECONDS = 90
 
 
+HEADER_METADATA_FIELDS = ("product_name", "equipment", "protocol_number", "specification_text", "location", "storage_location")
+ADDITIONAL_HEADER_FIELDS = ("product_name", "protocol_number", "specification_text", "storage_location")
+
+
 def adopted_scope(conn, project, batch):
     return [(value, StabilityRecord.model_validate_json(value['record_json']))
             for _, value in selected_rows(conn, project, ResultFilter(batch=batch)) if value]
@@ -174,6 +178,10 @@ class CreateWorksheet(Model):
     custom_items: tuple[CustomWorksheetItem, ...] = Field(default=(), max_length=150)
     equipment: str = Field(default="", max_length=500)
     location: str = Field(default="", max_length=500)
+    product_name: str = Field(default="", max_length=500)
+    protocol_number: str = Field(default="", max_length=500)
+    specification_text: str = Field(default="", max_length=500)
+    storage_location: str = Field(default="", max_length=500)
     idempotency_key: Text
     name: Text
     identity: StudyIdentity
@@ -209,6 +217,10 @@ class WorksheetMutation(LeaseToken):
 class EditWorksheetMetadata(WorksheetMutation):
     equipment: str = Field(max_length=500)
     location: str = Field(max_length=500)
+    product_name: str | None = Field(default=None, max_length=500)
+    protocol_number: str | None = Field(default=None, max_length=500)
+    specification_text: str | None = Field(default=None, max_length=500)
+    storage_location: str | None = Field(default=None, max_length=500)
     basis: Text
     metadata_fingerprint: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 
@@ -419,7 +431,7 @@ class BusinessWorksheets:
                     del creation[key]
             if not creation["copy_standards"]:
                 del creation["copy_standards"]
-            for key in ("equipment", "location", "custom_items", "item_standards", "protocol_row_items", "row_criteria",
+            for key in (*HEADER_METADATA_FIELDS, "custom_items", "item_standards", "protocol_row_items", "row_criteria",
                         "material_stage", "packaging"):
                 if not creation[key]:
                     del creation[key]
@@ -562,11 +574,12 @@ class BusinessWorksheets:
                 rows[key]["criteria_text"] = criteria.criteria_text.strip()
             if draft_id:
                 source["worksheet_draft_id"] = draft_id
-            metadata = {key: getattr(request, key).strip() for key in ("equipment", "location") if getattr(request, key).strip()}
+            metadata = {key: getattr(request, key).strip() for key in HEADER_METADATA_FIELDS if getattr(request, key).strip()}
             metadata_sources = {}
-            if request.seed_slot_id and metadata:
+            if metadata and (request.seed_slot_id or any(field in metadata for field in ADDITIONAL_HEADER_FIELDS)):
                 if not request.basis.strip():
-                    raise WorkflowError("worksheet_metadata_basis", "请记录确认设备编号和开展地点的依据。")
+                    raise WorkflowError("worksheet_metadata_basis", "请记录确认研究表头的依据。")
+            if request.seed_slot_id and metadata:
                 from .worksheet_seed import confirmed_metadata_sources
                 metadata_sources = confirmed_metadata_sources(
                     conn, project, request.identity.model_copy(update={"sample_id": selected.key.sample_id}),
@@ -683,6 +696,17 @@ class BusinessWorksheets:
                 conn.execute("INSERT INTO worksheet_result_positions VALUES (?,?,?,?)",
                              (sheet["id"], row["id"], point["id"], slot))
 
+    @staticmethod
+    def _legacy_location(conn, sheet, plan):
+        location = plan.get("location")
+        if not location or not any(row.get("plan_key", "").startswith("history_") for row in plan["rows"]):
+            return ""
+        confirmed = conn.execute("""SELECT 1 FROM workflow_events WHERE project=? AND subject_id=? AND (
+            (action='worksheet_create' AND json_extract(detail_json,'$.metadata.location')=?) OR
+            (action='worksheet_header_metadata' AND json_extract(detail_json,'$.after.location')=?))
+            LIMIT 1""", (sheet["project"], sheet["id"], location, location)).fetchone()
+        return "" if confirmed else location
+
     def get(self, sheet_id, actor, *, _conn=None):
         require(actor, Capability.VIEW)
         with (self.store.read() if _conn is None else nullcontext(_conn)) as conn:
@@ -703,6 +727,7 @@ class BusinessWorksheets:
                                 if member["id"] in reference_ids}
             cells = []
             source_events = {}
+            historical_protocol = False
             for row in plan["rows"]:
                 original_labels = {}
                 historical_criteria = set(row.get("source_criteria", ()))
@@ -740,6 +765,11 @@ class BusinessWorksheets:
                             historical_criteria.update(standard.criterion_text for standard in record.standards
                                                        if standard.criterion_text.strip())
                             original_labels.update(dict.fromkeys(original_test_items(sources)))
+                            if "protocol_number" not in plan and not historical_protocol:
+                                historical_protocol = any(
+                                    raw.get("fields", {}).get("study_id", "").strip() == identity.study_id
+                                    and raw.get("evidence", {}).get("study_id") for raw in sources
+                                )
                         notes = [line for raw in sources for line in frozen_block_events(raw, point)]
                         if notes:
                             source_events.setdefault(point["id"], {}).update(dict.fromkeys(notes))
@@ -765,11 +795,18 @@ class BusinessWorksheets:
                     if opts:
                         available_coa[row["id"]] = opts
 
+            legacy_location = self._legacy_location(conn, sheet, plan)
+            reported_spec = "" if identity.presentation.startswith("原文未注明") or identity.presentation in {
+                "未注明", "not_reported"
+            } else identity.presentation
             return {
                 "id": sheet_id, "project": sheet["project"], "name": sheet["name"], "revision": sheet["revision"],
                 "sample_id": sheet["sample_id"],
                 "plan_version": sheet["plan_version"], "start_date": sheet["start_date"], "identity": identity.model_dump(),
                 **plan, "layout": json.loads(sheet["layout_json"]), "cells": cells,
+                "specification_text": plan.get("specification_text", reported_spec),
+                **({"location": "", "legacy_location": legacy_location} if legacy_location else {}),
+                **({"protocol_number": identity.study_id} if historical_protocol else {}),
                 "selection_id": digest({"revision": sheet["revision"], "cells": cells}),
                 **({"source_events": {point_id: list(notes) for point_id, notes in source_events.items()}} if source_events else {}),
                 "available_coa_references": available_coa,
@@ -793,26 +830,35 @@ class BusinessWorksheets:
             return {"revision": sheet["revision"], **worksheet_metadata_preview(conn, sheet["project"], identity)}
 
     def edit_header_metadata(self, sheet_id, request, actor):
-        from .worksheet_seed import METADATA_FIELDS, confirmed_metadata_sources
+        from .worksheet_seed import confirmed_metadata_sources
 
         require(actor, Capability.CONFIRM_FACT)
         with self.store.connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
             sheet = self._sheet(conn, sheet_id)
             project = sheet["project"]
-            payload = {"worksheet_header_metadata": sheet_id, **request.model_dump(mode="json")}
+            changes_requested = request.model_dump(mode="json", exclude={
+                field for field in ADDITIONAL_HEADER_FIELDS if getattr(request, field) is None
+            })
+            payload = {"worksheet_header_metadata": sheet_id, **changes_requested}
             prior = replay(conn, project, actor, request.idempotency_key, payload)
             if prior is not None:
                 return prior
             self._check_mutation(conn, sheet, request, actor)
             plan = self._plan(conn, sheet)
-            before = {field: plan.get(field, "") for field in METADATA_FIELDS}
-            after = {field: getattr(request, field).strip() for field in METADATA_FIELDS}
-            if before == after:
+            before = {field: plan.get(field, "") for field in HEADER_METADATA_FIELDS}
+            after = {**before, **{field: changes_requested[field].strip()
+                                 for field in HEADER_METADATA_FIELDS if field in changes_requested}}
+            changed = {field: value for field, value in after.items() if value != before[field]}
+            for field in ("protocol_number", "specification_text"):
+                if field in changes_requested and field not in plan:
+                    changed[field] = after[field]  # An explicit blank also suppresses a legacy display fallback.
+            if after["location"] and self._legacy_location(conn, sheet, plan):
+                changed["location"] = after["location"]
+            if not changed:
                 response = {"id": sheet_id, "revision": sheet["revision"], "plan_version": sheet["plan_version"],
                             "project_revision": project_row(conn, project)["revision"]}
             else:
-                changed = {field: value for field, value in after.items() if value != before[field]}
                 identity = StudyIdentity.model_validate_json(sheet["identity_json"])
                 sources = confirmed_metadata_sources(conn, project, identity, changed, request.metadata_fingerprint)
                 plan.update(changed)
