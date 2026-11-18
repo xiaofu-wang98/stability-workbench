@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, inject, ref, watch, type Ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { NAlert, NButton, NCard, NInput, NSelect, NSpace, NSpin, NTag } from 'naive-ui';
 import { api, archiveStudyObject, triggerDownload, type Project, type SampleEntry, type WorksheetSummary, type Worksheet } from './api';
@@ -20,11 +20,15 @@ const route = useRoute();
 const router = useRouter();
 const page = computed(() => route.path.split('/')[1] || 'home');
 const project = computed(() => String(route.params.project || ''));
+const projectScope = inject<Ref<string>>('workbenchProject');
 const projects = ref<Project[]>([]);
 const sheets = ref<WorksheetSummary[]>([]);
 const samples = ref<SampleEntry[]>([]);
 const worksheetDrafts = ref<{ id: string; name: string; created_at: string; protocol_draft: string; protocol_table: string; copy_source: string }[]>([]);
 const sheet = ref<Worksheet>();
+watch(() => sheet.value?.project, code => {
+  if (code && projectScope) projectScope.value = code;
+});
 const editingSheet = ref(false);
 const search = ref('');
 const sheetSearch = ref('');
@@ -250,8 +254,8 @@ async function refreshSheet() {
         </ul>
       </div>
 
-      <h2 style="margin-top: 24px;">研究工作表</h2>
-      <RouterLink :to="{ path: '/new', query: { project } }">新建研究表</RouterLink>
+      <details v-if="sheets.length" class="all-study-search">
+      <summary>搜索全部研究表（{{ sheets.length }}）</summary>
       <NInput v-if="sheets.length" v-model:value="sheetSearch" placeholder="搜索研究表名称、批号或条件"
         :input-props="{ 'aria-label': '搜索研究表' }" clearable style="margin: 8px 0;" />
       <ul class="list">
@@ -261,8 +265,9 @@ async function refreshSheet() {
           <span>计划版本 {{ item.plan_version }}</span>
         </li>
       </ul>
-      <p v-if="!sheets.length" class="muted">此项目暂无研究工作表。</p>
-      <p v-else-if="!filteredSheets.length" class="muted">未找到匹配的研究表。</p>
+      <p v-if="!filteredSheets.length" class="muted">未找到匹配的研究表。</p>
+      </details>
+      <p v-else class="muted">此项目暂无研究工作表。</p>
       <template v-if="worksheetDrafts.length">
         <h2>待补全计划</h2>
         <ul class="list"><li v-for="draft in worksheetDrafts" :key="draft.id">
@@ -272,10 +277,6 @@ async function refreshSheet() {
           <span>{{ draft.created_at }}</span>
         </li></ul>
       </template>
-      <div style="margin-top: 12px;">
-        <RouterLink :to="'/trends?project=' + encodeURIComponent(project)">查看项目趋势</RouterLink>
-        <RouterLink :to="'/deliveries?project=' + encodeURIComponent(project)"> · 生成文件</RouterLink>
-      </div>
     </section>
     <ProjectResults v-if="page === 'projects' && project" :key="project" :project="project" />
     <template v-if="sheet">

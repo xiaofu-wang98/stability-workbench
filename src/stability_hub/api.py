@@ -192,6 +192,11 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
     @app.post("/api/v1/projects/{project}/specifications/{specification_id}/components")
     def confirm_specification_components(project: ProjectDependency, specification_id: str, command: RegisterComponents, operator: ActorDependency):
         return register_components(store, project, specification_id, command, operator)
+
+    @app.get("/api/v1/projects/{project}/specifications/{specification_id}/components", response_model=list[dict])
+    def read_specification_components(project: ProjectDependency, specification_id: str, operator: ActorDependency):
+        from .assay_catalog import registered_components
+        return registered_components(store, project, specification_id, operator)
     from .coa import router_for as coa_router
     app.include_router(coa_router(store, ActorDependency, ProjectDependency))
     from .worksheet_roundtrip import router_for as study_workbook_router

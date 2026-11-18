@@ -81,7 +81,7 @@ function upload(event: Event) {
   <section v-if="selected" class="panel">
     <h2>{{ selected.filename }}</h2>
     <p v-if="!busy" role="status">已保存原件，识别到 {{ selected.rows.length }} 条标准。下一步：核对下方检项、方法和标准原文，再用于建表。</p>
-    <RouterLink v-if="selected.rows.length" :to="{ path: '/new', query: { specification: selected.id } }">使用此标准新建研究表</RouterLink>
+    <RouterLink v-if="selected.rows.length" :to="{ path: '/new', query: { project: route.query.project, specification: selected.id } }">使用此标准新建研究表</RouterLink>
     <p v-else>没有识别到标准条款。请核对 Word 表格，或在研究表中手工填写标准。</p>
     <p>适用对象 {{ materials[selected.material_scope] || '待核对' }}</p>
     <p>当前条款归属：{{ selected.linked_projects?.map(item => `${item.project}（${item.count} 条）`).join('、') || '尚未确认到项目' }}。</p>
@@ -105,7 +105,8 @@ function upload(event: Event) {
       </table>
     </div>
   </section>
-  <ConfirmAssays v-if="selected?.rows.length" :key="'assays-' + selected.id" :specification="selected" @registered="open(selected.id)" />
+  <ConfirmAssays v-if="selected?.rows.length" :key="'assays-' + selected.id" :specification="selected"
+    :initial-project="String(route.query.project || '')" @registered="open(selected.id)" />
   <CoaEditor v-if="selected?.rows.length" :key="selected.id" :specification="selected" :initial-project="String(route.query.project || '')" :initial-batch="String(route.query.batch || '')" :initial-sample-id="String(route.query.sample || '')" />
 </template>
 

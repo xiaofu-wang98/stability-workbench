@@ -104,6 +104,23 @@ class RegisterComponents(Model):
     components: list[ReviewedComponent] = Field(min_length=1, max_length=150)
 
 
+def _registered_components(conn, project, specification_id):
+    return [dict(row) for row in conn.execute("""SELECT l.table_number AS "table",l.row_number AS "row",l.item_id,
+               d.name_zh AS assay_zh,d.name_en AS assay_en,d.method,d.method_version,
+               c.name_zh AS component_zh,c.name_en AS component_en,c.unit,c.result_type,
+               c.reporting_basis,c.norm_signature
+        FROM specification_assay_components l JOIN assay_components c ON c.project=l.project AND c.item_id=l.item_id
+        JOIN assay_definitions d ON d.id=c.assay_id
+        WHERE l.project=? AND l.specification_id=? ORDER BY l.table_number,l.row_number""", (project, specification_id))]
+
+
+def registered_components(store, project, specification_id, actor):
+    require(actor, Capability.VIEW)
+    with store.read() as conn:
+        project_row(conn, project)
+        return _registered_components(conn, project, specification_id)
+
+
 def register_components(store, project, specification_id, command, actor):
     require(actor, Capability.CONFIRM_FACT)
     with store.connect() as conn:
@@ -124,7 +141,8 @@ def register_components(store, project, specification_id, command, actor):
             raise WorkflowError("specification_criterion_missing", "请选择该标准中存在且不重复的条款。")
         config = ProjectConfig.model_validate_json(project_row(conn, project)["config_json"])
         items = {item.id: item for item in config.items}
-        links = []
+        previous_links = {(r["table"], r["row"]): r for r in _registered_components(conn, project, specification_id)}
+        links, added = [], []
         for component in command.components:
             assay_fields = (component.assay_zh, component.assay_en, component.method, component.method_version)
             assay_id = "assay_" + digest([project, *assay_fields])
@@ -138,18 +156,42 @@ def register_components(store, project, specification_id, command, actor):
                 component.result_type,
                 reporting_basis,
             )
+            coords = (component.table, component.row)
+            location = f"原件表 {component.table} 行 {component.row}"
+            previous = previous_links.get(coords)
+            if previous:
+                definition = items.get(previous["item_id"])
+                labels = {"method": "检测方法", "method_version": "方法版本", "unit": "单位", "result_type": "结果类型"}
+                differences = [
+                    f"{label}（已登记：{getattr(definition, field, '') or '未注明'}，本次：{getattr(component, field) or '未注明'}）"
+                    for field, label in labels.items()
+                    if definition is None or getattr(definition, field) != getattr(component, field)
+                ]
+                identity = previous["norm_signature"] or compute_norm_signature(
+                    previous["assay_zh"], previous["method"], previous["component_zh"],
+                    previous["result_type"], previous["reporting_basis"])
+                if identity != norm_sig:
+                    differences.append("检项／子结果／报告体系")
+                if differences:
+                    raise WorkflowError("assay_component_conflict",
+                        f"{location} 已关联 {previous['assay_zh']} · {previous['component_zh']}，"
+                        f"冲突字段：{'、'.join(differences)}。请查看已登记定义，取消该行后可继续登记其他条款。", 409)
+                links.append({"table": component.table, "row": component.row, "item_id": previous["item_id"]})
+                continue
 
             # 认领机制：按 (project, norm_signature) 查找是否已有 item_id
-            existing = conn.execute("""
+            candidates = conn.execute("""
                 SELECT item_id, aliases_json, unit, result_type FROM assay_components
                 WHERE project=? AND norm_signature=? AND norm_signature != ''
-                LIMIT 1
-            """, (project, norm_sig)).fetchone()
+            """, (project, norm_sig)).fetchall()
+            compatible = [entry for entry in candidates if entry["item_id"] in items and all(
+                getattr(items[entry["item_id"]], field) == getattr(component, field)
+                for field in ("method", "method_version", "unit", "result_type"))]
+            if len(compatible) > 1:
+                raise WorkflowError("assay_component_conflict", f"{location} 匹配多个已登记检项，请核对独立身份。", 409)
+            existing = compatible[0] if compatible else None
 
-            if existing and existing["result_type"] == component.result_type and existing["item_id"] in items and all(
-                getattr(items[existing["item_id"]], field) == getattr(component, field)
-                for field in ("method", "method_version", "unit", "result_type")
-            ):
+            if existing:
                 item_id = existing["item_id"]
                 aliases = json.loads(existing["aliases_json"])
                 new_alias = component.component_zh
@@ -160,7 +202,7 @@ def register_components(store, project, specification_id, command, actor):
             else:
                 item_id = "component_" + digest([assay_id, component.component_zh, component.component_en, component.result_type, reporting_basis])
                 if item_id in items and items[item_id].unit != component.unit:
-                    raise WorkflowError("assay_component_conflict", "该子结果已使用其他单位，不能覆盖已有定义；请核对单位或建立独立子结果。", 409)
+                    raise WorkflowError("assay_component_conflict", f"{location} 的同一子结果已使用其他单位，请核对单位或明确独立子结果。", 409)
 
             base_label = " · ".join(dict.fromkeys((component.assay_zh, component.component_zh)))
             if reporting_basis:
@@ -181,10 +223,6 @@ def register_components(store, project, specification_id, command, actor):
                 item = items[item_id]
 
             params = (project, specification_id, component.table, component.row)
-            previous = conn.execute("""SELECT item_id FROM specification_assay_components
-                                       WHERE project=? AND specification_id=? AND table_number=? AND row_number=?""", params).fetchone()
-            if previous and previous["item_id"] != item_id:
-                raise WorkflowError("assay_component_conflict", "该标准条款已关联另一个子结果，请先核对。", 409)
             conn.execute("INSERT OR IGNORE INTO assay_definitions VALUES (?,?,?,?,?,?)", (assay_id, project, *assay_fields))
             conn.execute("""
                 INSERT INTO assay_components (project, item_id, assay_id, name_zh, name_en, unit, result_type, reporting_basis, norm_signature, aliases_json)
@@ -197,10 +235,17 @@ def register_components(store, project, specification_id, command, actor):
             conn.execute("INSERT OR IGNORE INTO specification_assay_components VALUES (?,?,?,?,?)", (*params, item_id))
             items[item_id] = item
             links.append({"table": component.table, "row": component.row, "item_id": item_id})
-        after = ProjectConfig.model_validate({**config.model_dump(), "items": list(items.values())})
-        conn.execute("UPDATE workflow_projects SET config_json=? WHERE project=?", (after.model_dump_json(), project))
-        event(conn, project, specification_id, "register_assay_components", actor, "确认质量标准检项", {"links": links})
-        result = {"revision": bump(conn, project), "links": links}
+            added.append(links[-1])
+        revision = command.revision
+        if added:
+            try:
+                after = ProjectConfig.model_validate({**config.model_dump(), "items": list(items.values())})
+            except ValueError as exc:
+                raise WorkflowError("assay_component_conflict", "提交范围存在检项名称或别名冲突。请核对方法版本、名称与子结果后重试。", 409) from exc
+            conn.execute("UPDATE workflow_projects SET config_json=? WHERE project=?", (after.model_dump_json(), project))
+            event(conn, project, specification_id, "register_assay_components", actor, "确认质量标准检项", {"links": added})
+            revision = bump(conn, project)
+        result = {"revision": revision, "links": links, "added": len(added), "existing": len(links) - len(added)}
         remember(conn, project, actor, command.idempotency_key, payload, result)
         return result
 

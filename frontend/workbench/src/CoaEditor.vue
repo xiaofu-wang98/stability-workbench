@@ -183,6 +183,7 @@ function save() {
       </form>
     </div>
     <template v-if="selected && state">
+      <p>项目 <RouterLink :to="'/projects/' + encodeURIComponent(project)">{{ project }}</RouterLink></p>
       <p>当前样品 {{ selected.batch }} · {{ selected.material_stage }} · {{ selected.sample_type }} · {{ selected.presentation }} · {{ selected.packaging }} · {{ selected.purpose }}</p>
       <p>COA 版本 {{ state.version || '未填写' }}。留空会保留已保存的结果。</p>
       <div class="coa-actions">

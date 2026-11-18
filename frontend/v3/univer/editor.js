@@ -29,16 +29,36 @@ function clipboardRows(text) {
   return rows;
 }
 
-export function mountWorksheet(container, values, layout, editable, { onChange, onError, canEdit, fixedColumns = 1 }) {
+export function mountWorksheet(container, values, layout, editable, { onChange, onError, canEdit, onSelect, fixedColumns = 1 }) {
   const { univer, univerAPI } = createUniver({
     locale: LocaleType.ZH_CN,
     locales: { [LocaleType.ZH_CN]: mergeLocales(zhCN) },
     presets: [UniverSheetsCorePreset({
       container, header: false, toolbar: false, formulaBar: false, footer: false,
-      contextMenu: false, disableAutoFocus: true,
+      contextMenu: false,
     })],
   });
   const sheetId = 'study';
+  const measure = document.createElement('canvas').getContext('2d');
+  measure.font = '13px "Microsoft YaHei", sans-serif';
+  const originalHeights = layout.row_heights || {};
+  const displayedHeights = values.map((row, index) => {
+    const fieldCount = index === 1 ? row.length : fixedColumns;
+    const lines = Math.max(...row.slice(0, fieldCount).map((value, column) => {
+      const width = (layout.column_widths?.[column] || (column === 0 ? 225 : 130)) - 16;
+      return String(value).split('\n').reduce((total, line) => {
+        let count = 1;
+        let used = 0;
+        for (const char of line) {
+          const size = measure.measureText(char).width;
+          if (used && used + size > width) { count++; used = 0; }
+          used += size;
+        }
+        return total + count;
+      }, 0);
+    }));
+    return Math.max(originalHeights[index] || 40, Math.min(350, lines * 18 + 4));
+  });
   const cellData = Object.fromEntries(values.map((row, r) => [r, Object.fromEntries(
     row.map((value, c) => [c, { v: value, t: CellValueType.STRING, s: r === 0 || (r === 1 && c < fixedColumns) ? 'heading' : r === 1 || c < fixedColumns ? 'option' : 'entry' }])
   )]));
@@ -55,7 +75,8 @@ export function mountWorksheet(container, values, layout, editable, { onChange, 
         id: sheetId, name: '研究工作表', cellData,
         rowCount: values.length, columnCount: values[1].length,
         defaultColumnWidth: 130, defaultRowHeight: 40,
-        rowData: Object.fromEntries(Object.entries(layout.row_heights || {}).map(([i, h]) => [i, { h }])),
+        rowData: Object.fromEntries(displayedHeights.map((h, index) => [index, { h }])),
+        freeze: { xSplit: fixedColumns, ySplit: 0, startColumn: fixedColumns, startRow: -1 },
         columnData: {
           0: { w: 225 },
           ...Object.fromEntries(Object.entries(layout.column_widths || {}).map(([i, w]) => [i, { w }])),
@@ -66,6 +87,14 @@ export function mountWorksheet(container, values, layout, editable, { onChange, 
   });
   workbook.setEditable(editable);
   const subscription = univerAPI.addEvent(univerAPI.Event.SheetValueChanged, onChange);
+  const editGuard = univerAPI.addEvent(univerAPI.Event.BeforeSheetEditStart, event => {
+    if (!editable || !canEdit(event.row, event.column)) {
+      event.cancel = true;
+      if (editable) onError('请选择应检结果格录入。');
+    }
+  });
+  const selectionListeners = onSelect ? [univerAPI.Event.SelectionMoveEnd, univerAPI.Event.SelectionChanged]
+    .map(name => univerAPI.addEvent(name, event => onSelect(event.selections.at(-1)))) : [];
   const isLegalPlaceholder = val => {
     if (val === null || val === undefined) return true;
     const s = String(val).trim().toLowerCase();
@@ -77,7 +106,7 @@ export function mountWorksheet(container, values, layout, editable, { onChange, 
   const paste = event => {
     const text = event.clipboardData?.getData('text/plain');
     const range = workbook.getActiveSheet().getActiveRange()?.getRange();
-    if (!editable || !range || !text || !container.contains(event.target)) return;
+    if (!editable || !range || !text || !container.contains(event.target) || workbook.isCellEditing()) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     const rows = clipboardRows(text.replace(/\r\n/g, '\n'));
@@ -133,6 +162,7 @@ export function mountWorksheet(container, values, layout, editable, { onChange, 
 
   return {
     setEditable(value) { editable = value; workbook.setEditable(value); },
+    async finishEditing() { if (workbook.isCellEditing()) await workbook.endEditingAsync(); },
     selection() { return workbook.getActiveSheet().getActiveRange()?.getRange(); },
     mergeTitle(merge) {
       const range = workbook.getActiveSheet().getRange(0, 0, 1, values[1].length);
@@ -155,7 +185,11 @@ export function mountWorksheet(container, values, layout, editable, { onChange, 
       return {
         rows,
         layout: {
-          row_heights: Object.fromEntries(Object.entries(sheet.rowData || {}).filter(([, row]) => row.h).map(([i, row]) => [i, Math.round(row.h)])),
+          row_heights: Object.fromEntries(Object.entries(sheet.rowData || {}).flatMap(([i, row]) => {
+            const height = Math.round(row.h);
+            if (height !== displayedHeights[i]) return [[i, height]];
+            return originalHeights[i] ? [[i, originalHeights[i]]] : [];
+          })),
           column_widths: Object.fromEntries(Object.entries(sheet.columnData || {}).filter(([, col]) => col.w).map(([i, col]) => [i, Math.round(col.w)])),
           title_merge_to: sheet.mergeData[0]?.endColumn || 0,
         },
@@ -164,6 +198,8 @@ export function mountWorksheet(container, values, layout, editable, { onChange, 
     dispose() {
       document.removeEventListener('paste', paste, true);
       subscription.dispose();
+      editGuard.dispose();
+      selectionListeners.forEach(listener => listener.dispose());
       univer.dispose();
     },
   };

@@ -457,9 +457,6 @@ async function perform(action: () => Promise<void>) {
   finally { busy.value = false; }
 }
 
-function openInvalidDetails(event: Event) {
-  if (event.target instanceof HTMLElement && event.target.closest('.study-details')) detailsOpen.value = true;
-}
 function readFields(form: HTMLFormElement) {
   return Object.fromEntries([...new FormData(form)].map(([key, value]) => [key, String(value).trim()]));
 }
@@ -541,7 +538,28 @@ function addItems(event: Event) {
   });
 }
 
-function save(event: Event) {
+async function save(event: Event) {
+  const form = event.target as HTMLFormElement;
+  const names: Record<string, string> = { batch: '批号', sample_type: '材料类别', material_stage: '材料阶段',
+    presentation: '规格', start_date: '开始日期', study_id: '方案编号或内部研究名称', study: '研究类型',
+    condition: '条件', basis: '计划依据', reviewed: '方案和应检范围核对', reviewed_history: '历史应检范围核对' };
+  const invalid = [...form.elements].filter((input): input is HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement =>
+    (input instanceof HTMLInputElement || input instanceof HTMLSelectElement || input instanceof HTMLTextAreaElement)
+    && input.willValidate && (!input.validity.valid || (input.required && input.type === 'text' && !input.value.trim())));
+  const missing = [...new Set([...(project.value ? [] : ['项目编号']),
+    ...invalid.map(input => names[input.name] || input.name), ...(!selected.value.length ? ['应检项目'] : []),
+    ...(!templatePoints.value.length ? ['时间点'] : [])])];
+  if (missing.length) {
+    error.value = '请补齐或核对：' + missing.join('、') + '。';
+    const first = !project.value ? form.querySelector<HTMLElement>('[aria-label="项目"]')
+      : invalid[0] || form.querySelector<HTMLElement>(!selected.value.length ? '[aria-label="应检项目"]' : '[name="points"]');
+    if (first?.closest('.study-details')) detailsOpen.value = true;
+    for (let details = first?.closest('details'); details; details = details.parentElement?.closest('details')) details.open = true;
+    await nextTick();
+    first?.focus();
+    first?.scrollIntoView({ block: 'center' });
+    return;
+  }
   const data = fields(event);
   return perform(async () => {
     if (draftId && !protocolLoaded.value) throw new Error('请重新打开原方案。');
@@ -682,7 +700,7 @@ function save(event: Event) {
     <p v-if="seed?.source_timepoints?.length" class="pending">已带入原表时间点 {{ seed.source_timepoints.join('、') }}。历史空格的应检状态请对照方案核对。</p>
     <section class="panel entry-panel">
       <h2>稳定性研究通用表</h2>
-      <form ref="draftForm" class="fields ip281-template" @submit.prevent="save" @invalid.capture="openInvalidDetails">
+      <form ref="draftForm" class="fields ip281-template" novalidate @submit.prevent="save">
         <input v-if="seedSlot" type="hidden" name="seed_slot_id" :value="seedSlot">
         <div class="template-header-value"><b>项目编号</b><NSelect :value="project || null" aria-label="项目" filterable clearable placeholder="输入项目编号或名称搜索..." :disabled="busy || Boolean(resumed || sampleId || copyId || seedSlot)" @update:value="switchProject"
           :options="projects.map(p => ({ value: p.project, label: p.project + (p.name ? ' · ' + p.name : '') }))" /></div>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 import { NAlert, NButton, NSelect } from 'naive-ui';
 import { api, type Project } from './api';
 
@@ -20,13 +20,26 @@ type Row = {
   result_type?: 'numeric' | 'qualitative';
 };
 
-const props = defineProps<{ specification: { id: string; filename?: string; rows: Row[] } }>();
+const props = defineProps<{ specification: { id: string; filename?: string; rows: Row[] }; initialProject?: string }>();
 const emit = defineEmits<{ registered: [] }>();
 const projects = ref<Project[]>([]);
-const project = ref('');
+const project = ref(props.initialProject || '');
 const error = ref('');
 const message = ref('');
 const busy = ref(false);
+const loadingLinks = ref(false);
+const reviewed = ref(false);
+type Registration = { table: number; row: number; item_id: string; assay_zh: string; component_zh: string;
+  method: string; method_version: string; unit: string; result_type: string };
+const registered = ref<Record<string, Registration>>({});
+const keyFor = (row: { table: number; row: number }) => row.table + ':' + row.row;
+const componentsPath = (code: string) => '/projects/' + encodeURIComponent(code) + '/specifications/' + props.specification.id + '/components';
+async function readLinks(code: string, signal?: AbortSignal) {
+  const linked = code ? await api<Registration[]>(componentsPath(code), { signal }) : [];
+  if (signal?.aborted || project.value !== code) return;
+  registered.value = Object.fromEntries(linked.map(entry => [keyFor(entry), entry]));
+  for (const item of items.value) if (registered.value[keyFor(item)]) item.selected = false;
+}
 
 function bilingual(value: string) {
   if (!value) return ['', ''];
@@ -52,23 +65,6 @@ const items = ref(props.specification.rows.map(row => {
   const method = row.method_zh || defaultMethodZh || row.method || '';
   const comp_zh = row.component || assay_zh || '';
   const comp_en = row.component_en || assay_en || '';
-  let unit = row.unit || '';
-  let result_type = row.result_type || 'numeric';
-
-  // 行业领域字典兜底填充（若解析未抓取到）
-  if (!unit) {
-    if (/纯度|SEC|CE-SDS|CEX|变异体|活性|峰/i.test(assay_zh) || /%/i.test(row.criterion)) unit = '%';
-    else if (/DNA|HCP|蛋白A|残留/i.test(assay_zh) || /ppm/i.test(row.criterion)) unit = 'ppm';
-    else if (/浓度|含量/i.test(assay_zh) || /mg\/ml/i.test(row.criterion)) unit = 'mg/ml';
-    else if (/内毒素/i.test(assay_zh) || /EU/i.test(row.criterion)) unit = 'EU/ml';
-    else if (/微生物/i.test(assay_zh) || /cfu/i.test(row.criterion)) unit = 'cfu/10ml';
-    else if (/渗透压/i.test(assay_zh) || /mOsmol/i.test(row.criterion)) unit = 'mOsmol/kg';
-  }
-  if (/比色液|黄色|浊度|外观|颜色|澄清度|图谱一致|肽图|无菌/i.test(row.criterion || assay_zh)) {
-    if (!/mg|ppm|EU|%|cfu|NTU|\~|～/i.test(row.criterion || '')) {
-      result_type = 'qualitative';
-    }
-  }
 
   return {
     table: row.table,
@@ -80,14 +76,27 @@ const items = ref(props.specification.rows.map(row => {
     component_en: comp_en,
     method,
     method_version: '',
-    unit,
-    result_type,
+    unit: row.unit || '',
+    result_type: row.result_type || '',
   };
 }));
 
 function toggleAll() {
-  items.value.forEach(item => { item.selected = allSelected.value; });
+  items.value.forEach(item => { item.selected = !registered.value[keyFor(item)] && allSelected.value; });
 }
+
+watch(project, async (code, _, onCleanup) => {
+  const controller = new AbortController();
+  onCleanup(() => controller.abort());
+  reviewed.value = false;
+  registered.value = {};
+  allSelected.value = true;
+  toggleAll();
+  loadingLinks.value = true;
+  try { await readLinks(code, controller.signal); }
+  catch (e) { if (!controller.signal.aborted) error.value = (e as Error).message; }
+  finally { if (!controller.signal.aborted) loadingLinks.value = false; }
+}, { immediate: true });
 
 onMounted(async () => {
   try {
@@ -117,6 +126,7 @@ async function confirm() {
     error.value = '请先在上方下拉框中选择适用项目（例如 IP501 / 501）！';
     return;
   }
+  if (!reviewed.value || loadingLinks.value || busy.value) return;
   busy.value = true;
   try {
     const components = items.value.filter(item => item.selected)
@@ -126,12 +136,13 @@ async function confirm() {
     }
     const base = '/projects/' + encodeURIComponent(project.value);
     const current = await api<{ base_revision: number }>(base + '/configuration');
-    await api(base + '/specifications/' + props.specification.id + '/components', {
+    const result = await api<{ added: number; existing: number }>(componentsPath(project.value), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ revision: current.base_revision, components, idempotency_key: crypto.randomUUID() }),
     });
-    message.value = `已关联 ${components.length} 条标准至项目 ${project.value}，二级子结果可在稳定性研究表中自动复用。`;
+    message.value = `项目 ${project.value} 新登记 ${result.added} 条，已有 ${result.existing} 条。`;
+    await readLinks(project.value);
     emit('registered');
   } catch (e) {
     error.value = (e as Error).message;
@@ -157,6 +168,8 @@ async function confirm() {
             v-model:value="project"
             filterable
             clearable
+            :disabled="busy"
+            aria-label="标准适用项目"
             placeholder="输入项目编号或名称快速检索 (如 501 / IP281)..."
             :options="projects.map(item => ({ value: item.project, label: item.project + (item.name ? ' · ' + item.name : '') }))"
           />
@@ -179,12 +192,18 @@ async function confirm() {
             <tr v-for="(item, index) in items" :key="item.table + ':' + item.row">
               <td style="max-width: 320px;">
                 <label style="font-weight: bold; display: block; margin-bottom: 4px;">
-                  <input v-model="item.selected" type="checkbox"> 表 {{ item.table }} · 行 {{ item.row }}
+                  <input v-model="item.selected" type="checkbox" :disabled="Boolean(registered[keyFor(item)]) || busy || loadingLinks"> 表 {{ item.table }} · 行 {{ item.row }}
                 </label>
+                <p v-if="registered[keyFor(item)]">已关联 · {{ registered[keyFor(item)].assay_zh }} ·
+                  {{ registered[keyFor(item)].component_zh }} · {{ registered[keyFor(item)].method }}
+                  {{ registered[keyFor(item)].method_version }} · {{ registered[keyFor(item)].unit || '无单位' }}
+                  · {{ registered[keyFor(item)].result_type }}</p>
+                <span v-else>待登记</span>
                 <div style="white-space: pre-wrap; font-size: 12px; color: #606266; line-height: 1.4;">
                   {{ props.specification.rows[index]?.criterion }}
                 </div>
               </td>
+              <template v-if="!registered[keyFor(item)]">
               <td>
                 <input v-model="item.assay_zh" aria-label="检项名称" placeholder="中文检项" style="margin-bottom: 4px; width: 100%;">
                 <input v-model="item.assay_en" aria-label="检项英文名" placeholder="English Assay" style="width: 100%;">
@@ -205,12 +224,16 @@ async function confirm() {
                   <option value="qualitative">文字 (qualitative)</option>
                 </select>
               </td>
+              </template>
+              <td v-else colspan="4">使用已登记定义；如有差异，请先核对原件和项目字典。</td>
             </tr>
           </tbody>
         </table>
       </div>
       <div style="margin-top: 14px; display: flex; align-items: center; gap: 14px;">
-        <NButton attr-type="submit" :type="project ? 'primary' : 'default'" :disabled="busy || !items.some(item => item.selected)">
+        <label><input v-model="reviewed" type="checkbox" :disabled="busy || loadingLinks">
+          已逐条核对所选条款的项目、材料、方法、单位和结果类型</label>
+        <NButton attr-type="submit" :type="project ? 'primary' : 'default'" :disabled="busy || loadingLinks || !reviewed || !items.some(item => item.selected)">
           {{ !project ? '请先在上方选择适用项目' : `确认所选 ${items.filter(i => i.selected).length} 条标准并入库` }}
         </NButton>
         <span v-if="!project" style="color: #e6a23c; font-size: 13px;">⚠️ 请在上方指定项目（如 IP501 / 501）后点击提交</span>

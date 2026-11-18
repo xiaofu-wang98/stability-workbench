@@ -86,6 +86,8 @@ const candidates = computed(() => preview.value?.candidates.filter(c =>
   !preview.value?.sheet_confirmation_required || c.location.section === section.value) ?? []);
 const initial = computed(() => candidates.value.filter(c => c.lifecycle === 'draft' && c.allowed_actions.includes('confirm_initial')));
 const unreceived = computed(() => candidates.value.filter(c => c.lifecycle === 'draft' && !c.received));
+const needsReceipt = computed(() => Boolean(unreceived.value.length || preflight.value?.unresolved.includes('not_received')));
+const sourceOnly = computed(() => Boolean(preflight.value && !candidates.value.length));
 const unresolvedIssues = computed(() => preflight.value?.unresolved.filter(
   item => item !== 'not_received' && !item.startsWith('not_received:'),
 ) ?? []);
@@ -94,8 +96,10 @@ const nextSection = computed(() => sections.value[sections.value.indexOf(section
 const progressText = computed(() => {
   const current = preflight.value;
   if (!current) return '已解析';
+  if (sourceOnly.value && current.state === 'committed') return '已完成辅助来源归档 · 0 条正式结果';
   if (current.state === 'committed') return linkedSheets.value.length ? '已正式写入 · 研究表已关联' : '已正式写入 · 待关联研究表';
   if (current.unresolved.some(item => item === 'not_received' || item.startsWith('not_received:'))) return '已解析 · 待接收';
+  if (sourceOnly.value && current.can_commit) return '已接收 · 可确认辅助来源归档';
   return current.can_commit ? '已接收 · 可正式写入' : '已接收 · 待核对';
 });
 const reviewCandidates = computed(() => {
@@ -284,14 +288,15 @@ function changeRole() {
 function receiveSheet() {
   const source = preview.value;
   const check = preflight.value;
-  if (!source || !check || !unreceived.value.length) return;
+  if (!source || !check || !needsReceipt.value) return;
   const candidateIds = unreceived.value.map(candidate => candidate.id);
   return run(async () => {
     await submit(source.preview_id, '/receive', {
       base_revision: check.base_revision, defer_confirmation: true, candidate_ids: candidateIds,
     });
     await open(source.preview_id, check.section);
-    status.value = `已接收 ${candidateIds.length} 条候选供核对，正式结果尚未写入。`;
+    status.value = candidateIds.length ? `已接收 ${candidateIds.length} 条候选供核对，正式结果尚未写入。`
+      : '已接收原件供区域核对。';
   });
 }
 async function commit() {
@@ -309,11 +314,13 @@ async function commit() {
         identity_confirmed: true, intent: 'initial', reason,
       })),
     };
+    const auxiliary = sourceOnly.value;
     const result = await submit<CommitReceipt>(
-      source.preview_id, check ? '/v5/commit' : '/confirm', command);
+      source.preview_id, auxiliary ? '/v5/auxiliary-source' : check ? '/v5/commit' : '/confirm', command);
     try { await open(source.preview_id, check?.section); }
     catch { status.value = '已写入结果。请重新打开此导入记录读取最新状态。'; return; }
-    status.value = `本次写入 ${result.result_version_ids.length} 条结果版本。`;
+    status.value = auxiliary ? '已归档辅助来源，未产生检测结果版本。'
+      : `本次写入 ${result.result_version_ids.length} 条结果版本。`;
     worksheetSync.value = result.worksheet_sync ?? [];
   });
 }
@@ -370,6 +377,9 @@ function approveDecision() {
 }
 async function previewCellExclusion(candidate: Candidate) {
   excludeCandidate.value = candidate.id;
+  await showSourceReview();
+}
+async function showSourceReview() {
   reviewSources.value = true;
   await nextTick();
   sourceReviewPanel.value?.scrollIntoView({ block: 'start' });
@@ -537,9 +547,9 @@ function time(record?: Result) {
         <p v-if="blockerCount">还有 {{ blockerCount }} 项需要核对。逐项清单与本次预检对应。</p>
         <span v-if="preflight.review_required.length">{{ preflight.review_required.length }} 条结果的处理决定待复核。</span>
         <span v-if="!unreceived.length && !preflight.blocker_reasons.length && !unresolvedIssues.length && !preflight.review_required.length">此工作表还未通过写入预检。</span>
-        <NButton text :disabled="busy" @click="reviewSources = true">查看本表来源核对建议</NButton>
+        <NButton text :disabled="busy" @click="showSourceReview">查看本表来源核对建议</NButton>
       </NAlert>
-      <p v-if="preflight?.state === 'committed'">此工作表已写入。</p>
+      <p v-if="preflight?.state === 'committed'">{{ sourceOnly ? '此工作表已作为辅助来源归档。' : '此工作表已写入。' }}</p>
       <p v-if="commitReceipt" class="commit-receipt">新建结果版本 {{ commitReceipt.result_version_ids.length }} 条 · 沿用已有结果
         {{ commitReceipt.historical_count + (commitReceipt.counts.repeat_source ?? 0) + (commitReceipt.counts.keep_old ?? 0) }} 条 ·
         待处理研究 {{ worksheetSync.filter(item => item.status === 'needs_input').length }} 项 · 已关联研究表 {{ linkedSheets.length }} 张</p>
@@ -556,13 +566,14 @@ function time(record?: Result) {
         部分记录需要进一步核对，当前按钮只提交可写入的首次结果。
       </NAlert>
       <div class="entry-actions import-review-actions">
-        <NButton v-if="preflight && unreceived.length" :disabled="busy" @click="receiveSheet">接收 {{ unreceived.length }} 条候选供核对</NButton>
+        <NButton v-if="preflight && needsReceipt" :disabled="busy" @click="receiveSheet">
+          {{ unreceived.length ? '接收 ' + unreceived.length + ' 条候选供核对' : '接收原件供区域核对' }}</NButton>
         <NButton type="primary" :loading="busy" :disabled="preview.sheet_confirmation_required ? !preflight?.can_commit || preflight.state === 'committed' : !initial.length"
-          @click="commit">{{ preview.sheet_confirmation_required ? '核对无误，写入本工作表' : '核对无误，写入 ' + initial.length + ' 条首次结果' }}</NButton>
+          @click="commit">{{ sourceOnly ? '确认只归档辅助来源' : preview.sheet_confirmation_required ? '核对无误，写入本工作表' : '核对无误，写入 ' + initial.length + ' 条首次结果' }}</NButton>
         <RouterLink :to="'/projects/' + encodeURIComponent(preview.project)">打开项目数据</RouterLink>
         <RouterLink :to="{ path: '/deliveries', query: { project: preview.project } }">打开生成与交付</RouterLink>
         <RouterLink v-for="sheet in linkedSheets" :key="sheet.id" :to="'/worksheets/' + encodeURIComponent(sheet.id)">打开研究表 {{ sheet.name }}</RouterLink>
-        <NButton v-if="preflight?.state === 'committed'" :loading="busy" @click="syncWorksheets">同步研究表</NButton>
+        <NButton v-if="preflight?.state === 'committed' && !sourceOnly" :loading="busy" @click="syncWorksheets">同步研究表</NButton>
         <NButton v-if="nextSection" :disabled="busy" @click="run(() => selectSection(nextSection))">继续处理下一个工作表</NButton>
       </div>
     </section>

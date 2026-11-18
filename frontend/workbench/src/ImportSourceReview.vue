@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 import { NAlert, NButton } from 'naive-ui';
 import { api } from './api';
 
@@ -22,6 +22,8 @@ const groups = ref<Group[]>([]);
 const tasks = ref<ManualTask[]>([]);
 const blockers = ref<Blocker[]>([]);
 const manual = ref<ManualTask>();
+const manualForm = ref<HTMLFormElement>();
+const planHeading = ref<HTMLElement>();
 const manualValues = ref<Record<string, string>>({});
 const visibleTasks = ref(20);
 const fieldNames: Record<string, string> = { batch: '批号', presentation: '规格', sample_type: '材料类别',
@@ -104,11 +106,13 @@ function describeTask(detail: string) {
   }
 }
 
-function chooseManual(task: ManualTask) {
+async function chooseManual(task: ManualTask) {
   manual.value = task;
   manualValues.value = {};
   plan.value = undefined;
   selected.value = undefined;
+  await nextTick();
+  manualForm.value?.scrollIntoView({ block: 'start' });
 }
 function activeRevisionText(task: ManualTask) {
   try {
@@ -134,6 +138,8 @@ function inspect(group: Group) {
     reason.value = '';
     key = crypto.randomUUID();
     plan.value = await post('/tasks/preview', group.scope);
+    await nextTick();
+    planHeading.value?.scrollIntoView({ block: 'start' });
   });
 }
 function save() {
@@ -194,7 +200,7 @@ function renewRequestKey() { key = crypto.randomUUID(); }
       </li></ul>
       <NButton v-if="visibleTasks < tasks.length" :disabled="busy" @click="visibleTasks += 20">显示更多问题</NButton>
     </details>
-    <form v-if="manual" class="review-actions" @submit.prevent="inspectManual" @input="plan = undefined" @change="plan = undefined">
+    <form v-if="manual" ref="manualForm" class="review-actions" @submit.prevent="inspectManual" @input="plan = undefined" @change="plan = undefined">
       <p>{{ describeTask(manual.detail) }}</p>
       <p>{{ manual.evidence.map(e => e.section + ' · 行 ' + e.row + ' 列 ' + e.column).join('；') }} · 影响 {{ manual.affected_results }} 条</p>
       <div v-if="manual.guidance">
@@ -235,7 +241,7 @@ function renewRequestKey() { key = crypto.randomUUID(); }
       <NButton attr-type="submit" :disabled="busy">预览人工核对</NButton>
     </form>
     <template v-if="plan">
-      <h3>{{ selected?.title }} · {{ plan.changes.length }} 项待核对</h3>
+      <h3 ref="planHeading">{{ selected?.title }} · {{ plan.changes.length }} 项待核对</h3>
       <p>{{ plan.notice }}</p>
       <div class="matrix"><table>
         <thead><tr><th>原件位置</th><th>建议处理</th><th>原文与预览</th></tr></thead>
@@ -253,7 +259,7 @@ function renewRequestKey() { key = crypto.randomUUID(); }
         <NButton attr-type="submit" type="primary" :disabled="busy || !plan.changes.length || !reason.trim()">保存这些来源决定</NButton>
       </form>
     </template>
-    <NButton :disabled="busy" @click="emit('cancel')">关闭来源核对</NButton>
+    <NButton :disabled="busy" @click="emit('cancel')">返回当前原件</NButton>
   </section>
 </template>
 

@@ -264,3 +264,50 @@ def test_coa_word_round_trip_and_version_guard(tmp_path):
         assert conn.execute('SELECT count(*) FROM coa_versions').fetchone()[0] == 3
         assert conn.execute('SELECT count(*) FROM coa_sources').fetchone()[0] == 2
         assert conn.execute('PRAGMA foreign_key_check').fetchall() == []
+
+
+def test_repeated_standard_registration_reports_existing_and_conflicts(tmp_path):
+    store = Store(tmp_path)
+    actor = actor_for_role("reviewer", "Reviewer", Role.ADMIN)
+    word = Document()
+    table = word.add_table(rows=3, cols=4)
+    for row, values in enumerate((("Test Item", "Subresult", "Method", "Specification"),
+                                  ("Purity", "Monomer", "SEC", "≥90%"),
+                                  ("Purity", "HMW", "SEC", "≤5%"))):
+        for column, value in enumerate(values):
+            table.cell(row, column).text = value
+    source = content(word)
+    with TestClient(create_app(store, [ProjectConfig(project="P"), ProjectConfig(project="Q")], actor)) as client:
+        def upload():
+            response = client.post("/api/v1/specifications", files={"file": ("P DS.docx", source)})
+            assert response.is_success, response.text
+            return response.json()["id"]
+
+        spec = upload()
+        assert upload() == spec
+        base = "/api/v1/projects/P"
+        endpoint = base + f"/specifications/{spec}/components"
+        monomer = {"table": 1, "row": 2, "assay_zh": "Purity", "component_zh": "Monomer",
+                   "method": "SEC", "unit": "%", "result_type": "numeric"}
+        hmw = {**monomer, "row": 3, "component_zh": "HMW"}
+
+        def register(key, *components):
+            revision = client.get(base + "/configuration").json()["base_revision"]
+            return client.post(endpoint, json={"revision": revision, "idempotency_key": key, "components": components})
+
+        added = register("add", monomer)
+        assert added.is_success, added.text
+        repeated = register("repeat", monomer).json()
+        assert repeated == {**added.json(), "added": 0, "existing": 1}
+        for change in ({"method": "NR CE-SDS"}, {"unit": "ppm"}, {"component_zh": "Another component"}):
+            conflict = register("conflict-" + next(iter(change)), hmw, {**monomer, **change})
+            assert conflict.status_code == 409, conflict.text
+            assert "表 1 行 2" in conflict.json()["message"]
+            assert len(client.get(endpoint).json()) == 1
+        expanded = register("expand", monomer, hmw)
+        assert expanded.is_success, expanded.text
+        assert (expanded.json()["added"], expanded.json()["existing"]) == (1, 1)
+        rows = client.get(endpoint).json()
+        assert [row["component_zh"] for row in rows] == ["Monomer", "HMW"]
+        assert len({row["item_id"] for row in rows}) == 2
+        assert client.get(endpoint.replace("/P/", "/Q/")).json() == []

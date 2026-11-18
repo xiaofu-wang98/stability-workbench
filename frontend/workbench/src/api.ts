@@ -128,7 +128,7 @@ export interface Worksheet extends WorksheetSummary {
   project: string;
   identity: { batch: string; condition: string; orientation: string; study_id: string; study: string;
     sample_type: string; presentation: string; purpose: string; reporting_basis: string };
-  rows: { id: string; item_id: string; label: string; method: string; unit: string;
+  rows: { id: string; item_id: string; label: string; source_test_item?: string; method: string; unit: string;
     plan_key?: string; reporting_basis?: string;
     criteria_text?: string;
     source_criteria?: string[];

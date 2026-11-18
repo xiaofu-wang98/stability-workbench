@@ -14,10 +14,12 @@ const emit = defineEmits<{ saved: [Worksheet]; editing: [boolean] }>();
 type Snapshot = { rows: string[][]; layout: Worksheet['layout'] };
 type Recovery = { selection: string; snapshot: Snapshot; reason: string };
 type Range = { startRow: number; endRow: number; startColumn: number; endColumn: number };
-type Editor = { snapshot(): Snapshot; selection(): Range | undefined; setEditable(value: boolean): void; mergeTitle(merge: boolean): void; dispose(): void };
+type Editor = { snapshot(): Snapshot; selection(): Range | undefined; setEditable(value: boolean): void;
+  finishEditing(): Promise<void>; mergeTitle(merge: boolean): void; dispose(): void };
 type Change = { row_id: string; point_id: string; value: string; intent: 'initial' | 'correction'; expected_version_id: string | null };
 
 const grid = ref<HTMLDivElement>();
+const activeInspection = ref<{ item: string; criteria: string; point: string }>();
 const editing = ref(false);
 const busy = ref(false);
 const dirty = ref(false);
@@ -131,12 +133,14 @@ async function mount(restore = false) {
   await nextTick();
   if (!grid.value || disposed) return;
   editor?.dispose();
+  activeInspection.value = undefined;
   const existing = new Map(latest.cells.map(cell => [cell.row_id + ':' + cell.point_id, cell]));
   const values = [
     [latest.name, ...latest.points.map(() => '')],
     ['检验项目 / Test Item', ...latest.points.map(point => [point.label, point.planned_date, point.signed_status].filter(Boolean).join('\n'))],
     ...latest.rows.map(row => [
-      [row.label, row.method, row.reporting_basis ?? latest.identity.reporting_basis, row.unit].filter(Boolean).join('\n'),
+      [row.source_test_item, row.source_test_item === row.label ? '' : row.label, row.method,
+        row.reporting_basis ?? latest.identity.reporting_basis, row.unit].filter(Boolean).join('\n'),
       ...latest.points.map(point => existing.get(row.id + ':' + point.id)?.raw ??
         (point.required_row_ids.includes(row.id) ? '' : '—')),
     ]),
@@ -168,6 +172,13 @@ async function mount(restore = false) {
     const mounted = mountWorksheet(grid.value, displayed, visualLayout, !expired.value, {
       ...hooks, fixedColumns: 2,
       canEdit: (r: number, c: number) => c > 1 && hooks.canEdit(r, c - 1),
+      onSelect: (range?: Range) => {
+        const index = (range?.startRow ?? 0) - 2;
+        activeInspection.value = index >= 0 && index < latest.rows.length ? {
+          item: rows[index + 2][0], criteria: criteria[index + 2],
+          point: latest.points[(range?.startColumn ?? 0) - 2]?.label || '',
+        } : undefined;
+      },
     });
     return {
       ...mounted,
@@ -237,8 +248,9 @@ async function save() {
   if (!editor || expired.value) return;
   busy.value = true;
   error.value = '';
-  editor.setEditable(false);
   try {
+    await editor.finishEditing();
+    editor.setEditable(false);
     const snapshot = editor.snapshot();
     const changes: Change[] = [];
     const existing = new Map(current.cells.map(cell => [cell.row_id + ':' + cell.point_id, cell]));
@@ -652,6 +664,11 @@ onBeforeUnmount(() => {
       <NButton :disabled="busy" @click="retest = undefined">取消</NButton>
     </div>
   </form>
+  <details v-if="editing" class="worksheet-active-cell">
+    <summary>查看所选检项与标准 <template v-if="activeInspection">· {{ activeInspection.point }} {{ activeInspection.item.split('\n')[0] }}</template></summary>
+    <div v-if="activeInspection"><p>{{ activeInspection.item }}</p><p>{{ activeInspection.criteria || '未关联可接受标准' }}</p></div>
+    <p v-else>在表格中选择检项或结果格。</p>
+  </details>
   <div v-if="editing" ref="grid" class="worksheet-editor" aria-label="结果编辑表格"></div>
 </template>
 

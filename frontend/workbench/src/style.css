@@ -4,9 +4,13 @@ body { margin: 0; }
 a { color: #22645f; text-decoration: none; }
 a:hover { text-decoration: underline; }
 .shell { min-height: 100vh; display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); }
-.sidebar { display: flex; flex-direction: column; background: #153532; color: #fff; padding: 28px 16px 20px; }
+.sidebar { display: flex; flex-direction: column; background: #153532; color: #fff; padding: 28px 16px 20px; position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto; }
 .brand { display: flex; align-items: center; gap: 11px; margin: 0 0 38px 8px; font-size: 18px; font-weight: 700; color: #fff; }
 .brand-mark { background: #d3ebe5; color: #153532; border-radius: 6px; display: grid; place-items: center; width: 33px; height: 33px; }
+.sidebar-project { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 8px 16px; }
+.sidebar-project span { font-size: 12px; color: #d6e5e2; }
+.sidebar-project a { color: #fff; }
+.sidebar-project a:last-child { flex-basis: 100%; font-size: 12px; }
 nav { display: grid; gap: 5px; }
 nav a { color: #d6e5e2; padding: 11px 14px; border-radius: 6px; }
 nav a.router-link-active, nav a:hover { background: #27514b; color: #fff; text-decoration: none; }
@@ -31,11 +35,14 @@ thead tr > :first-child { z-index: 2; }
 .worksheet-matrix :is(th, td) { max-width: 260px; overflow-wrap: anywhere; }
 .worksheet-matrix tr > :first-child { width: 190px; max-width: min(220px, 50vw); }
 .worksheet-matrix:focus-visible { outline: 2px solid #22645f; outline-offset: 2px; }
+.worksheet-active-cell { padding: 6px 10px; background: #e0eeea; border-left: 3px solid #22645f; }
+.worksheet-active-cell div { display: flex; gap: 20px; flex-wrap: wrap; }
+.worksheet-active-cell p { white-space: pre-wrap; overflow-wrap: anywhere; }
 .pending { color: #885218; }
 .muted { color: #627572; }
 @media (max-width: 780px) {
   .shell { grid-template-columns: minmax(0, 1fr); }
-  .sidebar { padding: 14px; }
+  .sidebar { padding: 14px; position: static; height: auto; }
   .brand { margin: 0 0 10px; }
   nav { display: flex; flex-wrap: wrap; }
   .local { display: none; }
