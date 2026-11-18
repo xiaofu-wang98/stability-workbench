@@ -393,11 +393,12 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
     @app.get('/api/v1/previews/{preview_id}/v5/review-actions')
     def source_review_actions(preview_id: str, section: str, operator: ActorDependency):
         require(operator, Capability.VIEW)
-        from .review_tasks import build_action_groups, current_review
+        from .review_tasks import blocker_cards, build_action_groups, current_review
         with store.read() as conn:
             upload = workflow._upload(conn, preview_id)
             preview, sheets, flights, tasks, _ = current_review(workflow, conn, upload, operator, _shared=True)
-            if not any(flight.section == section for flight in flights):
+            flight = next((flight for flight in flights if flight.section == section), None)
+            if flight is None:
                 raise WorkflowError('unknown_sheet', '该来源中不存在此工作表。', 404)
             manual = [
                 {'id': task.id, 'detail': task.detail, 'fields': task.fields, 'evidence': task.evidence,
@@ -408,7 +409,8 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
                 and (task.code == 'identity' or ('manual' in task.actions
                      and all('issue_id' in member for member in task.members)))
             ]
-            return {'groups': build_action_groups(tasks, sheets, section, preview), 'manual': manual}
+            return {'groups': build_action_groups(tasks, sheets, section, preview), 'manual': manual,
+                    'blockers': blocker_cards(conn, upload, preview, flight, sheets, tasks)}
 
     @app.post('/api/v1/previews/{preview_id}/v5/tasks/preview')
     def source_task_preview(preview_id: str,command: TaskBatchScope,operator: ActorDependency):
@@ -1141,7 +1143,13 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
             if result.sheet_confirmation_required:
                 result = result.model_copy(update={"candidates": tuple(
                     candidate for candidate in result.candidates if candidate.location.section == selected)})
-            return {"preview": result, "sections": sections, "section": selected,
+            receipt = None
+            if view and view.state == "committed":
+                row = conn.execute("""SELECT detail_json FROM workflow_events WHERE subject_id=? AND action='confirm_sheet'
+                    AND json_extract(detail_json,'$.section')=? ORDER BY sequence DESC LIMIT 1""",
+                    (preview_id, selected)).fetchone()
+                receipt = json.loads(row[0]) if row else None
+            return {"preview": result, "sections": sections, "section": selected, "commit_receipt": receipt,
                     "preflight": view.model_dump(mode="json") if view else None}
 
     @app.post('/api/v1/previews/{preview_id}/sync-worksheets')
@@ -1173,6 +1181,7 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
                        OR version.id = json_extract(receipt.detail_json, '$.previous_version_id')
                    JOIN business_worksheet_slots slot ON slot.slot_id = version.slot_id
                    JOIN business_worksheets sheet ON sheet.id = slot.sheet_id AND sheet.project = version.project
+                     AND sheet.deleted_at IS NULL
                    WHERE candidate.upload_id = ? AND candidate.lifecycle = 'submitted'
                      AND (? IS NULL OR json_extract(candidate.raw_json, '$.location.section') = ?)
                    ORDER BY sheet.name, sheet.id""", (preview_id, section, section),

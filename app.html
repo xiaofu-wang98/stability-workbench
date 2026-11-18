@@ -9229,6 +9229,19 @@ Object.assign(ui,{
   this.renderActionBar();this.renderMatrix(this.preview.candidates.filter(c=>c.location.section===this.sheet));this.renderRaw(0);this.installViewport();this.bind(editor);this.bind(document.getElementById('v52SheetDirectory'));this.bind(document.getElementById('ledgerDataTable'));
   document.getElementById('v52TaskFilter').value=this.taskFilter||'';document.getElementById('v52TaskFilter').onchange=e=>{this.taskFilter=e.target.value;this.taskIndex=-1;this.rememberSheet();};
   document.querySelectorAll('[data-select]').forEach(n=>n.onchange=()=>{n.checked?this.selected.add(n.dataset.select):this.selected.delete(n.dataset.select);this.selection();this.rememberSheet();});this.selection();this.restoreSheet();this.updateViewport();
+  const query = new URL(window.location.href).searchParams;
+  if (query.get('upload') === this.upload && query.has('task')) {
+    const heading = editor.querySelector('.v52-heading');
+    const returnLink = document.createElement('a');
+    returnLink.textContent = '返回工作台当前原件';
+    returnLink.href = '/workbench/#/import?' + new URLSearchParams({ project: this.preview.project, source: this.upload, section: this.sheet });
+    heading?.prepend(returnLink);
+    const task = this.tasks.find(item => item.id === query.get('task'));
+    if (task && this.contextTask !== task.id) {
+      this.contextTask = task.id;
+      requestAnimationFrame(() => this.task(task.id));
+    }
+  }
  },
  sourceMarkup(r,col,body){const k=r+':'+col,ts=this.sourceTasks.get(k)||[],changes=this.sourceChanges.get(k)||[];
   const root=ts.length?`<div class="v52-source-warning">${ts.map(t=>`<button data-v5="task" data-id="${esc(t.id)}">${esc(this.taskTitle(t))}</button>`).join('')}</div>`:'';

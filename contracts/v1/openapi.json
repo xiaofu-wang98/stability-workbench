@@ -16030,6 +16030,18 @@
               }
             ],
             "title": "Preflight"
+          },
+          "commit_receipt": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commit Receipt"
           }
         },
         "additionalProperties": false,

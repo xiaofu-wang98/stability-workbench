@@ -189,6 +189,7 @@ class WorkspacePreview(Model):
     sections: tuple[str, ...]
     section: str | None
     preflight: dict | None = None
+    commit_receipt: dict | None = None
 
 
 class ExternalReference(Model):

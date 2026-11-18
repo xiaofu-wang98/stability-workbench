@@ -569,6 +569,57 @@ def enrich_sheet_preflight(conn, upload, preview, view, physical_sheets=None, ta
     )
 
 
+def blocker_cards(conn, upload, preview, flight, sheets, tasks):
+    """Expose each preflight reference once, even when several share a decision."""
+    from openpyxl import load_workbook
+    from openpyxl.utils import get_column_letter
+    from pathlib import Path
+    from .workflow_common import WorkflowError
+    import hashlib
+
+    by_blocker = defaultdict(list)
+    for task in tasks:
+        for blocker in task.blockers:
+            by_blocker[blocker].append(task)
+    candidates = {candidate.id: candidate for candidate in preview.candidates}
+    regions = {region["id"]: region for sheet in sheets if sheet["section"] == flight.section
+               for region in sheet["regions"]}
+    references = (*flight.unresolved, *("approval:" + cid for cid in flight.review_required))
+    if not references:
+        return []
+    path = Path(conn.execute("SELECT stored_path FROM documents WHERE sha256=?", (upload["source_hash"],)).fetchone()[0])
+    if hashlib.sha256(path.read_bytes()).hexdigest() != upload["source_hash"]:
+        raise WorkflowError("source_changed", "冻结 Excel 校验失败，无法核对原格。", 409)
+    book = load_workbook(path, read_only=False, rich_text=True)
+    try:
+        sheet = book[flight.section]
+        cards = []
+        for reference in references:
+            kind, _, subject = reference.partition(":")
+            matching = by_blocker[flight.section + "|" + reference]
+            candidate = candidates.get(subject)
+            region = regions.get(subject)
+            coordinates = list(region["coordinates"]) if region else []
+            for location in [*(loc for task in matching for loc in task.evidence),
+                             *([candidate.location] if candidate else [])]:
+                if location.section == flight.section:
+                    coordinates.append(get_column_letter(location.column) + str(location.row))
+            originals = []
+            for coordinate in dict.fromkeys(coordinates):
+                if ":" in coordinate:
+                    originals.append({"coordinate": coordinate, "text": "原件嵌入对象，请打开原件查看。"})
+                    continue
+                cell = sheet[coordinate]
+                originals.append({"coordinate": coordinate, "text": str(cell.value) if cell.value is not None else "",
+                                  "comment": cell.comment.text if cell.comment else ""})
+            cards.append({"id": reference, "kind": kind, "section": flight.section, "cells": originals,
+                          "candidate_id": candidate.id if candidate else None, "tasks": matching,
+                          "region_summary": region.get("summary") or region.get("basis", "") if region else ""})
+        return cards
+    finally:
+        book.close()
+
+
 def build_action_groups(tasks, physical_sheets, section, preview):
     from .v5_contracts import ActionGroup, TaskBatchScope
     sheet_tasks = [t for t in tasks if t.section == section and t.proposal.get("eligible") and not t.exception]

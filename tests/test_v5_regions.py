@@ -1,7 +1,9 @@
 from io import BytesIO
 
 from openpyxl import Workbook
+from fastapi.testclient import TestClient
 
+from stability_hub.api import create_app
 from stability_hub.models import ProjectConfig
 from stability_hub.storage import Store
 from stability_hub.workflow import Workflow
@@ -55,6 +57,57 @@ def test_a11_partial_bad_matrix_does_not_reject_other_sheet(tmp_path,context):
     bad = next(s for s in p.parsing_summary if s['section']=='Bad matrix')
     assert bad['adapter']=='unrecognized'
     assert any(r['role']=='unclassified' for r in bad['regions'])
+
+
+def test_workbench_blocker_cards_cover_preflight_and_include_original_cell(tmp_path, config, context):
+    book = Workbook()
+    book.active.title = "Unclear import region"
+    book.active["C13"] = "Unclassified source evidence 8.2"
+    good = book.create_sheet("Known results")
+    good.append(["Test item", "Time point", "Result", "Unit"])
+    good.append(["Purity", "0M", 98, "%"])
+    data = BytesIO()
+    book.save(data)
+    store = Store(tmp_path)
+    flow = Workflow(store)
+    flow.configure(config)
+    uploaded = flow.upload(config.project, "review.xlsx", data.getvalue(), context, "source", actor=TECH)
+    with TestClient(create_app(store, [], TECH)) as client:
+        base = f"/api/v1/previews/{uploaded.preview_id}"
+        for section in (book.active.title, good.title):
+            request = {"section": section}
+            response = client.get(base + "/workspace", params=request)
+            assert response.is_success, response.text
+            preflight = response.json()["preflight"]
+            tasks = client.get(base + "/v5/review-actions", params=request)
+            assert tasks.is_success, tasks.text
+            blockers = tasks.json()["blockers"]
+            assert [card["id"] for card in blockers] == [
+                *preflight["unresolved"], *("approval:" + cid for cid in preflight["review_required"])
+            ]
+            if section == book.active.title:
+                region = next(card for card in blockers if card["kind"] == "region")
+                assert region["cells"] == [{"coordinate": "C13", "text": "Unclassified source evidence 8.2", "comment": ""}]
+                assert "region_parse" in region["tasks"][0]["actions"]
+                blocked = client.post(base + "/v5/commit", json={
+                    "section": section, "base_revision": preflight["base_revision"], "fingerprint": preflight["fingerprint"],
+                    "reason": "Probe unresolved source", "idempotency_key": "blocked",
+                })
+                assert blocked.status_code == 422 and blocked.json()["code"] == "sheet_unresolved"
+        good_preview = client.get(base + "/workspace", params={"section": good.title}).json()
+        ids = [item["id"] for item in good_preview["preview"]["candidates"]]
+        received = client.post(base + "/receive", json={"base_revision": good_preview["preflight"]["base_revision"],
+            "candidate_ids": ids, "defer_confirmation": True, "idempotency_key": "receive"})
+        assert received.is_success, received.text
+        ready = client.get(base + "/workspace", params={"section": good.title}).json()["preflight"]
+        assert ready["can_commit"], ready
+        committed = client.post(base + "/v5/commit", json={"section": good.title, "base_revision": ready["base_revision"],
+            "fingerprint": ready["fingerprint"], "reason": "Checked independent sheet", "idempotency_key": "commit"})
+        assert committed.is_success, committed.text
+        refreshed = client.get(base + "/workspace", params={"section": good.title}).json()
+        assert refreshed["commit_receipt"] == committed.json()
+        result = client.get(f"/api/v1/projects/{config.project}/result-cells").json()
+        assert {cell["adopted"]["result_version_id"] for cell in result["cells"]} == set(committed.json()["result_version_ids"])
 
 
 def test_a11_native_drawing_line_is_visible_without_claiming_font_revision(tmp_path):

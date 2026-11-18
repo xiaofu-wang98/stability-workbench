@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, inject, nextTick, onMounted, ref, watch, type Ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { NAlert, NButton, NSelect } from 'naive-ui';
 import { api, type Project } from './api';
@@ -14,7 +14,8 @@ type Candidate = { id: string; lifecycle: string; received: boolean; detail: str
   logical_row?: number | null; source_span?: [number, number, number, number] | null;
   raw_fields: Record<string, string>; record?: Result; existing_record?: Result; allowed_actions: string[]; candidate_revision: number; detection_id: string };
 type Preview = { preview_id: string; project: string; filename: string; base_revision: number; duplicate_source?: boolean; sheet_confirmation_required: boolean; candidates: Candidate[] };
-type WorkspacePreview = { preview: Preview; sections: string[]; section: string | null; preflight: Preflight | null };
+type WorkspacePreview = { preview: Preview; sections: string[]; section: string | null; preflight: Preflight | null;
+  commit_receipt: CommitReceipt | null };
 type Preflight = { section: string; base_revision: number; fingerprint: string; can_commit: boolean; state: string; blocker_reasons: string[];
   unresolved: string[]; review_required: string[];
   counts: Record<string, number>; historical_count: number;
@@ -30,6 +31,7 @@ type Protocol = {
 };
 const projects = ref([...props.projects]);
 const project = ref(String(route.query.project || ''));
+const activeProject = inject<Ref<string>>('workbenchProject');
 const role = ref(route.query.sample ? 'stability_source' : '');
 const protocol = ref<Protocol>();
 const planDrafts = ref<{ id: string; filename: string }[]>([]);
@@ -42,6 +44,9 @@ const sections = ref<string[]>([]);
 const preflight = ref<Preflight>();
 const linkedSheets = ref<{ id: string; name: string }[]>([]);
 type WorksheetSync = { slot_id: string; batch: string; condition: string; status: string; reason?: string };
+type CommitReceipt = { result_version_ids: string[]; counts: Record<string, number>; historical_count: number;
+  worksheet_sync?: WorksheetSync[] };
+const commitReceipt = ref<CommitReceipt>();
 const worksheetSync = ref<WorksheetSync[]>([]);
 const suggestions = ref<string[]>([]);
 const error = ref('');
@@ -57,6 +62,7 @@ type ConflictAction = 'keep_old' | 'correction' | 'retest' | 'exclude';
 const resolving = ref<Candidate>();
 const conflictAction = ref<ConflictAction | ''>('');
 const conflictReason = ref('');
+const approval = ref<{ candidate: Candidate; action: string }>();
 const conflictOptions = computed(() => {
   const id = resolving.value?.id;
   const check = preflight.value;
@@ -83,6 +89,15 @@ const unreceived = computed(() => candidates.value.filter(c => c.lifecycle === '
 const unresolvedIssues = computed(() => preflight.value?.unresolved.filter(
   item => item !== 'not_received' && !item.startsWith('not_received:'),
 ) ?? []);
+const blockerCount = computed(() => (preflight.value?.unresolved.length ?? 0) + (preflight.value?.review_required.length ?? 0));
+const nextSection = computed(() => sections.value[sections.value.indexOf(section.value || '') + 1]);
+const progressText = computed(() => {
+  const current = preflight.value;
+  if (!current) return '已解析';
+  if (current.state === 'committed') return linkedSheets.value.length ? '已正式写入 · 研究表已关联' : '已正式写入 · 待关联研究表';
+  if (current.unresolved.some(item => item === 'not_received' || item.startsWith('not_received:'))) return '已解析 · 待接收';
+  return current.can_commit ? '已接收 · 可正式写入' : '已接收 · 待核对';
+});
 const reviewCandidates = computed(() => {
   const check = preflight.value;
   if (!check) return [];
@@ -118,6 +133,7 @@ async function list() {
   if (project.value) summaries.value = await api(projectPath() + '/previews?limit=50');
 }
 watch(project, () => {
+  if (project.value && activeProject) activeProject.value = project.value;
   summaries.value = [];
   uploadKey = '';
   if (!busy.value && project.value) void run(list);
@@ -164,6 +180,9 @@ async function selectSection(value: string | null, loaded?: WorkspacePreview) {
   section.value = value;
   preflight.value = undefined;
   resolving.value = undefined;
+  approval.value = undefined;
+  commitReceipt.value = undefined;
+  worksheetSync.value = [];
   reviewSources.value = false;
   excludeCandidate.value = undefined;
   reviewLimit.value = 100;
@@ -174,6 +193,8 @@ async function selectSection(value: string | null, loaded?: WorkspacePreview) {
     const view = loaded ?? await api<WorkspacePreview>(path.value + '/workspace?' + query);
     preview.value = view.preview;
     preflight.value = view.preflight ?? undefined;
+    commitReceipt.value = view.commit_receipt ?? undefined;
+    worksheetSync.value = commitReceipt.value?.worksheet_sync ?? [];
     if (candidates.value.some(candidate => candidate.lifecycle === 'submitted')) {
       linkedSheets.value = await api(path.value + '/worksheets?' + query);
     }
@@ -184,9 +205,11 @@ async function open(id: string, selected?: string) {
   const view = await api<WorkspacePreview>('/previews/' + encodeURIComponent(id) + '/workspace'
     + (selected ? '?section=' + encodeURIComponent(selected) : ''));
   preview.value = view.preview;
+  if (activeProject) activeProject.value = view.preview.project;
   section.value = null;
   preflight.value = undefined;
   linkedSheets.value = [];
+  commitReceipt.value = undefined;
   reviewLimit.value = 100;
   if (preview.value?.sheet_confirmation_required) {
     sections.value = view.sections;
@@ -286,7 +309,7 @@ async function commit() {
         identity_confirmed: true, intent: 'initial', reason,
       })),
     };
-    const result = await submit<{ result_version_ids: string[]; worksheet_sync?: WorksheetSync[] }>(
+    const result = await submit<CommitReceipt>(
       source.preview_id, check ? '/v5/commit' : '/confirm', command);
     try { await open(source.preview_id, check?.section); }
     catch { status.value = '已写入结果。请重新打开此导入记录读取最新状态。'; return; }
@@ -312,15 +335,50 @@ function submit<T = unknown>(id: string, suffix: string, command: object) {
   return post<T>('/previews/' + encodeURIComponent(id) + suffix, { ...command, idempotency_key: retry.key });
 }
 function openConflict(candidate: Candidate) {
+  approval.value = undefined;
   resolving.value = candidate;
   conflictAction.value = '';
   conflictReason.value = '';
+}
+async function reviewHistory(id: string, approve: boolean) {
+  const candidate = candidates.value.find(item => item.id === id);
+  if (!candidate) return;
+  if (!approve) openConflict(candidate);
+  else await run(async () => {
+    const state = await api<{ decisions: Record<string, { action: string }> }>(path.value + '/v5/draft-state');
+    const decision = state.decisions[id];
+    if (!decision) throw new Error('原决定已变化，请刷新预检。');
+    resolving.value = undefined;
+    conflictReason.value = '';
+    approval.value = { candidate, action: decision.action };
+  });
+  await nextTick();
+  document.getElementById('import-history-review')?.scrollIntoView({ block: 'start' });
+}
+function approveDecision() {
+  const pending = approval.value, source = preview.value, check = preflight.value;
+  if (!pending || !source || !check || !conflictReason.value.trim()) return;
+  return run(async () => {
+    await submit(source.preview_id, '/v5/review', {
+      base_revision: check.base_revision, candidate_id: pending.candidate.id,
+      decision_fingerprint: check.decision_fingerprints[pending.candidate.id],
+      action: pending.action === 'correction' ? 'adopt' : 'confirm_fact', reason: conflictReason.value.trim(),
+    });
+    await open(source.preview_id, check.section);
+    status.value = '已复核决定，请重新核对整表预检。';
+  });
 }
 async function previewCellExclusion(candidate: Candidate) {
   excludeCandidate.value = candidate.id;
   reviewSources.value = true;
   await nextTick();
   sourceReviewPanel.value?.scrollIntoView({ block: 'start' });
+}
+async function returnToSource() {
+  reviewSources.value = false;
+  excludeCandidate.value = undefined;
+  await nextTick();
+  document.getElementById('current-source')?.scrollIntoView({ block: 'start' });
 }
 function saveConflict() {
   const candidate = resolving.value;
@@ -372,7 +430,7 @@ function time(record?: Result) {
     <h2>导入文件</h2>
     <p>历史稳定性汇总表请选择「稳定性结果」。从工作台下载后填写的 Excel 可在下方回传。</p>
     <div class="upload-links">
-      <RouterLink to="/specifications">质量标准 Word：导入、查看或用于建表</RouterLink>
+      <RouterLink :to="{ path: '/specifications', query: { project: project || undefined } }">质量标准 Word：导入、查看或用于建表</RouterLink>
       <RouterLink to="/scans">识别扫描 PDF</RouterLink>
     </div>
     <label class="file-picker">
@@ -463,25 +521,28 @@ function time(record?: Result) {
     </section>
   </template>
   <template v-if="preview">
-    <section class="panel import-panel import-review">
+    <section id="current-source" class="panel import-panel import-review">
       <h2>{{ preview.filename }}</h2>
       <div>目标项目 {{ preview.project }} · <a :href="'/api/v1' + path + '/file'">下载原件</a></div>
       <a :href="reviewUrl" target="_blank" rel="noopener">在新标签打开当前核对范围</a>
       <NButton :disabled="busy" @click="run(async () => { preview = undefined; await list(); })">返回导入列表</NButton>
       <NSelect v-if="preview.sheet_confirmation_required" filterable :value="section" :disabled="busy" placeholder="选择工作表"
         :options="sections.map(s => ({ label: s, value: s }))" @update:value="value => run(() => selectSection(value))" />
-      <NAlert v-if="!candidates.length" type="warning">当前范围没有识别到结果。请确认文件用途、切换工作表，或使用来源处理工具对照原件补充。<a :href="'/legacy?view=ledger&project=' + encodeURIComponent(preview.project)">打开来源处理工具</a></NAlert>
+      <p class="source-progress">{{ progressText }}</p>
+      <NAlert v-if="!candidates.length" type="warning">当前范围没有识别到结果。请先核对工作表的来源区域和用途。</NAlert>
       <div>当前范围 {{ candidates.length }} 条 · 尚未提交 {{ candidates.filter(c => c.lifecycle === 'draft').length }} 条</div>
       <NAlert v-if="preflight && !preflight.can_commit && preflight.state !== 'committed'" type="warning">
         <span v-if="preflight.blocker_reasons.length">{{ preflight.blocker_reasons.join('；') }}</span>
         <p v-if="unreceived.length">有 {{ unreceived.length }} 条候选尚未接收。</p>
-        <p v-if="unresolvedIssues.length">还有 {{ unresolvedIssues.length }} 项需要核对。请对照原表处理后再写入。</p>
+        <p v-if="blockerCount">还有 {{ blockerCount }} 项需要核对。逐项清单与本次预检对应。</p>
         <span v-if="preflight.review_required.length">{{ preflight.review_required.length }} 条结果的处理决定待复核。</span>
         <span v-if="!unreceived.length && !preflight.blocker_reasons.length && !unresolvedIssues.length && !preflight.review_required.length">此工作表还未通过写入预检。</span>
         <NButton text :disabled="busy" @click="reviewSources = true">查看本表来源核对建议</NButton>
-        <a :href="'/legacy?view=ledger&project=' + encodeURIComponent(preview.project)">更多来源处理工具</a>
       </NAlert>
       <p v-if="preflight?.state === 'committed'">此工作表已写入。</p>
+      <p v-if="commitReceipt" class="commit-receipt">新建结果版本 {{ commitReceipt.result_version_ids.length }} 条 · 沿用已有结果
+        {{ commitReceipt.historical_count + (commitReceipt.counts.repeat_source ?? 0) + (commitReceipt.counts.keep_old ?? 0) }} 条 ·
+        待处理研究 {{ worksheetSync.filter(item => item.status === 'needs_input').length }} 项 · 已关联研究表 {{ linkedSheets.length }} 张</p>
       <ul v-if="worksheetSync.some(item => item.status === 'needs_input')">
         <li v-for="item in worksheetSync.filter(entry => entry.status === 'needs_input')" :key="item.slot_id">
           {{ item.batch }} · {{ item.condition }} · {{ item.reason }}
@@ -493,27 +554,40 @@ function time(record?: Result) {
       </p>
       <NAlert v-if="!preview.sheet_confirmation_required && candidates.some(c => c.lifecycle === 'draft' && !c.allowed_actions.includes('confirm_initial'))" type="warning">
         部分记录需要进一步核对，当前按钮只提交可写入的首次结果。
-        <a :href="'/legacy?project=' + encodeURIComponent(preview.project)">打开来源核对工具</a>
       </NAlert>
       <div class="entry-actions import-review-actions">
         <NButton v-if="preflight && unreceived.length" :disabled="busy" @click="receiveSheet">接收 {{ unreceived.length }} 条候选供核对</NButton>
         <NButton type="primary" :loading="busy" :disabled="preview.sheet_confirmation_required ? !preflight?.can_commit || preflight.state === 'committed' : !initial.length"
           @click="commit">{{ preview.sheet_confirmation_required ? '核对无误，写入本工作表' : '核对无误，写入 ' + initial.length + ' 条首次结果' }}</NButton>
         <RouterLink :to="'/projects/' + encodeURIComponent(preview.project)">打开项目数据</RouterLink>
+        <RouterLink :to="{ path: '/deliveries', query: { project: preview.project } }">打开生成与交付</RouterLink>
         <RouterLink v-for="sheet in linkedSheets" :key="sheet.id" :to="'/worksheets/' + encodeURIComponent(sheet.id)">打开研究表 {{ sheet.name }}</RouterLink>
         <NButton v-if="preflight?.state === 'committed'" :loading="busy" @click="syncWorksheets">同步研究表</NButton>
+        <NButton v-if="nextSection" :disabled="busy" @click="run(() => selectSection(nextSection))">继续处理下一个工作表</NButton>
       </div>
     </section>
     <div v-if="reviewSources && section" ref="sourceReviewPanel">
     <ImportSourceReview :key="[preview.preview_id, section, preflight?.base_revision, excludeCandidate].join(':')"
-      :source="preview.preview_id" :section="section" :exclude-candidate="excludeCandidate" @cancel="reviewSources = false; excludeCandidate = undefined"
+      :source="preview.preview_id" :section="section" :project="preview.project" :exclude-candidate="excludeCandidate" :refreshing="busy"
+      @receive="receiveSheet" @history="reviewHistory"
+      @cancel="returnToSource"
       @saved="run(async () => {
         if (preview) await open(preview.preview_id, section || undefined);
         reviewSources = Boolean(preflight && !preflight.can_commit);
         status = '已保存来源决定，请核对更新后的预检。';
       })" />
     </div>
-    <section v-if="resolving" class="panel import-panel">
+    <section v-if="approval" id="import-history-review" class="panel import-panel">
+      <h2>复核历史结果处理决定</h2>
+      <p>{{ approval.candidate.location.section }} · 行 {{ approval.candidate.location.row }} ·
+        {{ approval.candidate.existing_record?.result.raw_text }} → {{ approval.candidate.record?.result.raw_text }}</p>
+      <p>原处理方式 {{ approval.action }}</p>
+      <form class="conflict-form" @submit.prevent="approveDecision">
+        <label>复核依据 <input v-model="conflictReason" required :disabled="busy"></label>
+        <NButton attr-type="submit" :disabled="busy || !conflictReason.trim()">确认复核</NButton>
+      </form>
+    </section>
+    <section v-if="resolving" id="import-history-review" class="panel import-panel">
       <h2>核对变动结果</h2>
       <p>{{ resolving.location.section }} · 第 {{ resolving.location.row }} 行 · {{ resolving.record?.key.item }}</p>
       <p>原有值 {{ resolving.existing_record?.result.raw_text }}　 本次值 {{ resolving.record?.result.raw_text }}</p>
