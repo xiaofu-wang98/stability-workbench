@@ -2,8 +2,9 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router';
 import { NAlert, NButton, NSelect } from 'naive-ui';
-import { api, type Project, type Worksheet } from './api';
+import { api, type Project, type Worksheet, type HeaderMetadataPreview } from './api';
 import SpecificationPicker from './SpecificationPicker.vue';
+import WorksheetHeaderSources from './WorksheetHeaderSources.vue';
 
 const props = defineProps<{ projects: Project[] }>();
 const route = useRoute();
@@ -121,15 +122,22 @@ const referenceMessages = {
   available: '已登记条款，可按检项和方法核对关联。',
 };
 const copyId = String(route.query.copy || '');
-const seedSlot = String(route.query.slot || '');
+let seedSlot = String(route.query.slot || '');
 const seed = ref<{ identity: Partial<Worksheet['identity']> & { sample_id?: string | null }; items: Item[];
   points: { label: string; items: string[] }[]; matrix?: Matrix; protocol_standards?: ProtocolStandards;
   custom_items?: CustomItem[]; protocol_row_items?: Record<number, string[]>;
   standard_candidate_count?: number;
   item_standards: Record<string, { specification_id: string; table: number; row: number }[]>;
-  equipment: string; location: string; start_date?: string; source_timepoints?: string[]; material_stage?: string; packaging?: string;
+  equipment: string; location: string; metadata_sources?: HeaderMetadataPreview["metadata_sources"]; metadata_fingerprint?: string; start_date?: string; source_timepoints?: string[]; material_stage?: string; packaging?: string;
   point_metadata?: Record<string, { planned_date: string | null; signed_status: string }>;
   copy?: { id: string; name: string; plan_version: number; has_standards: boolean } }>();
+const metadataPreview = computed(() => {
+  const data = seed.value;
+  return data?.metadata_sources && data.metadata_fingerprint
+    ? { equipment: data.equipment, location: data.location, metadata_sources: data.metadata_sources, metadata_fingerprint: data.metadata_fingerprint }
+    : undefined;
+});
+const metadataConfirmed = ref(false);
 const copied = computed(() => seed.value?.copy);
 const protocolStandards = computed(() => seed.value?.protocol_standards);
 const matrix = ref<Matrix>();
@@ -327,16 +335,20 @@ async function loadSource() {
   } catch (e) { error.value = (e as Error).message; }
 }
 onMounted(async () => {
-  await loadSource();
   if (resumed) {
     try {
       const value = await api<Draft>('/projects/' + encodeURIComponent(project.value) + '/worksheet-drafts/' + encodeURIComponent(resumed));
       if (value.protocol_draft !== draftId || value.protocol_table !== String(route.query.table || '') || value.copy_source !== copyId) {
         throw new Error('草稿来源与当前页面不一致，请从项目重新打开。');
       }
+      if (value.fields.seed_slot_id) {
+        seedSlot = value.fields.seed_slot_id;
+        suggestedBatch.value = value.fields.batch;
+      }
       restored.value = value;
     } catch (e) { error.value = (e as Error).message; }
   }
+  await loadSource();
   setupReady.value = true;
 });
 
@@ -367,6 +379,7 @@ watch([setupReady, draftForm], async ([ready, form]) => {
   }
   await nextTick();
   for (const [name, value] of Object.entries(draft.fields)) {
+    if (name === "confirm_header_metadata") continue;
     const element = form.elements.namedItem(name);
     if (element instanceof RadioNodeList) element.value = value;
     else if (element instanceof HTMLInputElement && element.type === 'checkbox') element.checked = Boolean(value);
@@ -476,7 +489,9 @@ function saveDraft() {
     const value = criteriaFor(id);
     return rowCriteria.value[id] || value.specification_links.length || value.criteria_text ? [[id, value]] : [];
   });
-  const draft: Draft = { custom_items: customItems.value.filter(item => selected.value.includes(item.id)), fields: readFields(form), selected: selected.value, row_items: rowItems.value,
+  const draftFields = readFields(form);
+  delete draftFields.confirm_header_metadata;
+  const draft: Draft = { custom_items: customItems.value.filter(item => selected.value.includes(item.id)), fields: draftFields, selected: selected.value, row_items: rowItems.value,
     row_criteria: Object.fromEntries(criteria),
     required: Object.fromEntries(templatePoints.value.map((label, i) =>
       [i + 1, selected.value.filter(item => !excluded.value[label]?.includes(item))])), protocol_draft: draftId, protocol_table: String(route.query.table || ''), copy_source: copyId };
@@ -543,6 +558,11 @@ function save(event: Event) {
         required_items: items.filter(item => !excluded.value[text]?.includes(item)) };
     });
     const { start_date, basis } = data;
+    const saveMetadata = !seedSlot || Boolean(data.confirm_header_metadata);
+    const equipment = saveMetadata ? data.equipment : '';
+    const location = saveMetadata ? data.location : '';
+    const preview = metadataPreview.value;
+    const useSource = preview && ((equipment && equipment === preview.equipment) || (location && location === preview.location));
     const name = data.name || data.batch;
     const identity = Object.fromEntries(['batch', 'sample_type', 'presentation', 'study', 'study_id', 'condition', 'orientation', 'purpose', 'reporting_basis'].map(key => [key, data[key]]));
     const item_standards: Record<string, { specification_id: string; table: number; row: number }[]> = {};
@@ -557,7 +577,8 @@ function save(event: Event) {
         });
       }
     }
-    const body = { name, start_date, basis, identity, items, points, custom_items: customItems.value.filter(item => items.includes(item.id)), equipment: data.equipment, location: data.location,
+    const body = { name, start_date, basis, identity, items, points, custom_items: customItems.value.filter(item => items.includes(item.id)), equipment, location,
+      ...(useSource ? { metadata_fingerprint: preview.metadata_fingerprint } : {}),
       row_criteria: Object.fromEntries(Object.entries(rowCriteria.value).filter(([id]) => items.includes(id))),
       item_standards: Object.fromEntries(Object.entries(item_standards).map(([id, links]) =>
         [id, [...new Map(links.map(link => [standardKey(link), link])).values()]])),
@@ -657,6 +678,7 @@ function save(event: Event) {
     <section class="panel entry-panel">
       <h2>稳定性研究通用表</h2>
       <form ref="draftForm" class="fields ip281-template" @submit.prevent="save" @invalid.capture="openInvalidDetails">
+        <input v-if="seedSlot" type="hidden" name="seed_slot_id" :value="seedSlot">
         <div class="template-header-value"><b>项目编号</b><NSelect :value="project || null" aria-label="项目" filterable clearable placeholder="输入项目编号或名称搜索..." :disabled="busy || Boolean(resumed || sampleId || copyId || seedSlot)" @update:value="switchProject"
           :options="projects.map(p => ({ value: p.project, label: p.project + (p.name ? ' · ' + p.name : '') }))" /></div>
         <div class="template-header-value"><b>产品名称</b><span>{{ props.projects.find(item => item.project === project)?.name }}</span></div>
@@ -670,7 +692,7 @@ function save(event: Event) {
         </template>
           <label>规格 <input name="presentation" v-model="formValues.presentation" required></label>
           <label>开始日期 <input name="start_date" type="date" v-model="formValues.start_date" required></label>
-          <label>设备名称及编号 <input name="equipment" v-model="formValues.equipment"></label>
+          <label>设备名称及编号 <input name="equipment" v-model="formValues.equipment" maxlength="500"></label>
           <label>方案编号或内部研究名称 <input name="study_id" v-model="formValues.study_id" required></label>
           <fieldset class="header-options wide">
             <legend>稳定性类型</legend>
@@ -700,8 +722,17 @@ function save(event: Event) {
               <button v-for="value in locationOptions" :key="value" type="button"
                 :aria-pressed="locationValue === value" @click="locationValue = value">{{ value }}</button>
             </div>
-            <label class="header-custom">地点 <input name="location" v-model="locationValue" placeholder="可直接填写其他地点"></label>
+            <label class="header-custom">地点 <input name="location" v-model="locationValue" maxlength="500" placeholder="可直接填写其他地点"></label>
           </fieldset>
+        <div v-if="seedSlot" class="wide">
+          <WorksheetHeaderSources v-if="metadataPreview" :preview="metadataPreview" />
+          <label class="review"><input name="confirm_header_metadata" type="checkbox" v-model="metadataConfirmed">
+            已核对设备和开展地点，将当前填写值保存到研究表。未勾选时两项留空。
+          </label>
+          <p v-if="!formValues.equipment || !locationValue" class="pending">
+            {{ [!formValues.equipment ? '设备编号' : '', !locationValue ? '开展地点' : ''].filter(Boolean).join('、') }}待确认
+          </p>
+        </div>
         <div class="wide template-table">
           <p class="template-legend"><span>固定表头</span><span>可选或可改</span><span>填写区</span></p>
           <div class="template-options">
@@ -812,7 +843,7 @@ function save(event: Event) {
             <label>工作表名称 <input name="name" v-model="formValues.name" placeholder="默认使用批号"></label>
             <label>样品用途 <select name="purpose" v-model="formValues.purpose"><option value="unknown">未注明</option><option value="routine">常规样品</option><option value="reference">参考品</option></select></label>
             <label>报告体系 <input name="reporting_basis" v-model="formValues.reporting_basis"></label>
-            <label class="wide">计划依据 <input name="basis" v-model="formValues.basis"></label>
+            <label class="wide">计划依据 <input name="basis" v-model="formValues.basis" :required="metadataConfirmed && Boolean(formValues.equipment || locationValue)"></label>
           </div>
         </details>
         <label v-if="matrix" class="wide review"><input name="reviewed" type="checkbox" required>已核对原件、研究条件和各时间点的应检项目。</label>

@@ -29,9 +29,14 @@ def adopted_scope(conn, project, batch):
             for row, value in selected_rows(conn, project, ResultFilter(batch=batch)) if value]
 
 
-def scope_records(records, identity):
+def scope_result_entries(entries, identity):
     fields = {**identity.model_dump(exclude={'orientation', 'reporting_basis'}), 'condition': identity.record_condition()}
-    return [record for _, record in records if all(getattr(record.key, field) == value for field, value in fields.items())]
+    return [(source, record) for source, record in entries
+            if all(getattr(record.key, field) == value for field, value in fields.items())]
+
+
+def scope_records(records, identity):
+    return [record for _, record in scope_result_entries(records, identity)]
 
 
 def historical_row_key(key):
@@ -167,6 +172,7 @@ class CreateWorksheet(Model):
     copy_standards: bool = False
     worksheet_draft_id: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     seed_slot_id: Text | None = None
+    metadata_fingerprint: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     sample_id: Text | None = None
     material_stage: str = Field(default="", max_length=250)
     packaging: str = Field(default="", max_length=250)
@@ -182,6 +188,13 @@ class LeaseToken(Model):
 class WorksheetMutation(LeaseToken):
     idempotency_key: Text
     revision: int = Field(ge=1, strict=True)
+
+
+class EditWorksheetMetadata(WorksheetMutation):
+    equipment: str = Field(max_length=500)
+    location: str = Field(max_length=500)
+    basis: Text
+    metadata_fingerprint: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 
 
 class EditPointMetadata(WorksheetMutation):
@@ -385,7 +398,7 @@ class BusinessWorksheets:
                     point.pop("signed_status")
             if creation["identity"]["sample_id"] is None:
                 del creation["identity"]["sample_id"]
-            for key in ("protocol_draft_id", "protocol_table", "copy_source_id", "copy_source_plan_version", "worksheet_draft_id", "seed_slot_id", "sample_id"):
+            for key in ("protocol_draft_id", "protocol_table", "copy_source_id", "copy_source_plan_version", "worksheet_draft_id", "seed_slot_id", "sample_id", "metadata_fingerprint"):
                 if creation[key] is None:
                     del creation[key]
             if not creation["copy_standards"]:
@@ -533,7 +546,17 @@ class BusinessWorksheets:
                 rows[key]["criteria_text"] = criteria.criteria_text.strip()
             if draft_id:
                 source["worksheet_draft_id"] = draft_id
-            source.update({key: getattr(request, key) for key in ("equipment", "location") if getattr(request, key)})
+            metadata = {key: getattr(request, key).strip() for key in ("equipment", "location") if getattr(request, key).strip()}
+            metadata_sources = {}
+            if request.seed_slot_id and metadata:
+                if not request.basis.strip():
+                    raise WorkflowError("worksheet_metadata_basis", "请记录确认设备编号和开展地点的依据。")
+                from .worksheet_seed import confirmed_metadata_sources
+                metadata_sources = confirmed_metadata_sources(
+                    conn, project, request.identity.model_copy(update={"sample_id": selected.key.sample_id}),
+                    metadata, request.metadata_fingerprint,
+                )
+            source.update(metadata)
             points = ordered_points(add_points([], request.points, rows, request.start_date))
             if request.protocol_row_items:
                 source["pending_release_references"] = self._pending_protocol_release(
@@ -555,7 +578,10 @@ class BusinessWorksheets:
                             VALUES (?,1,?,?,?)""",
                          (sheet_id, encoded({"rows": list(rows.values()), "points": points, **source}), request.basis, actor.id))
             self._register_slots(conn, self._sheet(conn, sheet_id), identity, rows.values(), points)
-            event(conn, project, sheet_id, "worksheet_create", actor, request.basis, {"plan_version": 1})
+            detail = {"plan_version": 1}
+            if metadata:
+                detail.update(metadata=metadata, metadata_sources=metadata_sources)
+            event(conn, project, sheet_id, "worksheet_create", actor, request.basis, detail)
             if draft_id:
                 event(conn, project, draft_id, "worksheet_draft_converted", actor, request.basis, {"worksheet_id": sheet_id})
             result = {"id": sheet_id, "revision": 1, "project_revision": bump(conn, project)}
@@ -728,6 +754,44 @@ class BusinessWorksheets:
         if sheet["revision"] != request.revision:
             raise WorkflowError("worksheet_revision_changed", "工作表已保存新版本，请刷新并核对修改。", 409)
 
+    def preview_header_metadata(self, sheet_id, actor):
+        from .worksheet_seed import worksheet_metadata_preview
+
+        require(actor, Capability.VIEW)
+        with self.store.read() as conn:
+            sheet = self._sheet(conn, sheet_id)
+            identity = StudyIdentity.model_validate_json(sheet["identity_json"])
+            return {"revision": sheet["revision"], **worksheet_metadata_preview(conn, sheet["project"], identity)}
+
+    def edit_header_metadata(self, sheet_id, request, actor):
+        from .worksheet_seed import METADATA_FIELDS, confirmed_metadata_sources
+
+        require(actor, Capability.CONFIRM_FACT)
+        with self.store.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            sheet = self._sheet(conn, sheet_id)
+            project = sheet["project"]
+            payload = {"worksheet_header_metadata": sheet_id, **request.model_dump(mode="json")}
+            prior = replay(conn, project, actor, request.idempotency_key, payload)
+            if prior is not None:
+                return prior
+            self._check_mutation(conn, sheet, request, actor)
+            plan = self._plan(conn, sheet)
+            before = {field: plan.get(field, "") for field in METADATA_FIELDS}
+            after = {field: getattr(request, field).strip() for field in METADATA_FIELDS}
+            if before == after:
+                response = {"id": sheet_id, "revision": sheet["revision"], "plan_version": sheet["plan_version"],
+                            "project_revision": project_row(conn, project)["revision"]}
+            else:
+                changed = {field: value for field, value in after.items() if value != before[field]}
+                identity = StudyIdentity.model_validate_json(sheet["identity_json"])
+                sources = confirmed_metadata_sources(conn, project, identity, changed, request.metadata_fingerprint)
+                plan.update(changed)
+                response = self._write_plan(conn, sheet, plan, actor, request.basis, "worksheet_header_metadata",
+                                            detail={"before": before, "after": after, "metadata_sources": sources})
+            remember(conn, project, actor, request.idempotency_key, payload, response)
+            return response
+
     def edit_point_metadata(self, sheet_id, request, actor):
         require(actor, Capability.CONFIRM_FACT)
         with self.store.connect() as conn:
@@ -823,14 +887,14 @@ class BusinessWorksheets:
             remember(conn, project, actor, request.idempotency_key, payload, response)
             return response
 
-    def _write_plan(self, conn, sheet, plan, actor, basis, action):
+    def _write_plan(self, conn, sheet, plan, actor, basis, action, *, detail=None):
         sheet_id, project = sheet["id"], sheet["project"]
         version = sheet["plan_version"] + 1
         data = {key: value for key, value in plan.items() if key != "basis"}
         conn.execute("""INSERT INTO business_worksheet_plans(sheet_id,version,plan_json,basis,created_by)
                         VALUES (?,?,?,?,?)""", (sheet_id, version, encoded(data), basis, actor.id))
         conn.execute("UPDATE business_worksheets SET plan_version=?,revision=revision+1 WHERE id=?", (version, sheet_id))
-        event(conn, project, sheet_id, action, actor, basis, {"plan_version": version})
+        event(conn, project, sheet_id, action, actor, basis, {"plan_version": version, **(detail or {})})
         return {"id": sheet_id, "revision": sheet["revision"] + 1, "plan_version": version,
                 "project_revision": bump(conn, project)}
 

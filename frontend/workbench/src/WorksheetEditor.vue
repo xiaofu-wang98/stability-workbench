@@ -2,11 +2,12 @@
 import { nextTick, onBeforeUnmount, ref } from 'vue';
 import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
 import { NAlert, NButton, NInput, NSelect } from 'naive-ui';
-import { api, type Worksheet } from './api';
+import { api, type Worksheet, type HeaderField, type HeaderMetadataPreview } from './api';
 import WorksheetStandards from './WorksheetStandards.vue';
 import WorksheetRelease from './WorksheetRelease.vue';
 import WorksheetProtocol from './WorksheetProtocol.vue';
 import WorksheetEvents from './WorksheetEvents.vue';
+import WorksheetHeaderSources from './WorksheetHeaderSources.vue';
 
 const props = defineProps<{ sheet: Worksheet }>();
 const emit = defineEmits<{ saved: [Worksheet]; editing: [boolean] }>();
@@ -32,6 +33,9 @@ const releaseForm = ref(false);
 const pointEditor = ref<Worksheet['points'][number]>();
 const protocolForm = ref(false);
 const eventForm = ref(false);
+const headerForm = ref<{ equipment: string; location: string; basis: string; metadata_fingerprint?: string }>();
+const headerPreview = ref<HeaderMetadataPreview>();
+const sourceError = ref('');
 const planItems = ref<string[]>([]);
 const retest = ref<{ rowId: string; pointId: string; label: string; version: string }>();
 let editor: Editor | undefined;
@@ -280,6 +284,7 @@ async function end() {
     editor?.dispose();
     editor = undefined;
     await release();
+    headerForm.value = undefined;
     editing.value = false;
     emit('editing', false);
     dirty.value = false;
@@ -424,7 +429,26 @@ function choosePoint(event: Event) {
   if (point) pointEditor.value = { ...point };
 }
 
-async function submitExtra(input: Event | object, kind: 'stop-checks' | 'remove-row' | 'plan' | 'retest' | 'standards' | 'protocol-standards' | 'release-reference' | 'copy-coa-to-0m' | 'protocol' | 'events' | 'point-metadata') {
+async function openHeaderMetadata() {
+  headerForm.value = { equipment: current.equipment ?? '', location: current.location ?? '', basis: '' };
+  const form = headerForm.value;
+  headerPreview.value = undefined;
+  sourceError.value = '';
+  try {
+    const preview = await api<HeaderMetadataPreview & { revision: number }>(path() + '/header-metadata');
+    if (headerForm.value === form && preview.revision === current.revision) headerPreview.value = preview;
+  } catch (e) {
+    if (headerForm.value === form) sourceError.value = (e as Error).message;
+  }
+}
+
+function applyHeaderSuggestion(field: HeaderField) {
+  if (!headerForm.value || !headerPreview.value?.[field]) return;
+  headerForm.value[field] = headerPreview.value[field];
+  headerForm.value.metadata_fingerprint = headerPreview.value.metadata_fingerprint;
+}
+
+async function submitExtra(input: Event | object, kind: 'stop-checks' | 'remove-row' | 'plan' | 'retest' | 'standards' | 'protocol-standards' | 'release-reference' | 'copy-coa-to-0m' | 'protocol' | 'events' | 'point-metadata' | 'header-metadata') {
   if (busy.value || expired.value) return;
   busy.value = true;
   error.value = '';
@@ -432,7 +456,7 @@ async function submitExtra(input: Event | object, kind: 'stop-checks' | 'remove-
     assertClean();
     editor?.setEditable(false);
     let payload;
-    if (kind === 'stop-checks' || kind === 'remove-row' || kind === 'standards' || kind === 'protocol-standards' || kind === 'release-reference' || kind === 'copy-coa-to-0m' || kind === 'protocol' || kind === 'events' || kind === 'point-metadata') {
+    if (kind !== 'plan' && kind !== 'retest') {
       payload = input;
     } else {
       const form = new FormData((input as Event).target as HTMLFormElement);
@@ -460,13 +484,14 @@ async function submitExtra(input: Event | object, kind: 'stop-checks' | 'remove-
     if (retry?.signature !== signature) retry = { signature, key: crypto.randomUUID() };
     await post(kind === 'retest' ? '/save' : '/' + kind, { ...body, idempotency_key: retry.key });
     pointEditor.value = undefined;
+    headerForm.value = undefined;
     plan.value = false;
     standards.value = false;
     releaseForm.value = false;
     protocolForm.value = false;
     eventForm.value = false;
     retest.value = undefined;
-    status.value = kind === 'stop-checks' ? '已停检所选时间点，历史结果和计划已保留。' : kind === 'remove-row' ? '已移除检项，旧计划仍保留。' : kind === 'events' ? '已保存研究事件。' : kind === 'protocol' ? '已关联研究方案。' : kind === 'copy-coa-to-0m' ? '已处理 COA 复制。' : kind === 'release-reference' ? '已保存放行引用设置。' : ['standards', 'protocol-standards'].includes(kind) ? '已保存标准关联。' :
+    status.value = kind === 'header-metadata' ? '已保存设备与开展地点。' : kind === 'stop-checks' ? '已停检所选时间点，历史结果和计划已保留。' : kind === 'remove-row' ? '已移除检项，旧计划仍保留。' : kind === 'events' ? '已保存研究事件。' : kind === 'protocol' ? '已关联研究方案。' : kind === 'copy-coa-to-0m' ? '已处理 COA 复制。' : kind === 'release-reference' ? '已保存放行引用设置。' : ['standards', 'protocol-standards'].includes(kind) ? '已保存标准关联。' :
       kind === 'plan' ? '已保存新计划版本。' : '已保存独立复测，当前采用结果保持原值。';
     try { await mount(); }
     catch {
@@ -521,6 +546,7 @@ onBeforeUnmount(() => {
       <NButton :disabled="busy || expired" @click="openRetest">新增复测</NButton>
       <NButton :disabled="busy || expired" @click="openPlan">增加计划时间点</NButton>
       <NButton v-if="current.points.length" :disabled="busy || expired" @click="pointEditor = { ...current.points[0] }">日期与签署状态</NButton>
+      <NButton :disabled="busy || expired" @click="openHeaderMetadata">设备与开展地点</NButton>
       <NButton :disabled="busy || expired" @click="openStandards">标准与检项维护</NButton>
       <NButton :disabled="busy || expired" @click="openProtocol">后补研究方案</NButton>
       <NButton :disabled="busy || expired" @click="openEvent">记录研究事件</NButton>
@@ -558,6 +584,17 @@ onBeforeUnmount(() => {
     </select></label>
     <NButton attr-type="submit" type="primary" :disabled="busy || expired">保存时间点</NButton>
     <NButton :disabled="busy" @click="pointEditor = undefined">取消</NButton>
+  </form>
+  <form v-if="editing && headerForm" class="extra-form" @submit.prevent="submitExtra(headerForm, 'header-metadata')">
+    <label>设备名称及编号 <input v-model="headerForm.equipment" maxlength="500" :disabled="busy"></label>
+    <NButton v-if="headerPreview?.equipment" :disabled="busy || expired" @click="applyHeaderSuggestion('equipment')">带入来源设备</NButton>
+    <label>稳定性开展地点 <input v-model="headerForm.location" maxlength="500" :disabled="busy"></label>
+    <NButton v-if="headerPreview?.location" :disabled="busy || expired" @click="applyHeaderSuggestion('location')">带入来源地点</NButton>
+    <WorksheetHeaderSources v-if="headerPreview" :preview="headerPreview" />
+    <p v-if="sourceError" role="status">{{ sourceError }}</p>
+    <label>修改依据 <input v-model="headerForm.basis" required :disabled="busy"></label>
+    <NButton attr-type="submit" type="primary" :disabled="busy || expired">保存设备与地点</NButton>
+    <NButton :disabled="busy" @click="headerForm = undefined">取消</NButton>
   </form>
   <WorksheetStandards v-if="editing && standards" :sheet="current" :busy="busy || expired"
     @stop="value => submitExtra(value, 'stop-checks')" @remove="confirmRowRemoval" @save="value => submitExtra(value, 'standards')" @confirm-protocol="value => submitExtra(value, 'protocol-standards')" @cancel="standards = false" />

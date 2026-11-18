@@ -31,6 +31,13 @@ export interface Project {
   purpose?: 'formal' | 'sandbox';
 }
 
+export type HeaderField = 'equipment' | 'location';
+export type HeaderSource = { filename: string; sha256: string; sheet: string; cell: string; raw: string };
+export type HeaderMetadataPreview = Record<HeaderField, string> & {
+  metadata_sources: Record<HeaderField, HeaderSource[]>;
+  metadata_fingerprint: string;
+};
+
 export interface WorksheetSummary {
   id: string;
   name: string;

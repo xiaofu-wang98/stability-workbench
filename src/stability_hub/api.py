@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field, StringConstraints, ValidationError
 from lxml.etree import XMLSyntaxError
 
 from .source_tables import SourceTables
-from .business_worksheets import ArchiveStudyObject, EditPointMetadata, LinkWorksheetSample, RemoveWorksheetRow, StopWorksheetChecks
+from .business_worksheets import ArchiveStudyObject, EditPointMetadata, EditWorksheetMetadata, LinkWorksheetSample, RemoveWorksheetRow, StopWorksheetChecks
 from .assay_catalog import RegisterComponents, catalog, register_components
 from .source_contracts import ArchiveInfo, ArchiveView, ArchiveTablePage, SourcePackage, SourcePreviewRequest
 from .models import ImportContext
@@ -269,6 +269,14 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
     @app.post("/api/v1/worksheets/{sheet_id}/save")
     def save_worksheet(sheet_id: str, command: SaveWorksheet, operator: ActorDependency):
         return worksheets.save(sheet_id, command, operator)
+
+    @app.get("/api/v1/worksheets/{sheet_id}/header-metadata")
+    def preview_worksheet_header_metadata(sheet_id: str, operator: ActorDependency):
+        return worksheets.preview_header_metadata(sheet_id, operator)
+
+    @app.post("/api/v1/worksheets/{sheet_id}/header-metadata")
+    def edit_worksheet_header_metadata(sheet_id: str, command: EditWorksheetMetadata, operator: ActorDependency):
+        return worksheets.edit_header_metadata(sheet_id, command, operator)
 
     @app.post("/api/v1/worksheets/{sheet_id}/point-metadata")
     def edit_worksheet_point(sheet_id: str, command: EditPointMetadata, operator: ActorDependency):

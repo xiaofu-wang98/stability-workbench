@@ -11,11 +11,11 @@ const study = computed(() => ({ long_term: '长期试验 / Long-term study', acc
     <div class="field"><b>产品批号<br>Product Batch No.</b><span>{{ sheet.identity.batch }}</span></div>
     <div class="field"><b>规格<br>Specification</b><span>{{ sheet.identity.presentation }}</span></div>
     <div class="field"><b>开始日期<br>Starting Date</b><span>{{ sheet.start_date }}</span></div>
-    <div class="field"><b>设备名称及编号</b><span>{{ sheet.equipment }}</span></div>
+    <div class="field"><b>设备名称及编号</b><span>{{ sheet.equipment || '未填写' }}</span></div>
     <div class="field"><b>稳定性试验方案编号</b><span class="option">{{ sheet.identity.study_id }}</span></div>
     <div class="field"><b>稳定性类型</b><span class="option">{{ study }}<br>{{ sheet.identity.sample_type === 'DS' ? '原液 DS' : sheet.identity.sample_type === 'DP' ? '制剂 DP' : sheet.identity.sample_type }}</span></div>
     <div class="field condition"><b>考察条件<br>Study Condition</b><span class="option">{{ sheet.identity.condition }}<br v-if="sheet.identity.orientation">{{ sheet.identity.orientation }}</span></div>
-    <div class="field"><b>稳定性开展地点</b><span class="option">{{ sheet.location }}</span></div>
+    <div class="field"><b>稳定性开展地点</b><span class="option">{{ sheet.location || '未填写' }}</span></div>
   </div>
 </template>
 <style scoped>

@@ -22,5 +22,7 @@ POST .../v5/manual-sheet/undo：DraftCommand加edit_id，必须是没有后续�
 - 研究表 Excel 回传可提交 `coordinates` 选择子集，并按原格指定 `keep`、`correct`、`retest`。响应返回本次处理及仍待核对坐标。未传 `coordinates` 时按原有整份回传范围处理。
 - 研究表或样品删除先请求对象的 `archive-impact`，随后提交 `DELETE`，请求体含确认后的影响指纹、原因和幂等键。检项行通过 `GET /worksheets/{id}/remove-row?row_id=...` 预览，再通过同路径的 `POST` 提交。
 - 研究表的 `copy-coa-to-0m` 使用当前放行选项指纹及预期采用版本，保留放行来源。时间点的 `point-metadata` 保存计划日期与签署文字。
+- 历史建表的预填返回设备、开展地点、来源原格和 `metadata_fingerprint`。自动建表保留两字段待确认。明确提交历史表头值时须附 `basis`，采用来源建议时可提交该指纹以记录已核验原格。
+- `GET /api/v1/worksheets/{sheet_id}/header-metadata` 只读预览当前研究范围的冻结原件表头。`POST` 提交设备和开展地点、编辑租约、revision、幂等键及依据。有效变更增加计划版本并记录变更前后值。
 - `POST /api/v1/projects/{project}/controlled-workbook` 使用项目 revision 与所选研究表 ID 冻结并生成可下载的受控汇总 Excel。
 - `GET/POST /api/v1/projects/{project}/current-specifications` 查询或明确设置已确认的当前适用标准。采用值可携带 `standard_assessment` 供网页提示。

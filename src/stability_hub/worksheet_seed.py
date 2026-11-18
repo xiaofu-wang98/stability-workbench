@@ -3,6 +3,7 @@
 import hashlib
 import json
 import re
+from contextlib import ExitStack
 from datetime import date, datetime
 from io import BytesIO
 from pathlib import Path
@@ -10,11 +11,14 @@ from unicodedata import normalize
 
 from openpyxl import load_workbook
 
-from .business_worksheets import CreateWorksheet, StudyIdentity, adopted_scope, historical_row_key, historical_rows, scope_records
+from .business_worksheets import CreateWorksheet, StudyIdentity, historical_row_key, historical_rows, scope_result_entries
 from .matrix_fields import timepoint_token
 from .models import ProjectConfig, StabilityRecord, digest
 from .specification_preview import matching_standards, protocol_numbers, specification_material_scope, unambiguous_standard_sources
+from .result_queries import selected_rows
 from .workflow_common import WorkflowError, project_row
+from .workflow_contracts import ResultFilter
+from .xlsx_matrix import parse_matrix_sheet, text
 
 
 def _matching_component(link, method, label):
@@ -33,7 +37,6 @@ def _matching_component(link, method, label):
         len(name) > 1 and re.search(r"(?<![a-z0-9])" + re.escape(name) + r"(?![a-z0-9])", label)
         for value in link["assay_names"] if (name := " ".join(normalize("NFKC", value).casefold().split()))
     )
-from .xlsx_matrix import parse_matrix_sheet, text
 
 DEFAULT_MONTHS = (0, 3, 6, 9, 12, 18, 24, 36)
 
@@ -48,99 +51,178 @@ def header_date(value):
     return ""
 
 
-def historical_header(conn, project, slot_id):
-    from .identity_associations import adopted
+METADATA_FIELDS = ("equipment", "location")
+HEADER_FIELDS = {
+    "设备编号": "equipment",
+    "设备名称及编号": "equipment",
+    "稳定性试验箱/温控设备名称和编号": "equipment",
+    "稳定性开展地点": "location",
+}
 
-    version = adopted(conn, project, slot_id)
-    axes = set()
-    if version is None:
-        return {}
-    for source in json.loads(version["source_json"]):
-        raw = source.get("raw_json") or {}
-        evidence = raw.get("evidence", {}).get("time_point", {})
-        if raw.get("adapter") != "stability_matrix" or not evidence:
-            continue
-        sha = source.get("document_hash")
-        document = conn.execute("SELECT stored_path FROM documents WHERE sha256=?", (sha,)).fetchone()
-        if document is None:
-            continue
-        path = Path(document["stored_path"])
-        if not path.is_file():
-            continue
-        data = path.read_bytes()
-        if hashlib.sha256(data).hexdigest() != sha:
-            raise WorkflowError("source_integrity", "历史原件校验失败，无法读取时间轴。", 409)
-        book = load_workbook(BytesIO(data), keep_links=False)
-        try:
-            sheet = book[evidence["section"]]
-            observations, layout = parse_matrix_sheet(sheet)
+
+def historical_results(conn, project, batch):
+    return [(value, StabilityRecord.model_validate_json(value["record_json"]))
+            for _, value in selected_rows(conn, project, ResultFilter(batch=batch)) if value]
+
+
+def historical_blocks(conn, results, stack):
+    books, layouts = {}, {}
+    seen = set()
+    for version, _ in results:
+        for source in json.loads(version["source_json"]):
+            raw = source.get("raw_json") or {}
+            evidence = raw.get("evidence", {}).get("time_point", {})
+            if raw.get("adapter") != "stability_matrix" or not evidence:
+                continue
+            section = evidence["section"]
+            sha = source.get("document_hash")
+            if sha not in books:
+                document = conn.execute("SELECT filename,stored_path FROM documents WHERE sha256=?", (sha,)).fetchone()
+                path = Path(document["stored_path"]) if document else None
+                if not path or not path.is_file():
+                    books[sha] = None
+                else:
+                    data = path.read_bytes()
+                    if hashlib.sha256(data).hexdigest() != sha:
+                        raise WorkflowError("source_integrity", "历史原件校验失败，无法读取研究表头。", 409)
+                    book = load_workbook(BytesIO(data), keep_links=False)
+                    stack.callback(book.close)
+                    books[sha] = (book, document["filename"])
+            if books[sha] is None:
+                continue
+            book, filename = books[sha]
+            sheet = book[section]
+            if (sha, section) not in layouts:
+                layouts[sha, section] = parse_matrix_sheet(sheet)
+            observations, layout = layouts[sha, section]
             for block in layout["blocks"]:
-                if "header_row" not in block:
-                    continue
-                if (not block["header_row"] <= evidence["row"] <= block["header_row"] + 1
+                if ("header_row" not in block or not block["header_row"] <= evidence["row"] <= block["header_row"] + 1
                         or evidence["column"] not in block["time_columns"]
                         or not evidence["row"] < raw["location"]["row"] <= block["end_row"]):
                     continue
-                labels = [text(sheet.cell(evidence["row"], column)).strip() for column in block["time_columns"]]
-                axis = tuple(timepoint_token(label) for label in labels if label)
-                if axis and all(axis) and len(axis) == len(set(axis)):
-                    dates, locations, stages, packaging, equipment = set(), set(), set(), set(), set()
-                    start = raw.get("evidence", {}).get("batch", {}).get("row", block["header_row"])
-                    merged_ends = {(area.min_row, area.min_col): area.max_col
-                                   for area in sheet.merged_cells.ranges
-                                   if start <= area.min_row < block["header_row"]}
-                    for header_row in sheet.iter_rows(min_row=start, max_row=block["header_row"] - 1):
-                        for label, value in zip(header_row, header_row[1:]):
-                            title = text(label).strip().split("\n")[0].strip().rstrip("：:").strip()
-                            if title and (end := merged_ends.get((label.row, label.column))) and end < len(header_row):
-                                value = header_row[end]
-                            if title in {"开始日期", "放入时间"} and isinstance(value.value, date):
-                                dates.add((value.value.date() if isinstance(value.value, datetime) else value.value).isoformat())
-                            if title in {"开始日期", "放入时间"} and isinstance(value.value, str):
-                                match = re.fullmatch(r"(\d{4})[./年-](\d{1,2})[./月-](\d{1,2})日?", value.value.strip())
-                                if match:
-                                    try:
-                                        dates.add(date(*map(int, match.groups())).isoformat())
-                                    except ValueError:
-                                        pass
-                            for names, values in (
-                                ({"材料阶段", "物料阶段"}, stages),
-                                ({"包装", "包装形式", "包装方式"}, packaging),
-                                ({"设备编号", "设备名称及编号", "稳定性试验箱/温控设备名称和编号"}, equipment),
-                            ):
-                                if title in names and text(value).strip():
-                                    values.add(text(value).strip())
-                            if title == "稳定性开展地点":
-                                marked = re.findall(r"^\s*[R☑✓]\s*([^A-Za-z\n]+)", text(value), re.M)
-                                if len(marked) == 1:
-                                    locations.add(marked[0].strip())
-                            if title == "存放位置" and text(value).strip():
-                                locations.add(text(value).strip())
-                    planned_dates = {}
-                    for observation in observations:
-                        time_source = observation.evidence.get("time_point")
-                        date_source = observation.evidence.get("planned_date")
-                        if (time_source is None or date_source is None or time_source.row != evidence["row"]
-                                or date_source.column != time_source.column):
-                            continue
-                        value = observation.fields.get("planned_date", "").strip()
-                        if value and not value.startswith("=") and (day := header_date(value)):
-                            planned_dates.setdefault(time_source.column, set()).add(day)
-                    metadata = tuple((header_date(label) or (
-                                          next(iter(planned_dates[column])) if len(planned_dates.get(column, ())) == 1 else ""),
-                                      "已签报告" if "已签报告" in label else "已签" if "已签" in label else "")
-                                     for column, label in zip(block["time_columns"], labels, strict=True) if label)
-                    axes.add((axis, metadata, *(next(iter(values)) if len(values) == 1 else ""
-                                      for values in (dates, locations, stages, packaging, equipment))))
-        finally:
-            book.close()
-    if len(axes) != 1:
+                start = raw.get("evidence", {}).get("batch", {}).get("row", block["header_row"])
+                key = (sha, section, start, evidence["row"], block["header_row"])
+                if key not in seen:
+                    seen.add(key)
+                    yield version, sha, filename, sheet, block, evidence, start, observations
+
+
+def header_fields(sheet, start, end):
+    merged_ends = {(area.min_row, area.min_col): area.max_col
+                   for area in sheet.merged_cells.ranges if start <= area.min_row <= end}
+    for row in sheet.iter_rows(min_row=start, max_row=end):
+        for label, value in zip(row, row[1:]):
+            title = text(label).strip().split("\n")[0].strip().rstrip("：:").strip()
+            if not title:
+                continue
+            last = merged_ends.get((label.row, label.column))
+            if last and last < len(row):
+                value = row[last]
+            yield title, value
+
+
+def location_value(raw):
+    markers = list(re.finditer(r"[☐□☒☑✓√£]|(?m:^[ \t]*R(?=[ \t]*[^\x00-\x7f]))", raw))
+    if not markers:
+        return raw if len(raw.splitlines()) == 1 else ""
+    marked = []
+    for index, marker in enumerate(markers):
+        symbol = marker.group().strip()
+        if symbol not in {"☑", "✓", "√", "R"}:
+            continue
+        end = markers[index + 1].start() if index + 1 < len(markers) else len(raw)
+        value = raw[marker.end():end].partition("\n")[0].strip()
+        if symbol == "R":
+            # The legacy checkbox template appends an option code to the Chinese name.
+            value = re.sub(r"(?<=[^\x00-\x7f])\s*[A-Z]$", "", value).strip()
+        marked.append(value)
+    return marked[0] if len(marked) == 1 else ""
+
+
+def historical_header(conn, results, slot_id=None):
+    axes = set()
+    sources = {field: {} for field in HEADER_FIELDS.values()}
+    with ExitStack() as stack:
+        for version, sha, filename, sheet, block, evidence, start, observations in historical_blocks(conn, results, stack):
+            fields = list(header_fields(sheet, start, block["header_row"] - 1))
+            for title, cell in fields:
+                field = HEADER_FIELDS.get(title)
+                raw = text(cell).strip()
+                if field and raw:
+                    value = raw
+                    if cell.data_type == "f":
+                        value = ""
+                    elif field == "location":
+                        value = location_value(raw)
+                    sources[field][sha, sheet.title, cell.coordinate] = {
+                        "filename": filename, "sha256": sha, "sheet": sheet.title, "cell": cell.coordinate,
+                        "raw": raw, "value": value if len(value) <= 500 else "",
+                    }
+            if version["slot_id"] != slot_id:
+                continue
+            labels = [text(sheet.cell(evidence["row"], column)).strip() for column in block["time_columns"]]
+            axis = tuple(timepoint_token(label) for label in labels if label)
+            if not axis or not all(axis) or len(axis) != len(set(axis)):
+                continue
+            dates, stages, packaging = set(), set(), set()
+            for title, cell in fields:
+                if title in {"开始日期", "放入时间"}:
+                    if isinstance(cell.value, date):
+                        dates.add(cell.value.strftime("%Y-%m-%d"))
+                    elif isinstance(cell.value, str) and re.fullmatch(
+                            r"\d{4}[./年-]\d{1,2}[./月-]\d{1,2}日?", cell.value.strip()):
+                        if day := header_date(cell.value):
+                            dates.add(day)
+                if title in {"材料阶段", "物料阶段"} and text(cell).strip():
+                    stages.add(text(cell).strip())
+                if title in {"包装", "包装形式", "包装方式"} and text(cell).strip():
+                    packaging.add(text(cell).strip())
+            planned_dates = {}
+            for observation in observations:
+                time_source = observation.evidence.get("time_point")
+                date_source = observation.evidence.get("planned_date")
+                if (time_source is None or date_source is None or time_source.row != evidence["row"]
+                        or date_source.column != time_source.column):
+                    continue
+                value = observation.fields.get("planned_date", "").strip()
+                if value and not value.startswith("=") and (day := header_date(value)):
+                    planned_dates.setdefault(time_source.column, set()).add(day)
+            metadata = tuple((header_date(label) or (
+                                  next(iter(planned_dates[column])) if len(planned_dates.get(column, ())) == 1 else ""),
+                              "已签报告" if "已签报告" in label else "已签" if "已签" in label else "")
+                             for column, label in zip(block["time_columns"], labels, strict=True) if label)
+            axes.add((axis, metadata, *(next(iter(values)) if len(values) == 1 else ""
+                                       for values in (dates, stages, packaging))))
+    result = {"metadata_sources": {field: [entries[key] for key in sorted(entries)] for field, entries in sources.items()}}
+    for field, entries in sources.items():
+        values = {entry["value"] for entry in entries.values()}
+        result[field] = next(iter(values)) if len(values) == 1 else ""
+    if len(axes) == 1:
+        axis, metadata, start_date, material_stage, packaging = next(iter(axes))
+        result.update(source_timepoints=list(axis), start_date=start_date, material_stage=material_stage, packaging=packaging,
+                      point_metadata={label: {"planned_date": planned or None, "signed_status": signed}
+                                      for label, (planned, signed) in zip(axis, metadata, strict=True)})
+    return result
+
+
+def metadata_preview(header):
+    data = {key: header[key] for key in (*METADATA_FIELDS, "metadata_sources")}
+    return {**data, "metadata_fingerprint": digest(data)}
+
+
+def worksheet_metadata_preview(conn, project, identity):
+    results = historical_results(conn, project, identity.batch)
+    return metadata_preview(historical_header(conn, scope_result_entries(results, identity)))
+
+
+def confirmed_metadata_sources(conn, project, identity, values, fingerprint):
+    if not fingerprint:
         return {}
-    axis, metadata, start_date, location, material_stage, packaging, equipment = next(iter(axes))
-    return {"source_timepoints": list(axis), "start_date": start_date, "location": location,
-            "material_stage": material_stage, "packaging": packaging, "equipment": equipment,
-            "point_metadata": {label: {"planned_date": planned or None, "signed_status": signed}
-                               for label, (planned, signed) in zip(axis, metadata, strict=True)}}
+    preview = worksheet_metadata_preview(conn, project, identity)
+    if preview["metadata_fingerprint"] != fingerprint:
+        raise WorkflowError("worksheet_metadata_source_changed", "设备或地点来源已变化，请重新核对原件。", 409)
+    return {field: preview["metadata_sources"][field] for field, value in values.items()
+            if value and value == preview[field]}
 
 
 def provision_from_results(conn, worksheets, project, version_ids, actor):
@@ -198,7 +280,6 @@ def provision_from_results(conn, worksheets, project, version_ids, actor):
                 identity=identity, start_date=date.fromisoformat(seed["start_date"]),
                 seed_slot_id=slot_id, sample_id=identity.sample_id,
                 items=tuple(item["id"] for item in seed["items"]), points=points,
-                location=seed.get("location", ""), equipment=seed.get("equipment", ""),
                 material_stage=seed.get("material_stage", ""), packaging=seed.get("packaging", ""),
                 basis="从已确认的历史 Excel 结果生成", idempotency_key="history-provision:" + digest([project, slot_id, version_id]),
             )
@@ -225,16 +306,17 @@ def plan_seed(conn, worksheets, project, actor, *, source, batch, slot_id, sourc
     if source == "blank":
         return plan
     if source == "results":
-        records = adopted_scope(conn, project, batch)
-        key = next((record.key for slot, record in records if slot == slot_id and record.key.study != "release"), None)
+        results = historical_results(conn, project, batch)
+        key = next((record.key for version, record in results if version["slot_id"] == slot_id and record.key.study != "release"), None)
         if key is None:
             raise WorkflowError("worksheet_seed_missing", "找不到已采用的稳定性结果。", 404)
         identity = StudyIdentity.model_validate(key.model_dump(include=set(StudyIdentity.model_fields) - {"reporting_basis"}))
-        records = scope_records(records, identity)
+        results = scope_result_entries(results, identity)
+        records = [record for _, record in results]
         points = {}
         for record in records:
             points.setdefault(record.key.time_label, set()).add(historical_row_key(record.key))
-        header = historical_header(conn, project, slot_id)
+        header = historical_header(conn, sorted(results, key=lambda pair: pair[0]["slot_id"] != slot_id), slot_id)
         axis = header.get("source_timepoints", [])
         for label in axis:
             points.setdefault(label, set())
@@ -246,7 +328,7 @@ def plan_seed(conn, worksheets, project, actor, *, source, batch, slot_id, sourc
                 "points": [{"label": label, "items": sorted(points[label]),
                             **header.get("point_metadata", {}).get(label, {})} for label in
                            [*axis, *sorted(points.keys() - set(axis), key=lambda label: (label[-1], int(label[:-1])))]],
-                **header}
+                **header, **metadata_preview(header)}
     if source == "copy":
         sheet = worksheets.get(source_id, actor, _conn=conn)
         if sheet["project"] != project:

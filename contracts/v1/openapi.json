@@ -1327,6 +1327,88 @@
         }
       }
     },
+    "/api/v1/worksheets/{sheet_id}/header-metadata": {
+      "get": {
+        "summary": "Preview Worksheet Header Metadata",
+        "operationId": "preview_worksheet_header_metadata_api_v1_worksheets__sheet_id__header_metadata_get",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Edit Worksheet Header Metadata",
+        "operationId": "edit_worksheet_header_metadata_api_v1_worksheets__sheet_id__header_metadata_post",
+        "parameters": [
+          {
+            "name": "sheet_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sheet Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditWorksheetMetadata"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/worksheets/{sheet_id}/point-metadata": {
       "post": {
         "summary": "Edit Worksheet Point",
@@ -10063,6 +10145,18 @@
             ],
             "title": "Seed Slot Id"
           },
+          "metadata_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata Fingerprint"
+          },
           "sample_id": {
             "anyOf": [
               {
@@ -10459,6 +10553,63 @@
           "planned_date"
         ],
         "title": "EditPointMetadata"
+      },
+      "EditWorksheetMetadata": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Token"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision"
+          },
+          "equipment": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Equipment"
+          },
+          "location": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Location"
+          },
+          "basis": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Basis"
+          },
+          "metadata_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata Fingerprint"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token",
+          "idempotency_key",
+          "revision",
+          "equipment",
+          "location",
+          "basis"
+        ],
+        "title": "EditWorksheetMetadata"
       },
       "ExportRequest": {
         "properties": {
