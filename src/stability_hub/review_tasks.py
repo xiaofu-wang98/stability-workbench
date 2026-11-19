@@ -569,7 +569,45 @@ def enrich_sheet_preflight(conn, upload, preview, view, physical_sheets=None, ta
     )
 
 
-def blocker_cards(conn, upload, preview, flight, sheets, tasks):
+def blocker_index(flight, tasks):
+    index = defaultdict(list)
+    prefix = flight.section + "|"
+    for task in tasks:
+        for blocker in task.blockers:
+            if blocker.startswith(prefix):
+                index[blocker[len(prefix):]].append(task)
+    return {ref: index[ref] for ref in (
+        *flight.unresolved, *("approval:" + cid for cid in flight.review_required)
+    )}
+
+
+def blocker_category(reference, task):
+    return "unprojected_region" if reference.startswith("unprojected_region:") else task.code
+
+
+def blocker_summary(index):
+    categories = defaultdict(lambda: {"references": set(), "tasks": set(), "candidates": set()})
+    tasks, affected, receipt = set(), set(), 0
+    for reference, matching in index.items():
+        kind, _, identifier = reference.partition(":")
+        if kind == "not_received":
+            receipt += bool(identifier)
+            continue
+        for task in matching:
+            entry = categories[blocker_category(reference, task)]
+            entry["references"].add(reference)
+            entry["tasks"].add(task.id)
+            candidates = {m["candidate_id"] for m in task.members if "candidate_id" in m}
+            entry["candidates"].update(candidates)
+            affected.update(candidates)
+            tasks.add(task.id)
+    return {"unreceived_candidates": receipt, "pending_receipt": "not_received" in index,
+            "tasks": len(tasks), "affected_candidates": len(affected),
+            "categories": {code: {key: len(values) for key, values in counts.items()}
+                           for code, counts in categories.items()}}
+
+
+def blocker_cards(conn, upload, preview, flight, sheets, tasks, *, index=None, references=None):
     """Expose each preflight reference once, even when several share a decision."""
     from openpyxl import load_workbook
     from openpyxl.utils import get_column_letter
@@ -577,14 +615,11 @@ def blocker_cards(conn, upload, preview, flight, sheets, tasks):
     from .workflow_common import WorkflowError
     import hashlib
 
-    by_blocker = defaultdict(list)
-    for task in tasks:
-        for blocker in task.blockers:
-            by_blocker[blocker].append(task)
+    index = blocker_index(flight, tasks) if index is None else index
     candidates = {candidate.id: candidate for candidate in preview.candidates}
     regions = {region["id"]: region for sheet in sheets if sheet["section"] == flight.section
                for region in sheet["regions"]}
-    references = (*flight.unresolved, *("approval:" + cid for cid in flight.review_required))
+    references = list(index) if references is None else references
     if not references:
         return []
     path = Path(conn.execute("SELECT stored_path FROM documents WHERE sha256=?", (upload["source_hash"],)).fetchone()[0])
@@ -596,7 +631,7 @@ def blocker_cards(conn, upload, preview, flight, sheets, tasks):
         cards = []
         for reference in references:
             kind, _, subject = reference.partition(":")
-            matching = by_blocker[flight.section + "|" + reference]
+            matching = index[reference]
             candidate = candidates.get(subject)
             region = regions.get(subject)
             coordinates = list(region["coordinates"]) if region else []

@@ -396,26 +396,56 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
         return source_structure.apply(workflow,preview_id,command,actor=operator)
 
     @app.get('/api/v1/previews/{preview_id}/v5/review-actions')
-    def source_review_actions(preview_id: str, section: str, operator: ActorDependency):
+    def source_review_actions(preview_id: str, section: str, operator: ActorDependency,
+                              category: str = "", focus: str = "", offset: int = Query(0, ge=0),
+                              limit: int | None = Query(None, ge=1, le=100)):
         require(operator, Capability.VIEW)
-        from .review_tasks import blocker_cards, build_action_groups, current_review
+        from .review_tasks import blocker_cards, blocker_category, blocker_index, blocker_summary, build_action_groups, current_review
         with store.read() as conn:
             upload = workflow._upload(conn, preview_id)
             preview, sheets, flights, tasks, _ = current_review(workflow, conn, upload, operator, _shared=True)
             flight = next((flight for flight in flights if flight.section == section), None)
             if flight is None:
                 raise WorkflowError('unknown_sheet', '该来源中不存在此工作表。', 404)
+            index = blocker_index(flight, tasks)
+            summary = blocker_summary(index)
+            selected = [ref for ref, matching in index.items() if
+                        (limit is None or not ref.startswith("not_received")) and
+                        (not category or any(blocker_category(ref, task) == category for task in matching))]
+            if focus and limit:
+                position = next((i for i, ref in enumerate(selected)
+                                 if ref.partition(":")[2] == focus or any(task.id == focus for task in index[ref])), None)
+                if position is not None:
+                    offset = (position // limit) * limit
+            if limit and offset and offset >= len(selected):
+                offset = (max(len(selected) - 1, 0) // limit) * limit
+            references = selected[offset:offset + limit] if limit is not None else selected
+            active_tasks = {task.id for ref, matching in index.items() if not ref.startswith("not_received") for task in matching}
             manual = [
                 {'id': task.id, 'detail': task.detail, 'fields': task.fields, 'evidence': task.evidence,
                  'affected_results': len(task.members),
+                 'member_ids': [m["candidate_id"] for m in task.members if "candidate_id" in m],
                  'identity_options': task.proposal.get('identity_options', {}),
                  'guidance': task.proposal.get('guidance')}
-                for task in tasks if task.section == section and task.fields and task.members
+                for task in tasks if task.id in active_tasks and task.fields and task.members
                 and (task.code == 'identity' or ('manual' in task.actions
                      and all('issue_id' in member for member in task.members)))
             ]
-            return {'groups': build_action_groups(tasks, sheets, section, preview), 'manual': manual,
-                    'blockers': blocker_cards(conn, upload, preview, flight, sheets, tasks)}
+            groups = build_action_groups(tasks, sheets, section, preview)
+            members = {task.id: [m["candidate_id"] for m in task.members if "candidate_id" in m]
+                       for task in tasks if task.section == section}
+            batch_members = {g.group_id: list(dict.fromkeys(cid for tid in g.scope.task_ids for cid in members.get(tid, ())))
+                             for g in groups}
+            undo = conn.execute("""SELECT json_extract(b.detail_json,'$.batch_id') FROM workflow_events b
+                WHERE b.subject_id=? AND b.action='review_batch' AND json_extract(b.detail_json,'$.scope.section')=?
+                  AND NOT EXISTS(SELECT 1 FROM workflow_events u WHERE u.subject_id=b.subject_id
+                    AND u.action='undo_review_batch'
+                    AND json_extract(u.detail_json,'$.batch_id')=json_extract(b.detail_json,'$.batch_id'))
+                ORDER BY b.sequence DESC LIMIT 1""", (preview_id, section)).fetchone()
+            return {'groups': groups, 'manual': manual, 'batch_members': batch_members,
+                    'base_revision': flight.base_revision, 'undo_batch_id': undo[0] if undo and flight.state != 'committed' else None,
+                    'summary': summary, 'total': len(selected), 'offset': offset,
+                    'blockers': blocker_cards(conn, upload, preview, flight, sheets, tasks, index=index, references=references)}
 
     @app.post('/api/v1/previews/{preview_id}/v5/tasks/preview')
     def source_task_preview(preview_id: str,command: TaskBatchScope,operator: ActorDependency):
@@ -1203,6 +1233,10 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
     @app.patch("/api/v1/candidates/{candidate_id}", response_model=MutationResult)
     def edit(candidate_id: str, command: CandidateEdit, operator: ActorDependency):
         return workflow.edit(candidate_id, command, actor=operator)
+
+    @app.post("/api/v1/candidates/{candidate_id}/edit-preview")
+    def edit_candidate_preview(candidate_id: str, command: CandidateEdit, operator: ActorDependency):
+        return workflow.preview_edit(candidate_id, command, actor=operator)
 
     @app.post("/api/v1/candidates/{candidate_id}/withdraw", response_model=MutationResult)
     def withdraw(candidate_id: str, command: WithdrawRequest, operator: ActorDependency):

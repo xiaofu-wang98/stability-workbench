@@ -66,6 +66,8 @@ def preview_batch(flow, conn, upload_id, scope, actor):
     members_in_scope = {m["candidate_id"] for t in selected for m in t.members if "candidate_id" in m}
     if not set(scope.exclude_candidate_ids) <= members_in_scope:
         raise WorkflowError("scope_outside", "例外成员必须属于明确所选来源范围。")
+    if scope.operation == "manual" and "result" in scope.fields and len(members_in_scope - set(scope.exclude_candidate_ids)) > 1:
+        raise WorkflowError("shared_result", "不能将同一人工结果复制到不同检测格，请逐格核对。")
     if scope.operation not in {"suggested", "classify"} and len({t.batch_key for t in selected}) > 1:
         raise WorkflowError(
             "mixed_semantics", "本次只能处理相同字段语义和修改方式；标准、结果和全删除须分别预览。"
@@ -144,10 +146,6 @@ def preview_batch(flow, conn, upload_id, scope, actor):
         elif operation == "manual":
             if not fields or set(fields) - set(task.fields):
                 raise WorkflowError("issue_scope", "只允许填写当前争议字段。")
-            if "result" in fields and len(selected) > 1:
-                raise WorkflowError(
-                    "shared_result", "不同来源结果不能复制同一个人工值；请使用各处保留值建议或分别解释。"
-                )
         elif operation == "keep_body":
             fields = {}
             if "keep_body" not in task.actions:

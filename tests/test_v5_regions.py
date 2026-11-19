@@ -85,17 +85,38 @@ def test_workbench_blocker_cards_cover_preflight_and_include_original_cell(tmp_p
             assert [card["id"] for card in blockers] == [
                 *preflight["unresolved"], *("approval:" + cid for cid in preflight["review_required"])
             ]
+            page = client.get(base + "/v5/review-actions", params={**request, "limit": 1}).json()
+            assert len(page["blockers"]) <= 1
+            assert all(card["kind"] != "not_received" for card in page["blockers"])
+            assert page["summary"]["pending_receipt"]
             if section == book.active.title:
                 region = next(card for card in blockers if card["kind"] == "region")
                 assert region["cells"] == [{"coordinate": "C13", "text": "Unclassified source evidence 8.2", "comment": ""}]
                 assert "region_parse" in region["tasks"][0]["actions"]
+                filtered = client.get(base + "/v5/review-actions", params={**request, "limit": 1, "category": "region"}).json()
+                assert filtered["summary"]["categories"]["region"]["tasks"] == 1
+                assert filtered["total"] == 1 and filtered["blockers"] == [region]
                 blocked = client.post(base + "/v5/commit", json={
                     "section": section, "base_revision": preflight["base_revision"], "fingerprint": preflight["fingerprint"],
                     "reason": "Probe unresolved source", "idempotency_key": "blocked",
                 })
                 assert blocked.status_code == 422 and blocked.json()["code"] == "sheet_unresolved"
         good_preview = client.get(base + "/workspace", params={"section": good.title}).json()
-        ids = [item["id"] for item in good_preview["preview"]["candidates"]]
+        candidate, = good_preview["preview"]["candidates"]
+        ids = [candidate["id"]]
+        endpoint = f"/api/v1/candidates/{candidate['id']}"
+        command = {"base_revision": good_preview["preflight"]["base_revision"], "candidate_revision": candidate["candidate_revision"],
+                   "fields": {"result": "97"}, "reason": "Checked source against project records", "idempotency_key": "correction"}
+        proposed = client.post(endpoint + "/edit-preview", json=command)
+        assert proposed.is_success, proposed.text
+        assert proposed.json()["record"]["result"]["raw_text"] == "97"
+        assert client.get(base + "/workspace", params={"section": good.title}).json() == good_preview
+        assert client.patch(endpoint, json=command).is_success
+        assert client.post(endpoint + "/edit-preview", json=command).status_code == 409
+        good_preview = client.get(base + "/workspace", params={"section": good.title}).json()
+        corrected, = good_preview["preview"]["candidates"]
+        assert corrected["corrections"]["result"] == "97"
+        assert corrected["raw_fields"]["result"] == candidate["raw_fields"]["result"]
         received = client.post(base + "/receive", json={"base_revision": good_preview["preflight"]["base_revision"],
             "candidate_ids": ids, "defer_confirmation": True, "idempotency_key": "receive"})
         assert received.is_success, received.text
@@ -104,10 +125,35 @@ def test_workbench_blocker_cards_cover_preflight_and_include_original_cell(tmp_p
         committed = client.post(base + "/v5/commit", json={"section": good.title, "base_revision": ready["base_revision"],
             "fingerprint": ready["fingerprint"], "reason": "Checked independent sheet", "idempotency_key": "commit"})
         assert committed.is_success, committed.text
+        blocked = client.patch(endpoint, json={**command, "base_revision": committed.json()["base_revision"],
+                                                "candidate_revision": corrected["candidate_revision"] + 1,
+                                                "idempotency_key": "official-modification"})
+        assert blocked.status_code == 409 and blocked.json()["code"] == "candidate_changed"
         refreshed = client.get(base + "/workspace", params={"section": good.title}).json()
         assert refreshed["commit_receipt"] == committed.json()
         result = client.get(f"/api/v1/projects/{config.project}/result-cells").json()
         assert {cell["adopted"]["result_version_id"] for cell in result["cells"]} == set(committed.json()["result_version_ids"])
+
+        good["C2"] = 96
+        alternative = BytesIO()
+        book.save(alternative)
+        conflict = flow.upload(config.project, "recheck.xlsx", alternative.getvalue(), context, "conflicting-source", actor=TECH)
+        path = f"/api/v1/previews/{conflict.preview_id}"
+        new_view = client.get(path + "/workspace", params={"section": good.title}).json()
+        new_row, = new_view["preview"]["candidates"]
+        received_again = client.post(path + "/receive", json={"base_revision": new_view["preflight"]["base_revision"],
+            "candidate_ids": [new_row["id"]], "defer_confirmation": True, "idempotency_key": "receive-conflict"})
+        assert received_again.is_success, received_again.text
+        changed = client.patch(f"/api/v1/candidates/{new_row['id']}", json={
+            "base_revision": received_again.json()["base_revision"], "candidate_revision": new_row["candidate_revision"],
+            "fields": {"result": "95"}, "reason": "Confirm the different value in this new source", "idempotency_key": "edit-conflict",
+        })
+        assert changed.is_success, changed.text
+        conflict_view = client.get(path + "/workspace", params={"section": good.title}).json()
+        assert conflict_view["preflight"]["unresolved"] == ["missing_intent:" + new_row["id"]]
+        assert not conflict_view["preflight"]["can_commit"]
+        unchanged = client.get(f"/api/v1/projects/{config.project}/result-cells").json()["cells"]
+        assert [cell["adopted"] for cell in unchanged] == [cell["adopted"] for cell in result["cells"]]
 
 
 def test_a11_native_drawing_line_is_visible_without_claiming_font_revision(tmp_path):

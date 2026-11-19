@@ -601,10 +601,36 @@ class Workflow:
             conn.execute("BEGIN")
             return self._preview(conn, self._upload(conn, upload_id), actor)
 
+    @staticmethod
+    def _check_edit_fields(request):
+        if set(request.fields) - (EDITABLE - {"project"}):
+            raise WorkflowError("invalid_correction", "不能修改系统 ID、项目归属或未知字段。")
+
+    @staticmethod
+    def _check_edit_revision(conn, row, request):
+        check_revision(conn, row["project"], request.base_revision)
+        if row["lifecycle"] != "draft" or row["revision"] != request.candidate_revision:
+            raise WorkflowError("candidate_changed", "候选已提交或版本已变化；已确认事实不能用解析纠错修改。", 409)
+
+    def preview_edit(self, candidate_id, request, *, actor):
+        require(actor, Capability.CONFIRM_FACT)
+        self._check_edit_fields(request)
+        with self.store.read() as conn:
+            row = self._candidate(conn, candidate_id)
+            self._check_edit_revision(conn, row, request)
+            upload = self._upload(conn, row["upload_id"])
+            updated = {**dict(row), "corrections_json": encoded({
+                **json.loads(row["corrections_json"]), **request.fields
+            })}
+            try:
+                record = self._mapped(conn, updated, upload, acknowledge_warning=request.acknowledge_source_warning)
+            except NeedsReview as exc:
+                return {"record": None, "issue_code": exc.code, "detail": str(exc)}
+            return {"record": record, "issue_code": None, "detail": ""}
+
     def edit(self, candidate_id, request, *, actor):
         require(actor, Capability.CONFIRM_FACT)
-        if set(request.fields) - EDITABLE or "project" in request.fields:
-            raise WorkflowError("invalid_correction", "不能修改系统 ID、项目归属或未知字段。")
+        self._check_edit_fields(request)
         with self.store.connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
             row = self._candidate(conn, candidate_id)
@@ -613,9 +639,7 @@ class Workflow:
             prior = replay(conn, project, actor, request.idempotency_key, payload)
             if prior:
                 return MutationResult.model_validate(prior)
-            check_revision(conn, project, request.base_revision)
-            if row["lifecycle"] != "draft" or row["revision"] != request.candidate_revision:
-                raise WorkflowError("candidate_changed", "候选已提交或版本已变化；已确认事实不能用解析纠错修改。", 409)
+            self._check_edit_revision(conn, row, request)
             changes = {**json.loads(row["corrections_json"]), **request.fields}
             detection = row["detection_id"]
             if "source_number" in request.fields:

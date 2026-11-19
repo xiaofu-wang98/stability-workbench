@@ -215,7 +215,8 @@ Object.assign(ui,{
     const heading = editor.querySelector('.v52-heading');
     const returnLink = document.createElement('a');
     returnLink.textContent = '返回工作台当前原件';
-    returnLink.href = '/workbench/#/import?' + new URLSearchParams({ project: this.preview.project, source: this.upload, section: this.sheet });
+    returnLink.href = '/workbench/#/import?' + new URLSearchParams({ project: this.preview.project, source: this.upload,
+      section: this.sheet, task: query.get('task') });
     heading?.prepend(returnLink);
     const task = this.tasks.find(item => item.id === query.get('task'));
     if (task && this.contextTask !== task.id) {

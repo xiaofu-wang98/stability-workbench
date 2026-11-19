@@ -139,6 +139,16 @@ def test_each_result_uses_its_own_new_value_undo_and_idempotency(tmp_path, conte
     _, _, _, tasks, _ = view(flow, p)
     result_tasks = [t for t in tasks if t.fields == ("result",)]
     assert len(result_tasks) == 2
+    manual_scope = TaskBatchScope(section="DP长期", task_ids=tuple(t.id for t in result_tasks),
+                                  operation="manual", fields={"result": "5.50"})
+    with flow.store.read() as conn:
+        with pytest.raises(WorkflowError) as failure:
+            preview_batch(flow, conn, p.preview_id, manual_scope, TECH)
+        assert failure.value.code == "shared_result"
+        skipped = result_tasks[1].members[0]["candidate_id"]
+        one = preview_batch(flow, conn, p.preview_id,
+                            manual_scope.model_copy(update={"exclude_candidate_ids": (skipped,)}), TECH)
+        assert len(one["members"]) == 1 and one["members"][0]["candidate_id"] != skipped
     scope = TaskBatchScope(
         section="DP长期", task_ids=tuple(t.id for t in result_tasks), operation="keep_active"
     )

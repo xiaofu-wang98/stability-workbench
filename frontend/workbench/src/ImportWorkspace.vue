@@ -4,13 +4,15 @@ import { useRoute, useRouter } from 'vue-router';
 import { NAlert, NButton, NSelect } from 'naive-ui';
 import { api, type Project } from './api';
 import ImportSourceReview from './ImportSourceReview.vue';
+import CandidateSourceEditor, { type SourceCandidate } from './CandidateSourceEditor.vue';
+import { cellAddress, sourceReviewText } from './sourceReviewText';
 import StudyWorkbook from './StudyWorkbook.vue';
 
 const props = defineProps<{ projects: Project[] }>();
 const route = useRoute();
 const router = useRouter();
 type Result = { result: { raw_text: string }; key: { batch: string; item: string; method: string; time_label?: string; month?: number; day?: number } };
-type Candidate = { id: string; lifecycle: string; received: boolean; detail: string; status: string; location: { section: string; row: number; column: number };
+type Candidate = SourceCandidate & { lifecycle: string; received: boolean; status: string;
   logical_row?: number | null; source_span?: [number, number, number, number] | null;
   raw_fields: Record<string, string>; record?: Result; existing_record?: Result; allowed_actions: string[]; candidate_revision: number; detection_id: string };
 type Preview = { preview_id: string; project: string; filename: string; base_revision: number; duplicate_source?: boolean; sheet_confirmation_required: boolean; candidates: Candidate[] };
@@ -58,6 +60,8 @@ const onlyReview = ref(false);
 const reviewSources = ref(false);
 const excludeCandidate = ref<string>();
 const sourceReviewPanel = ref<HTMLElement>();
+const sourceCandidate = ref<string>();
+const taskFocus = ref(String(route.query.task || ''));
 type ConflictAction = 'keep_old' | 'correction' | 'retest' | 'exclude';
 const resolving = ref<Candidate>();
 const conflictAction = ref<ConflictAction | ''>('');
@@ -84,6 +88,10 @@ const reviewUrl = computed(() => preview.value ? router.resolve({ path: '/import
 } }).href : '');
 const candidates = computed(() => preview.value?.candidates.filter(c =>
   !preview.value?.sheet_confirmation_required || c.location.section === section.value) ?? []);
+const candidateDirectory = computed(() => Object.fromEntries(candidates.value.map(c => [c.id, c])));
+const activeCandidate = computed(() => sourceCandidate.value ? candidateDirectory.value[sourceCandidate.value] : undefined);
+const scopeIdentities = computed(() => [...new Set(candidates.value.map(c =>
+  ['batch', 'sample_type', 'condition'].map(field => c.interpreted_fields[field]).filter(Boolean).join(' · ')).filter(Boolean))]);
 const initial = computed(() => candidates.value.filter(c => c.lifecycle === 'draft' && c.allowed_actions.includes('confirm_initial')));
 const unreceived = computed(() => candidates.value.filter(c => c.lifecycle === 'draft' && !c.received));
 const needsReceipt = computed(() => Boolean(unreceived.value.length || preflight.value?.unresolved.includes('not_received')));
@@ -91,7 +99,7 @@ const sourceOnly = computed(() => Boolean(preflight.value && !candidates.value.l
 const unresolvedIssues = computed(() => preflight.value?.unresolved.filter(
   item => item !== 'not_received' && !item.startsWith('not_received:'),
 ) ?? []);
-const blockerCount = computed(() => (preflight.value?.unresolved.length ?? 0) + (preflight.value?.review_required.length ?? 0));
+const blockerCount = computed(() => unresolvedIssues.value.length + (preflight.value?.review_required.length ?? 0));
 const nextSection = computed(() => sections.value[sections.value.indexOf(section.value || '') + 1]);
 const progressText = computed(() => {
   const current = preflight.value;
@@ -182,6 +190,7 @@ async function createProject(event: Event) {
 }
 async function selectSection(value: string | null, loaded?: WorkspacePreview) {
   section.value = value;
+  sourceCandidate.value = undefined;
   preflight.value = undefined;
   resolving.value = undefined;
   approval.value = undefined;
@@ -225,7 +234,10 @@ async function open(id: string, selected?: string) {
 onMounted(() => {
   const source = String(route.query.source || '');
   const selected = String(route.query.section || '');
-  if (source) void run(() => open(source, selected || undefined));
+  if (source) void run(async () => {
+    await open(source, selected || undefined);
+    if (taskFocus.value) await showSourceReview();
+  });
   else if (project.value) void run(list);
 });
 function upload() {
@@ -378,6 +390,38 @@ function approveDecision() {
 async function previewCellExclusion(candidate: Candidate) {
   excludeCandidate.value = candidate.id;
   await showSourceReview();
+}
+async function viewCandidate(id: string) {
+  sourceCandidate.value = id;
+  await nextTick();
+  const editor = document.querySelector<HTMLElement>('.candidate-source-editor');
+  editor?.focus({ preventScroll: true });
+  editor?.scrollIntoView({ block: 'start' });
+}
+async function viewCandidateTask(id: string) {
+  taskFocus.value = id;
+  await showSourceReview();
+}
+function refreshReview(reopenCandidate?: string) {
+  return run(async () => {
+    const reviewWasOpen = reviewSources.value;
+    if (preview.value) await open(preview.value.preview_id, section.value || undefined);
+    reviewSources.value = reviewWasOpen && Boolean(preflight.value && preflight.value.state !== 'committed');
+    if (reopenCandidate && candidateDirectory.value[reopenCandidate]) await viewCandidate(reopenCandidate);
+    status.value = '已保存来源决定，请核对更新后的预检。';
+  });
+}
+function restoreCandidate(candidate: Candidate) {
+  const basis = window.prompt('恢复此草稿的依据');
+  if (!basis?.trim() || !preview.value || !preflight.value) return;
+  const source = preview.value.preview_id;
+  const name = preflight.value.section;
+  return run(async () => {
+    await submit(source, '/v5/restore', { base_revision: preflight.value?.base_revision,
+      candidate_id: candidate.id, candidate_revision: candidate.candidate_revision, action: 'restore', reason: basis.trim() });
+    await open(source, name);
+    status.value = '已恢复候选草稿。';
+  });
 }
 async function showSourceReview() {
   reviewSources.value = true;
@@ -534,17 +578,20 @@ function time(record?: Result) {
     <section id="current-source" class="panel import-panel import-review">
       <h2>{{ preview.filename }}</h2>
       <div>目标项目 {{ preview.project }} · <a :href="'/api/v1' + path + '/file'">下载原件</a></div>
+      <details v-if="scopeIdentities.length"><summary>本表批次、材料与条件 · {{ scopeIdentities.length }} 组</summary>
+        <ul><li v-for="identity in scopeIdentities" :key="identity">{{ identity }}</li></ul>
+      </details>
       <a :href="reviewUrl" target="_blank" rel="noopener">在新标签打开当前核对范围</a>
       <NButton :disabled="busy" @click="run(async () => { preview = undefined; await list(); })">返回导入列表</NButton>
       <NSelect v-if="preview.sheet_confirmation_required" filterable :value="section" :disabled="busy" placeholder="选择工作表"
-        :options="sections.map(s => ({ label: s, value: s }))" @update:value="value => run(() => selectSection(value))" />
+        :options="sections.map(s => ({ label: s, value: s }))" @update:value="value => { taskFocus = ''; run(() => selectSection(value)); }" />
       <p class="source-progress">{{ progressText }}</p>
       <NAlert v-if="!candidates.length" type="warning">当前范围没有识别到结果。请先核对工作表的来源区域和用途。</NAlert>
       <div>当前范围 {{ candidates.length }} 条 · 尚未提交 {{ candidates.filter(c => c.lifecycle === 'draft').length }} 条</div>
       <NAlert v-if="preflight && !preflight.can_commit && preflight.state !== 'committed'" type="warning">
         <span v-if="preflight.blocker_reasons.length">{{ preflight.blocker_reasons.join('；') }}</span>
         <p v-if="unreceived.length">有 {{ unreceived.length }} 条候选尚未接收。</p>
-        <p v-if="blockerCount">还有 {{ blockerCount }} 项需要核对。逐项清单与本次预检对应。</p>
+        <p v-if="blockerCount">还有 {{ blockerCount }} 个争议或复核引用。请在下方按类型查看独立任务。</p>
         <span v-if="preflight.review_required.length">{{ preflight.review_required.length }} 条结果的处理决定待复核。</span>
         <span v-if="!unreceived.length && !preflight.blocker_reasons.length && !unresolvedIssues.length && !preflight.review_required.length">此工作表还未通过写入预检。</span>
         <NButton text :disabled="busy" @click="showSourceReview">查看本表来源核对建议</NButton>
@@ -578,16 +625,16 @@ function time(record?: Result) {
       </div>
     </section>
     <div v-if="reviewSources && section" ref="sourceReviewPanel">
-    <ImportSourceReview :key="[preview.preview_id, section, preflight?.base_revision, excludeCandidate].join(':')"
+    <ImportSourceReview :key="[preview.preview_id, section, preflight?.base_revision, excludeCandidate, taskFocus].join(':')"
       :source="preview.preview_id" :section="section" :project="preview.project" :exclude-candidate="excludeCandidate" :refreshing="busy"
+      :candidates="candidateDirectory" :focus="taskFocus" @edit="viewCandidate"
       @receive="receiveSheet" @history="reviewHistory"
       @cancel="returnToSource"
-      @saved="run(async () => {
-        if (preview) await open(preview.preview_id, section || undefined);
-        reviewSources = Boolean(preflight && !preflight.can_commit);
-        status = '已保存来源决定，请核对更新后的预检。';
-      })" />
+      @saved="refreshReview()" />
     </div>
+    <CandidateSourceEditor v-if="activeCandidate" :key="activeCandidate.id + ':' + activeCandidate.candidate_revision"
+      :candidate="activeCandidate" :revision="preview.base_revision" :source="preview.preview_id"
+      @saved="refreshReview(sourceCandidate)" @close="sourceCandidate = undefined" @review="viewCandidateTask" />
     <section v-if="approval" id="import-history-review" class="panel import-panel">
       <h2>复核历史结果处理决定</h2>
       <p>{{ approval.candidate.location.section }} · 行 {{ approval.candidate.location.row }} ·
@@ -619,17 +666,21 @@ function time(record?: Result) {
       <table>
         <thead><tr><th>原件位置</th><th>批号</th><th>检项与方法</th><th>时间点</th><th>原有值</th><th>本次值</th><th>状态</th></tr></thead>
         <tbody><tr v-for="c in visibleCandidates.slice(0, reviewLimit)" :key="c.id">
-          <td>{{ c.location.section }} · 行 {{ c.location.row }} 列 {{ c.location.column }}
+          <td>{{ c.location.section }} · {{ cellAddress(c.location.row, c.location.column) }}
             <div v-if="c.source_span">合并原格覆盖第 {{ c.source_span[0] }}–{{ c.source_span[2] }} 行，当前对应第 {{ c.logical_row ?? c.location.row }} 行。</div>
           </td><td>{{ c.record?.key.batch ?? c.raw_fields.batch }}</td>
           <td>{{ c.record?.key.item ?? c.raw_fields.test_item }} {{ c.record?.key.method ?? c.raw_fields.method }}</td>
           <td>{{ time(c.record) || c.raw_fields.time_point }}</td>
           <td>{{ c.existing_record?.result.raw_text }}</td><td>{{ c.record?.result.raw_text ?? c.raw_fields.result }}</td>
-          <td>{{ c.lifecycle === 'submitted' ? '已提交' : c.lifecycle === 'withdrawn' ? '已排除' : c.detail }}
+          <td>{{ c.lifecycle === 'submitted' ? '已提交' : c.lifecycle === 'withdrawn' ? '已排除' : sourceReviewText(c.detail, c.revisions?.result) }}
+            <span v-if="c.comment && c.lifecycle === 'draft'"> · 有原件批注</span>
+            <NButton text :disabled="busy" @click="viewCandidate(c.id)">{{ c.allowed_actions.includes('edit') ? '修改来源解释' : '查看原格' }}</NButton>
+            <NButton v-if="c.lifecycle === 'draft' && c.status === 'needs_review'" text :disabled="busy" @click="viewCandidateTask(c.id)">查看关联任务</NButton>
+            <NButton v-if="c.lifecycle === 'withdrawn' && preflight && preflight.state !== 'committed'" text :disabled="busy" @click="restoreCandidate(c)">恢复草稿</NButton>
             <NButton v-if="preflight && c.received && c.lifecycle === 'draft' && c.status === 'different_value' && c.allowed_actions.includes('save_decision')"
               text :disabled="busy" @click="openConflict(c)">处理变动</NButton>
-            <NButton v-if="preflight && c.received && c.lifecycle === 'draft' && c.status === 'needs_review'"
-              text :disabled="busy" @click="previewCellExclusion(c)">预览排除此原格</NButton>
+            <NButton v-if="preflight && c.received && c.allowed_actions.includes('withdraw')"
+              text :disabled="busy" @click="previewCellExclusion(c)">预览不采用</NButton>
           </td>
         </tr></tbody>
       </table>

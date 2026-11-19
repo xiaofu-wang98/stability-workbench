@@ -1,0 +1,173 @@
+{
+  "baseline": "ef2070e593435d1348e4cc677bd29dbfbc6ebd3b",
+  "method": "workflow upload into isolated empty store; current_review before and after receipt",
+  "sheets": {
+    "ds_accelerated": {
+      "before_receipt": {
+        "candidates": 102,
+        "preflight_references": 114,
+        "reference_kinds": {
+          "not_received": 103,
+          "candidate": 11
+        },
+        "approvals": 0,
+        "independent_tasks": 7,
+        "taxonomy": {
+          "identity_conflict": 2,
+          "source_comment": 3,
+          "source_revision": 2
+        },
+        "affected_candidates": 11,
+        "multiple_task_candidates": 0,
+        "without_old_vue_inline_manual": 0,
+        "eligible_existing_suggestion_excluding_regions": 5,
+        "candidate_status": {
+          "new": 91,
+          "needs_review": 11
+        },
+        "missing_in_parsed_fields": {
+          "time_point": 0,
+          "sample_type": 0,
+          "test_item": 0
+        }
+      },
+      "after_receipt": {
+        "candidates": 102,
+        "preflight_references": 11,
+        "reference_kinds": {
+          "candidate": 11
+        },
+        "approvals": 0,
+        "independent_tasks": 7,
+        "taxonomy": {
+          "identity_conflict": 2,
+          "source_comment": 3,
+          "source_revision": 2
+        },
+        "affected_candidates": 11,
+        "multiple_task_candidates": 0,
+        "without_old_vue_inline_manual": 0,
+        "eligible_existing_suggestion_excluding_regions": 5,
+        "candidate_status": {
+          "new": 91,
+          "needs_review": 11
+        },
+        "missing_in_parsed_fields": {
+          "time_point": 0,
+          "sample_type": 0,
+          "test_item": 0
+        }
+      },
+      "underlying_source_issues": {
+        "issue_instances": {
+          "identity_conflict": 6,
+          "source_comment": 3,
+          "source_revision": 2
+        },
+        "candidates_with_multiple_issues": 0,
+        "physical_candidate_locations": 102
+      },
+      "header_diagnostics": {
+        "parsed_sample_type": {
+          "DS": 102
+        },
+        "numeric_time_header_comparisons": {
+          "matched": 0,
+          "mismatched": 0,
+          "not_comparable": 102
+        },
+        "original_item_evidence_count": 102,
+        "physical_month_labels": {
+          "matched": 102,
+          "mismatched": 0,
+          "not_comparable": 0
+        }
+      }
+    },
+    "ds_minus20": {
+      "before_receipt": {
+        "candidates": 903,
+        "preflight_references": 1256,
+        "reference_kinds": {
+          "region": 6,
+          "not_received": 904,
+          "candidate": 346
+        },
+        "approvals": 0,
+        "independent_tasks": 80,
+        "taxonomy": {
+          "source_revision": 13,
+          "source_comment": 52,
+          "row_exclusion": 9,
+          "region": 6
+        },
+        "affected_candidates": 346,
+        "multiple_task_candidates": 7,
+        "without_old_vue_inline_manual": 15,
+        "eligible_existing_suggestion_excluding_regions": 73,
+        "candidate_status": {
+          "new": 557,
+          "needs_review": 346
+        },
+        "missing_in_parsed_fields": {
+          "time_point": 0,
+          "sample_type": 0,
+          "test_item": 0
+        }
+      },
+      "after_receipt": {
+        "candidates": 903,
+        "preflight_references": 352,
+        "reference_kinds": {
+          "region": 6,
+          "candidate": 346
+        },
+        "approvals": 0,
+        "independent_tasks": 80,
+        "taxonomy": {
+          "source_revision": 13,
+          "source_comment": 52,
+          "row_exclusion": 9,
+          "region": 6
+        },
+        "affected_candidates": 346,
+        "multiple_task_candidates": 7,
+        "without_old_vue_inline_manual": 15,
+        "eligible_existing_suggestion_excluding_regions": 73,
+        "candidate_status": {
+          "new": 557,
+          "needs_review": 346
+        },
+        "missing_in_parsed_fields": {
+          "time_point": 0,
+          "sample_type": 0,
+          "test_item": 0
+        }
+      },
+      "underlying_source_issues": {
+        "issue_instances": {
+          "source_revision": 1036,
+          "source_comment": 52
+        },
+        "candidates_with_multiple_issues": 259,
+        "physical_candidate_locations": 903
+      },
+      "header_diagnostics": {
+        "parsed_sample_type": {
+          "DS": 903
+        },
+        "numeric_time_header_comparisons": {
+          "matched": 129,
+          "mismatched": 0,
+          "not_comparable": 774
+        },
+        "original_item_evidence_count": 903,
+        "physical_month_labels": {
+          "matched": 903,
+          "mismatched": 0,
+          "not_comparable": 0
+        }
+      }
+    }
+  }
+}
