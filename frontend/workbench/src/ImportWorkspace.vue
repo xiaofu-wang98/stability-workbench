@@ -70,6 +70,32 @@ const onlyReview = ref(false);
 const reviewSources = ref(false);
 const excludeCandidate = ref<string>();
 const sourceReviewPanel = ref<HTMLElement>();
+const sourceReviewRef = ref<{ reload: () => Promise<void>; hasDirtyDraft?: boolean }>();
+const candidateEditorRef = ref<{ isDirty?: boolean }>();
+const dirtyModalVisible = ref(false);
+const dirtyAction = ref<(() => Promise<void> | void) | null>(null);
+
+function checkDirtyAndConfirm(action: () => Promise<void> | void) {
+  const isEditorDirty = candidateEditorRef.value?.isDirty;
+  const isReviewDirty = sourceReviewRef.value?.hasDirtyDraft;
+  if (isEditorDirty || isReviewDirty) {
+    dirtyAction.value = action;
+    dirtyModalVisible.value = true;
+  } else {
+    void action();
+  }
+}
+
+function confirmDiscardDirty() {
+  dirtyModalVisible.value = false;
+  sourceCandidate.value = undefined;
+  if (dirtyAction.value) {
+    const act = dirtyAction.value;
+    dirtyAction.value = null;
+    void act();
+  }
+}
+
 const sourceCandidate = ref<string>();
 const taskFocus = ref(String(route.query.task || ''));
 const reviewRefreshToken = ref(0);
@@ -131,8 +157,8 @@ const sectionOptions = computed(() => sections.value.map(s => {
   let tag = '';
   if (st) {
     if (st.state === 'committed') tag = ' [✓ 已入库]';
-    else if (st.unresolved_count > 0) tag = ` [⚠ 待核对: ${st.unresolved_count}]`;
     else if (st.state === 'not_received') tag = ' [○ 待接收]';
+    else if (st.unresolved_count > 0) tag = ` [⚠ 待核对: ${st.unresolved_count}]`;
   }
   return { label: s + tag, value: s };
 }));
@@ -342,7 +368,22 @@ onMounted(() => {
   const selected = String(route.query.section || '');
   if (source) void run(async () => {
     await open(source, selected || undefined);
-    if (taskFocus.value) await showSourceReview();
+    if (taskFocus.value) {
+      await showSourceReview();
+      try {
+        const actions = await api<{ task_cards?: { task_id: string }[] }>(
+          `/previews/${encodeURIComponent(source)}/v5/review-actions?section=${encodeURIComponent(selected || section.value || '')}`
+        );
+        const exists = actions.task_cards?.some(c => c.task_id === taskFocus.value);
+        if (!exists) {
+          message.info('该高级任务已处理完成');
+          taskFocus.value = '';
+          const q = { ...route.query };
+          delete q.task;
+          void router.replace({ path: '/import', query: q });
+        }
+      } catch {}
+    }
   });
   else if (project.value) void run(list);
 });
@@ -753,7 +794,7 @@ function syncWorksheets() {
           <div class="meta-row">目标项目 {{ preview.project }} · <a :href="'/api/v1' + path + '/file'">下载原件</a></div>
         </div>
         <div class="header-actions">
-          <NButton :disabled="busy" @click="returnToList">返回导入列表</NButton>
+          <NButton :disabled="busy" @click="checkDirtyAndConfirm(returnToList)">返回导入列表</NButton>
         </div>
       </div>
 
@@ -766,7 +807,7 @@ function syncWorksheets() {
       <div v-if="preview.sheet_confirmation_required" class="sheet-select-row">
         <label>选择工作表：
           <NSelect filterable :value="section" :disabled="busy" placeholder="选择工作表"
-            :options="sectionOptions" @update:value="value => { taskFocus = ''; run(() => selectSection(value)); }" />
+            :options="sectionOptions" :on-update:value="value => checkDirtyAndConfirm(() => { taskFocus = ''; run(() => selectSection(value)); })" />
         </label>
         <span v-if="sheetProgressText" class="sheet-progress-pill">{{ sheetProgressText }}</span>
       </div>
@@ -796,7 +837,7 @@ function syncWorksheets() {
           待处理研究 {{ worksheetSync.filter(item => item.status === 'needs_input').length }} 项 · 已关联研究表 {{ linkedSheets.length }} 张
         </p>
         <div class="committed-next-actions">
-          <NButton v-if="nextIncompleteSection" type="primary" :disabled="busy" @click="run(() => selectSection(nextIncompleteSection))">
+          <NButton v-if="nextIncompleteSection" type="primary" :disabled="busy" @click="checkDirtyAndConfirm(() => run(() => selectSection(nextIncompleteSection)))">
             1. 继续处理下一张表（{{ nextIncompleteSection }}）
           </NButton>
           <NButton v-if="!sourceOnly" secondary type="info" :loading="busy" @click="syncWorksheets">
@@ -827,14 +868,14 @@ function syncWorksheets() {
         <RouterLink :to="'/projects/' + encodeURIComponent(preview.project)">打开项目数据</RouterLink>
         <RouterLink :to="{ path: '/deliveries', query: { project: preview.project, format: 'controlled' } }">打开生成与交付</RouterLink>
         <RouterLink v-for="sheet in linkedSheets" :key="sheet.id" :to="'/worksheets/' + encodeURIComponent(sheet.id)">打开研究表 {{ sheet.name }}</RouterLink>
-        <NButton v-if="preflight?.state === 'committed' && !sourceOnly" :loading="busy" @click="syncWorksheets">同步研究表</NButton>
-        <NButton v-if="nextSection" :disabled="busy" @click="run(() => selectSection(nextSection))">继续处理下一个工作表</NButton>
+        <NButton v-if="preflight?.state !== 'committed' && nextSection" :disabled="busy" @click="checkDirtyAndConfirm(() => run(() => selectSection(nextSection)))">继续处理下一个工作表</NButton>
       </div>
     </section>
 
     <!-- Source Review Panel (Phase 2.2) -->
     <div v-if="reviewSources && section" id="sourceReviewPanel" ref="sourceReviewPanel">
       <ImportSourceReview
+        ref="sourceReviewRef"
         :key="[preview.preview_id, section].join(':')"
         :refresh-token="reviewRefreshToken"
         :source="preview.preview_id"
@@ -855,12 +896,13 @@ function syncWorksheets() {
     <!-- Candidate Source Drawer (Phase 3.1) -->
     <CandidateSourceEditor
       v-if="activeCandidate"
+      ref="candidateEditorRef"
       :candidate="activeCandidate"
       :revision="preview.base_revision"
       :source="preview.preview_id"
       :candidates-list="candidates"
       @saved="refreshReview(sourceCandidate)"
-      @close="sourceCandidate = undefined"
+      @close="checkDirtyAndConfirm(() => { sourceCandidate = undefined; })"
       @navigate="id => viewCandidate(id)"
       @review="viewCandidateTask"
     />
@@ -901,7 +943,7 @@ function syncWorksheets() {
       <table>
         <thead><tr><th>原件位置</th><th>批号</th><th>检项与方法</th><th>时间点</th><th>原有值</th><th>本次值</th><th>状态与操作</th></tr></thead>
         <tbody>
-          <tr v-for="c in visibleCandidates.slice(0, reviewLimit)" :key="c.id" :class="{ 'anomaly-row': (c.issues && c.issues.length > 0) || !c.received }">
+          <tr v-for="c in visibleCandidates.slice(0, reviewLimit)" :key="c.id" :class="{ 'anomaly-row': c.lifecycle === 'draft' && (c.status === 'needs_review' || c.status === 'different_value' || (c.issues && c.issues.length > 0)) }">
             <td>{{ c.location.section }} · {{ cellAddress(c.location.row, c.location.column) }}
               <div v-if="c.source_span">合并原格覆盖第 {{ c.source_span[0] }}–{{ c.source_span[2] }} 行，当前对应第 {{ c.logical_row ?? c.location.row }} 行。</div>
             </td>
@@ -916,15 +958,25 @@ function syncWorksheets() {
                 <span v-if="c.comment && c.lifecycle === 'draft'"> · 有原件批注</span>
               </div>
               <div class="row-actions">
-                <NButton size="small" type="primary" secondary :disabled="busy" @click="viewCandidate(c.id)">
-                  {{ c.issues && c.issues.length > 0 ? '去核对 / 修改' : (c.allowed_actions.includes('edit') ? '修改解释' : '查看原格') }}
+                <NButton v-if="c.lifecycle === 'withdrawn' && preflight && preflight.state !== 'committed'" size="small" type="primary" secondary :disabled="busy" @click="restoreCandidate(c)">
+                  恢复草稿
                 </NButton>
-                <NButton v-if="c.lifecycle === 'draft' && c.status === 'needs_review'" text :disabled="busy" @click="viewCandidateTask(c.id)">查看关联任务</NButton>
-                <NButton v-if="c.lifecycle === 'withdrawn' && preflight && preflight.state !== 'committed'" text :disabled="busy" @click="restoreCandidate(c)">恢复草稿</NButton>
-                <NButton v-if="preflight && c.received && c.lifecycle === 'draft' && c.status === 'different_value' && c.allowed_actions.includes('save_decision')"
-                  text :disabled="busy" @click="openConflict(c)">处理变动</NButton>
-                <NButton v-if="preflight && c.received && c.allowed_actions.includes('withdraw')"
-                  text :disabled="busy" @click="previewCellExclusion(c)">预览不采用</NButton>
+                <NButton v-else-if="preflight && c.received && c.lifecycle === 'draft' && c.status === 'different_value' && c.allowed_actions.includes('save_decision')" size="small" type="primary" secondary :disabled="busy" @click="openConflict(c)">
+                  处理变动
+                </NButton>
+                <NButton v-else-if="(c.issues && c.issues.length > 0) || (c.lifecycle === 'draft' && c.status === 'needs_review')" size="small" type="primary" secondary :disabled="busy" @click="viewCandidate(c.id)">
+                  去核对 / 修改
+                </NButton>
+                <NButton v-else size="small" secondary :disabled="busy" @click="viewCandidate(c.id)">
+                  {{ c.allowed_actions.includes('edit') ? '修改解释' : '查看原格' }}
+                </NButton>
+
+                <NButton v-if="c.lifecycle === 'draft' && c.status === 'needs_review'" text size="tiny" :disabled="busy" @click="viewCandidateTask(c.id)">
+                  查看关联任务
+                </NButton>
+                <NButton v-if="preflight && c.received && c.allowed_actions.includes('withdraw') && c.lifecycle !== 'withdrawn'" text size="tiny" :disabled="busy" @click="previewCellExclusion(c)">
+                  预览不采用
+                </NButton>
               </div>
             </td>
           </tr>
@@ -945,13 +997,25 @@ function syncWorksheets() {
         </div>
       </div>
     </NModal>
+
+    <!-- Modal for Dirty Protection -->
+    <NModal
+      v-model:show="dirtyModalVisible"
+      preset="dialog"
+      type="warning"
+      title="未保存内容提示"
+      content="当前有未保存的核对/修改内容，确认离开并放弃未保存更改？"
+      positive-text="确认离开"
+      negative-text="继续保留"
+      @positive-click="confirmDiscardDirty"
+    />
   </template>
 </template>
 
 <style scoped>
 .import-panel { display: grid; gap: 12px; max-width: 800px; justify-items: start; }
 .import-review { max-width: none; }
-.file-header-row { display: flex; justify-content: space-between; align-items: flex-start; width: 100%; }
+.file-header-row { display: flex; justify-content: flex-start; align-items: center; gap: 24px; width: 100%; }
 .meta-row { font-size: 0.9rem; color: #475569; margin-top: 4px; }
 .sheet-select-row { display: flex; align-items: center; gap: 12px; width: 100%; margin: 8px 0; }
 .sheet-select-row label { display: flex; align-items: center; gap: 8px; min-width: 300px; font-weight: 500; }

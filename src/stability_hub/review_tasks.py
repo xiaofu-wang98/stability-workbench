@@ -688,10 +688,41 @@ def blocker_cards(conn, upload, preview, flight, sheets, tasks, *, index=None, r
     return cards
 
 
+def _readable_task_detail(detail: str) -> str:
+    if not detail:
+        return ""
+    s = detail.strip()
+    if s.startswith("{") and s.endswith("}"):
+        import json
+        try:
+            data = json.loads(s)
+            if isinstance(data, dict):
+                deleted_word = data.get("deleted_word")
+                all_deleted = data.get("all_deleted")
+                active_text = data.get("active_text")
+                segments = data.get("segments")
+                if all_deleted:
+                    return f"原单元格全部内容已划线删除（删除内容：“{deleted_word or '整格文本'}”）"
+                parts = []
+                if deleted_word:
+                    parts.append(f"划线删除内容：“{deleted_word}”")
+                if active_text:
+                    parts.append(f"未划线保留正文：“{active_text}”")
+                if parts:
+                    return "；".join(parts)
+                if segments:
+                    seg_texts = [f"~~{seg['text']}~~" if seg.get("struck") else seg.get("text", "")
+                                 for seg in segments if seg.get("text")]
+                    return "".join(seg_texts)
+        except Exception:
+            pass
+    return detail
+
+
 def build_task_cards(conn, upload, preview, flight, sheets, tasks, *, index=None):
     from openpyxl.utils import get_column_letter
     from pathlib import Path
-    import re
+    import json
 
     index = blocker_index(flight, tasks) if index is None else index
     candidates = {candidate.id: candidate for candidate in preview.candidates}
@@ -707,6 +738,14 @@ def build_task_cards(conn, upload, preview, flight, sheets, tasks, *, index=None
         if task.id in seen_tasks:
             continue
         seen_tasks.add(task.id)
+
+        # 1. Category matching blocker_category
+        task_category = task.code
+        for ref, matching in index.items():
+            if any(t.id == task.id for t in matching):
+                if ref.startswith("unprojected_region:"):
+                    task_category = "unprojected_region"
+                    break
 
         coords = []
         for loc in task.evidence:
@@ -754,7 +793,7 @@ def build_task_cards(conn, upload, preview, flight, sheets, tasks, *, index=None
                 members_list.append({
                     "candidate_id": cid,
                     "coordinate": coord,
-                    "time_point": tp or "0M",
+                    "time_point": tp or "未注明",
                     "batch": batch_val,
                     "current_value": curr_val,
                     "raw_value": raw_val,
@@ -762,73 +801,79 @@ def build_task_cards(conn, upload, preview, flight, sheets, tasks, *, index=None
 
         primary_cell = source_cells[0] if source_cells else {"coordinate": "", "text": "", "comment": ""}
         coord_label = primary_cell["coordinate"]
-        raw_text = primary_cell["text"]
 
-        lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
-        zh_choice, en_choice = None, None
-        for line in lines:
-            has_zh = bool(re.search(r'[\u4e00-\u9fa5]', line))
-            has_en = bool(re.search(r'[A-Za-z]', line))
-            clean_token = re.sub(r'[:：].*$', '', line).strip()
-            clean_token = re.sub(r'[（\(][^）\)]*[）\)]', '', clean_token).strip()
-            if has_zh and not zh_choice:
-                zh_choice = clean_token or line
-            elif has_en and not en_choice:
-                en_choice = clean_token or line
+        primary_cid = members_list[0]["candidate_id"] if members_list else None
+        primary_candidate = candidates.get(primary_cid) if primary_cid else None
+        revisions_data = None
+        if primary_candidate and getattr(primary_candidate, "revisions", None):
+            rev = primary_candidate.revisions
+            revisions_data = rev.model_dump(mode="json") if hasattr(rev, "model_dump") else rev
 
         title = ""
         detail_text = ""
         quick_choices = []
         field_name = task.fields[0] if task.fields else "subresult"
 
-        if task.code in ("identity_conflict", "method_conflict") or (zh_choice and en_choice and len(lines) >= 2):
-            if zh_choice and en_choice:
-                title = f"双语冲突：{zh_choice} vs {en_choice}"
-                detail_text = f"原件单元格 {coord_label} 存在中英文双语差异（{zh_choice} / {en_choice}），影响 {len(members_list)} 个时间点。请核对原件后选择适用标准。"
+        readable_detail = _readable_task_detail(task.detail)
+
+        # 1. Identity / method bilingual conflict
+        if task.code in ("identity_conflict", "method_conflict"):
+            identity_opts = (task.proposal or {}).get("identity_options") or {}
+            zh_opt = identity_opts.get("chinese")
+            en_opt = identity_opts.get("english")
+            if zh_opt and en_opt:
+                title = f"双语冲突：{zh_opt} vs {en_opt}"
+                detail_text = f"原件单元格 {coord_label} 存在中英文双语差异（{zh_opt} / {en_opt}），影响 {len(members_list)} 个时间点。请核对原件后选择适用标准。"
+            else:
+                title = f"检项冲突待核对 · {coord_label}"
+                detail_text = f"原件单元格 {coord_label} 检项标注存在争议，影响 {len(members_list)} 个时间点。请核对原件后选择适用标准。"
+
+            if zh_opt:
                 quick_choices.append({
-                    "label": f"采用中文：{zh_choice}",
-                    "fields": {field_name: zh_choice},
+                    "label": f"采用中文：{zh_opt}",
+                    "fields": {field_name: zh_opt},
                     "operation": "manual",
                     "default_reason": "原表英文标注笔误，以中文标注为准",
                 })
+            if en_opt:
                 quick_choices.append({
-                    "label": f"采用英文：{en_choice}",
-                    "fields": {field_name: en_choice},
+                    "label": f"采用英文：{en_opt}",
+                    "fields": {field_name: en_opt},
                     "operation": "manual",
                     "default_reason": "以原表英文标注为准",
                 })
-            else:
-                title = f"检项冲突待核对 · {coord_label}"
-                detail_text = f"原件单元格 {coord_label} 检项标注存在争议，影响 {len(members_list)} 个时间点。"
+            for k, val in identity_opts.items():
+                if k not in ("chinese", "english"):
+                    quick_choices.append({
+                        "label": f"采用{k}：{val}",
+                        "fields": {field_name: val},
+                        "operation": "manual",
+                        "default_reason": f"核对原件确认采用{val}",
+                    })
+
+        # 2. Source revision (strikethrough)
         elif task.code == "source_revision":
             title = f"划线修订待核对 · {coord_label}"
-            detail_text = f"原件单元格 {coord_label} 包含划线修订文本。请核对是否采纳新值。"
-            quick_choices.append({
-                "label": "采纳修订新值",
-                "fields": {},
-                "operation": "keep_active",
-                "default_reason": "核对未划线正文无误，采纳修订后数值",
-            })
-            quick_choices.append({
-                "label": "保留原值（不采纳修订）",
-                "fields": {},
-                "operation": "exclude",
-                "default_reason": "核对不采纳划线变动，保留原记录",
-            })
+            detail_text = f"原件单元格 {coord_label} 包含划线修订（{readable_detail}）。请核对是否采纳新值。"
+            if "keep_active" in task.actions and (task.proposal or {}).get("eligible"):
+                quick_choices.append({
+                    "label": "核对并保留未划线正文",
+                    "fields": {},
+                    "operation": "keep_active",
+                    "default_reason": "核对未划线正文无误，采纳修订后数值",
+                })
+
+        # 3. Source comment
         elif task.code == "source_comment" or (task.proposal and task.proposal.get("operation") == "keep_body"):
             title = f"单元格批注待核对 · {coord_label}"
             comment_str = primary_cell.get("comment") or ""
             detail_text = f"原件单元格 {coord_label} 存在批注{('：' + comment_str) if comment_str else ''}。请核对是否保留正文。"
-            quick_choices.append({
-                "label": "确认批注并保留正文",
-                "fields": {},
-                "operation": "keep_body",
-                "default_reason": "核对批注确认有效，保留正文结果",
-            })
+
+        # 4. Identity ambiguity
         elif task.code in ("identity", "identity_ambiguity"):
             title = f"样品身份待核对 · {coord_label}"
             detail_text = f"待核对样品批号、规格或考察条件等信息（影响 {len(members_list)} 条结果）。"
-            identity_opts = task.proposal.get("identity_options") or {}
+            identity_opts = (task.proposal or {}).get("identity_options") or {}
             for k, val in identity_opts.items():
                 quick_choices.append({
                     "label": f"采用{k}：{val}",
@@ -836,28 +881,63 @@ def build_task_cards(conn, upload, preview, flight, sheets, tasks, *, index=None
                     "operation": "manual",
                     "default_reason": f"核对原件确认采用{val}",
                 })
+
+        # 5. Fallback
         else:
-            title = task.detail or f"{task.code} 待核对"
-            detail_text = f"原件单元格 {coord_label} 待核对，影响 {len(members_list)} 条结果。"
-            if task.proposal and task.proposal.get("operation"):
-                op = task.proposal["operation"]
+            title = readable_detail or f"{task.code} 待核对"
+            detail_text = f"原件单元格 {coord_label} 待核对（{readable_detail}），影响 {len(members_list)} 条结果。"
+
+        # Whitelist-driven actions:
+        if "keep_body" in task.actions and not any(q.get("operation") == "keep_body" for q in quick_choices):
+            quick_choices.append({
+                "label": "确认批注并保留正文",
+                "fields": {},
+                "operation": "keep_body",
+                "default_reason": "核对批注确认有效，保留正文结果",
+            })
+
+        if "keep_single" in task.actions and not any(q.get("operation") == "keep_single" for q in quick_choices):
+            quick_choices.append({
+                "label": "确认合并排版",
+                "fields": {},
+                "operation": "keep_single",
+                "default_reason": "核对合并排版确认有效，保留记录",
+            })
+
+        if task.code == "region" and "classify" in task.actions and not any(q.get("operation") == "classify" for q in quick_choices):
+            quick_choices.append({
+                "label": "确认辅助用途（不入库）",
+                "fields": {},
+                "operation": "classify",
+                "role": (task.proposal or {}).get("role", "auxiliary"),
+                "default_reason": "核对确认为辅助用途区域，不入库",
+            })
+
+        if "manual" in task.actions and task.proposal and task.proposal.get("guidance", {}).get("name_options"):
+            for opt in task.proposal["guidance"]["name_options"]:
                 quick_choices.append({
-                    "label": "采用系统建议处理",
-                    "fields": {},
-                    "operation": op,
-                    "default_reason": "核对确认系统建议处理方式有效",
+                    "label": f"指定分项：{opt}",
+                    "fields": {field_name: opt},
+                    "operation": "manual",
+                    "default_reason": f"核对说明，指定分项为{opt}",
                 })
 
-        quick_choices.append({
-            "label": "确认为无效记录（不采用）",
-            "fields": {},
-            "operation": "exclude",
-            "default_reason": "确认为无效记录，不予采用",
-        })
+        if "exclude" in task.actions and not any(q.get("operation") == "exclude" for q in quick_choices):
+            quick_choices.append({
+                "label": "不采用此记录",
+                "fields": {},
+                "operation": "exclude",
+                "default_reason": "确认为无效记录，不予采用",
+            })
+
+        needs_history_review = task.code in ("approval", "history")
+        needs_approval = task.code == "approval"
+        needs_advanced_tool = any(a in task.actions for a in ("region_parse", "structure")) or task_category in ("region", "unprojected_region")
 
         task_cards.append({
             "task_id": task.id,
             "code": task.code,
+            "category": task_category,
             "title": title,
             "detail_text": detail_text,
             "source_cells": source_cells,
@@ -868,6 +948,12 @@ def build_task_cards(conn, upload, preview, flight, sheets, tasks, *, index=None
             "proposal": task.proposal,
             "actions": list(task.actions),
             "can_exclude_members": len(members_list) > 1,
+            "needs_history_review": needs_history_review,
+            "needs_approval": needs_approval,
+            "primary_candidate_id": primary_cid,
+            "needs_advanced_tool": needs_advanced_tool,
+            "revisions": revisions_data,
+            "guidance": (task.proposal or {}).get("guidance") if task.proposal else None,
         })
 
     return task_cards

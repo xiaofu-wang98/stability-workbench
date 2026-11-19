@@ -74,16 +74,18 @@ function save() {
     emit('saved');
   });
 }
+const isDirty = computed(() => Object.keys(differences.value).length > 0);
+defineExpose({ isDirty });
+
 async function quickSave() {
-  if (!editable.value || !Object.keys(differences.value).length) return;
-  if (!reason.value.trim()) reason.value = quickReasons[0];
+  if (!editable.value || !Object.keys(differences.value).length || !reason.value.trim()) return;
   await inspect();
   if (plan.value) await save();
 }
 </script>
 
 <template>
-  <NDrawer class="candidate-drawer" :show="true" :width="'min(620px, 92vw)'" placement="right" :on-update:show="val => { if (!val) emit('close'); }">
+  <NDrawer class="candidate-drawer" :show="true" :mask-closable="false" :show-mask="false" :trap-focus="false" :block-scroll="false" :width="'min(620px, 92vw)'" placement="right" :on-update:show="val => { if (!val) emit('close'); }">
     <NDrawerContent closable :on-close="() => emit('close')">
       <template #header>
         <div class="drawer-header">
@@ -101,7 +103,17 @@ async function quickSave() {
       <div class="drawer-body">
         <div class="orig-card">
           <div class="card-label">原件原文</div>
-          <div class="card-text">{{ sourceReviewText(candidate.detail, candidate.revisions?.result) }}</div>
+          <div class="card-text">
+            <template v-if="candidate.revisions?.result?.segments?.length">
+              <span v-for="(seg, idx) in candidate.revisions.result.segments" :key="idx">
+                <del v-if="seg.struck" class="struck-text">{{ seg.text }}</del>
+                <span v-else>{{ seg.text }}</span>
+              </span>
+            </template>
+            <template v-else>
+              {{ sourceReviewText(candidate.detail, candidate.revisions?.result) }}
+            </template>
+          </div>
           <div v-if="candidate.comment" class="comment-text"><strong>批注：</strong>{{ candidate.comment }}</div>
         </div>
 
@@ -139,7 +151,7 @@ async function quickSave() {
             </div>
 
             <div class="actions-row">
-              <NButton type="primary" attr-type="submit" :loading="processing" :disabled="processing || !Object.keys(differences).length">
+              <NButton type="primary" attr-type="submit" :loading="processing" :disabled="processing || !Object.keys(differences).length || !reason.trim()">
                 一键保存修改草稿
               </NButton>
               <NButton v-if="Object.keys(differences).length && reason.trim()" secondary :disabled="processing" @click="inspect">
@@ -197,6 +209,7 @@ async function quickSave() {
 .orig-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; }
 .card-label { font-size: 0.8rem; font-weight: 600; color: #64748b; text-transform: uppercase; margin-bottom: 4px; }
 .card-text { font-size: 0.95rem; line-height: 1.5; color: #1e293b; white-space: pre-wrap; }
+.struck-text { color: #d03050; text-decoration: line-through; background-color: #fef0f0; padding: 0 2px; border-radius: 2px; }
 .comment-text { margin-top: 6px; font-size: 0.88rem; color: #d97706; }
 .focused-fields-section { background: #ffffff; border: 1px solid #e2e8e6; border-radius: 6px; padding: 14px; }
 .focused-fields-section h4 { margin: 0 0 12px; font-size: 0.95rem; color: #0f172a; }

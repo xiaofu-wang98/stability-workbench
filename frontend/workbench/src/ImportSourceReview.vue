@@ -31,6 +31,7 @@ export type TaskMember = { candidate_id: string; coordinate: string; time_point:
 export type TaskCard = {
   task_id: string;
   code: string;
+  category?: string;
   title: string;
   detail_text: string;
   source_cells: { coordinate: string; text: string; comment?: string }[];
@@ -41,6 +42,12 @@ export type TaskCard = {
   proposal: { eligible?: boolean; operation?: string; identity_options?: Record<string, string> };
   actions: string[];
   can_exclude_members: boolean;
+  needs_history_review?: boolean;
+  needs_approval?: boolean;
+  primary_candidate_id?: string;
+  needs_advanced_tool?: boolean;
+  revisions?: { result?: { segments?: { text: string; struck?: boolean }[] } };
+  guidance?: { question?: string; help?: string; name_options?: string[] } | null;
 };
 
 type Group = { group_id: string; title: string; reason: string; scope: object; decision_count: number };
@@ -85,15 +92,32 @@ type Summary = { unreceived_candidates: number; pending_receipt: boolean; tasks:
   categories: Record<string, { references: number; tasks: number; candidates: number }> };
 const summary = ref<Summary>();
 const total = ref(0);
-const pageSize = 50;
+const taskCardsTotal = ref(0);
+const pageSize = 25;
 const positionKey = 'source-review:' + JSON.stringify([props.source, props.section]);
 const category = ref(props.focus ? '' : sessionStorage.getItem(positionKey + ':category') || '');
 const offset = ref(props.focus ? 0 : Number(sessionStorage.getItem(positionKey + ':offset')) || 0);
 const batchMembers = ref<Record<string, string[]>>({});
+const batchExcluded = ref<string[]>([]);
 const undoBatch = ref<string>();
 const projectRevision = ref(0);
 const undoModalVisible = ref(false);
 const undoReason = ref('');
+
+const categoryLabels: Record<string, string> = {
+  '': '全部',
+  'source_revision': '删除线／删',
+  'deleted_source': '整格删除',
+  'source_comment': '批注与解释',
+  'identity_conflict': '双语身份冲突',
+  'method_conflict': '方法中英冲突',
+  'row_exclusion': '整行不采用建议',
+  'region': '来源区域',
+  'unprojected_region': '未投影区域',
+  'history': '历史版本',
+  'approval': '待复核',
+  'structure': '排版结构',
+};
 
 const reasonPills = [
   '原表英文标注笔误，以中文标注为准',
@@ -119,7 +143,7 @@ async function loadQueue(focus = '') {
   const result = await api<{
     groups: Group[]; manual: ManualTask[]; blockers: Blocker[]; summary: Summary; total: number;
     offset: number; batch_members: Record<string, string[]>; undo_batch_id?: string; base_revision: number;
-    task_cards?: TaskCard[];
+    task_cards?: TaskCard[]; task_cards_total?: number;
   }>(
     base + '/review-actions?' + new URLSearchParams({
       section: props.section, category: category.value, focus,
@@ -138,18 +162,35 @@ async function loadQueue(focus = '') {
 
   if (result.task_cards) {
     taskCards.value = result.task_cards;
-    // auto select first choice for convenience if not yet selected
     for (const c of result.task_cards) {
-      if (cardSelectedChoice.value[c.task_id] === undefined && c.quick_choices.length > 0) {
-        cardSelectedChoice.value[c.task_id] = 0;
-        cardReasons.value[c.task_id] = c.quick_choices[0].default_reason || '';
-        cardCustomFields.value[c.task_id] = { ...(c.quick_choices[0].fields || {}) };
+      if (!Array.isArray(cardExceptions.value[c.task_id])) {
+        cardExceptions.value[c.task_id] = [];
+      }
+      if (!cardCustomFields.value[c.task_id]) {
+        cardCustomFields.value[c.task_id] = {};
       }
     }
   }
+  taskCardsTotal.value = result.task_cards_total ?? result.task_cards?.length ?? 0;
 
   sessionStorage.setItem(positionKey + ':category', category.value);
   sessionStorage.setItem(positionKey + ':offset', String(offset.value));
+}
+
+function selectCategory(cat: string) {
+  category.value = cat;
+  offset.value = 0;
+  void loadQueue();
+}
+
+function prevPage() {
+  offset.value = Math.max(0, offset.value - pageSize);
+  void loadQueue();
+}
+
+function nextPage() {
+  offset.value += pageSize;
+  void loadQueue();
 }
 
 onMounted(() => run(async () => {
@@ -169,7 +210,9 @@ watch(() => props.refreshToken, () => {
   void loadQueue();
 });
 
-defineExpose({ reload: loadQueue });
+const hasDirtyDraft = computed(() => Object.values(cardSelectedChoice.value).some(v => v !== undefined));
+
+defineExpose({ reload: loadQueue, hasDirtyDraft });
 
 function selectChoice(card: TaskCard, idx: number) {
   cardSelectedChoice.value[card.task_id] = idx;
@@ -178,13 +221,32 @@ function selectChoice(card: TaskCard, idx: number) {
   cardCustomFields.value[card.task_id] = { ...(choice.fields || {}) };
 }
 
+function switchToManual(card: TaskCard) {
+  let mIdx = card.quick_choices.findIndex(q => q.operation === 'manual');
+  if (mIdx === -1) {
+    card.quick_choices.push({
+      label: '人工输入解释',
+      operation: 'manual',
+      fields: Object.fromEntries(card.fields.map(f => [f, ''])),
+      default_reason: '核对原件后人工输入解释',
+    });
+    mIdx = card.quick_choices.length - 1;
+  }
+  selectChoice(card, mIdx);
+}
+
 async function applyTaskCard(card: TaskCard) {
-  const choiceIdx = cardSelectedChoice.value[card.task_id] ?? 0;
+  const choiceIdx = cardSelectedChoice.value[card.task_id];
+  if (choiceIdx === undefined) {
+    message.warning('请先点击上方快捷选项或输入人工解释');
+    return;
+  }
   const choice = card.quick_choices[choiceIdx];
   const op = (choice?.operation as any) || 'manual';
   const fields = cardCustomFields.value[card.task_id] || choice?.fields || {};
   const reasonText = cardReasons.value[card.task_id]?.trim() || choice?.default_reason || '核对原件后保存决定';
-  const excluded = cardExceptions.value[card.task_id] || [];
+  const rawExcluded = cardExceptions.value[card.task_id];
+  const excluded = Array.isArray(rawExcluded) ? rawExcluded : [];
 
   await run(async () => {
     const scope = {
@@ -207,14 +269,14 @@ async function applyTaskCard(card: TaskCard) {
     });
     resolvedTaskIds.value.add(card.task_id);
     resolvedCardsHistory.value.push(card);
-    const prevCount = summary.value?.tasks ?? taskCards.value.length;
+    delete cardSelectedChoice.value[card.task_id];
+    const prevCount = taskCardsTotal.value || activeCards.value.length;
     const newCount = Math.max(0, prevCount - 1);
     const coord = card.source_cells[0]?.coordinate || '来源格';
     try {
       message.success(`已保存 ${coord}（合并解决 ${card.affected_count} 条），剩余待核对：${prevCount} → ${newCount}`);
     } catch {}
     emit('saved');
-    await loadQueue();
   });
 }
 
@@ -239,21 +301,35 @@ function inspect(group: Group) {
     plan.value = undefined;
     selected.value = group;
     reason.value = '';
+    batchExcluded.value = [];
     key = crypto.randomUUID();
     plan.value = await post('/tasks/preview', group.scope);
   });
 }
+
+async function toggleBatchException(cid: string) {
+  if (batchExcluded.value.includes(cid)) {
+    batchExcluded.value = batchExcluded.value.filter(id => id !== cid);
+  } else {
+    batchExcluded.value.push(cid);
+  }
+  if (selected.value) {
+    const scope = { ...selected.value.scope, exclude_candidate_ids: batchExcluded.value };
+    plan.value = await post('/tasks/preview', scope);
+  }
+}
+
 function saveBatch() {
   if (!selected.value || !plan.value?.changes.length || !reason.value.trim()) return;
-  const scope = selected.value.scope;
+  const scope = { ...selected.value.scope, exclude_candidate_ids: batchExcluded.value };
   const { base_revision, fingerprint } = plan.value;
   return run(async () => {
     await post('/tasks/apply', { scope, base_revision, fingerprint, reason: reason.value.trim(), idempotency_key: key });
     try { message.success('已批量应用所选处理'); } catch {}
     plan.value = undefined;
     selected.value = undefined;
+    batchExcluded.value = [];
     emit('saved');
-    await loadQueue();
   });
 }
 
@@ -273,7 +349,6 @@ function confirmUndo() {
     undoModalVisible.value = false;
     try { message.success('已撤销上一次批量处理'); } catch {}
     emit('saved');
-    await loadQueue();
   });
 }
 </script>
@@ -284,7 +359,7 @@ function confirmUndo() {
       <div class="top-meta">
         <h2>工作表来源就地核对 · {{ section }}</h2>
         <span class="counts-badge">
-          待核对独立任务 {{ activeCards.length }} 项 · 影响 {{ summary?.affected_candidates ?? 0 }} 条结果
+          待核对独立任务 {{ taskCardsTotal || activeCards.length }} 项 · 影响 {{ summary?.affected_candidates ?? 0 }} 条结果
         </span>
       </div>
       <div class="top-actions">
@@ -298,7 +373,47 @@ function confirmUndo() {
       </div>
     </div>
 
+    <!-- Category Filter Bar -->
+    <div v-if="summary?.categories && Object.keys(summary.categories).length > 1" class="category-filter-bar">
+      <span class="filter-label">分类筛选：</span>
+      <div class="category-pills">
+        <NButton
+          size="small"
+          :type="category === '' ? 'primary' : 'default'"
+          :secondary="category !== ''"
+          @click="selectCategory('')"
+        >全部 ({{ summary?.tasks ?? total }})</NButton>
+        <NButton
+          v-for="(info, cat) in summary.categories"
+          :key="cat"
+          size="small"
+          :type="category === cat ? 'primary' : 'default'"
+          :secondary="category !== cat"
+          @click="selectCategory(cat)"
+        >
+          {{ categoryLabels[cat] || cat }} ({{ info.tasks }})
+        </NButton>
+      </div>
+    </div>
+
+    <!-- Unreceived Alert -->
+    <NAlert v-if="summary?.pending_receipt || summary?.unreceived_candidates" type="warning" class="unreceived-banner" style="margin-bottom: 12px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+        <span>当前工作表尚有 {{ summary.unreceived_candidates || '若干' }} 条候选结果未接收供核对</span>
+        <NButton size="small" type="warning" @click="emit('receive')">立即接收候选</NButton>
+      </div>
+    </NAlert>
+
     <NAlert v-if="error" type="error" role="alert" style="margin-bottom: 12px;">{{ error }}</NAlert>
+
+    <!-- Pagination Bar (Top) -->
+    <div v-if="taskCardsTotal > pageSize || offset > 0" class="pagination-bar">
+      <span>第 {{ Math.floor(offset / pageSize) + 1 }} / {{ Math.ceil(taskCardsTotal / pageSize) || 1 }} 页 (共 {{ taskCardsTotal }} 项待核对任务)</span>
+      <NButtonGroup>
+        <NButton size="small" :disabled="offset <= 0 || busy" @click="prevPage">上一页</NButton>
+        <NButton size="small" :disabled="offset + pageSize >= taskCardsTotal || busy" @click="nextPage">下一页</NButton>
+      </NButtonGroup>
+    </div>
 
     <!-- Top batch plan preview modal/section if active -->
     <div v-if="plan" class="batch-preview-box">
@@ -315,6 +430,17 @@ function confirmUndo() {
             </tr>
           </tbody>
         </table>
+      </div>
+      <div v-if="batchMembers[selected?.group_id || '']?.length > 1" class="batch-members-box">
+        <details>
+          <summary>排除个别候选（例外设置，已排除 {{ batchExcluded.length }} 项）</summary>
+          <div class="member-checkboxes">
+            <label v-for="cid in batchMembers[selected?.group_id || '']" :key="cid">
+              <input type="checkbox" :checked="batchExcluded.includes(cid)" @change="toggleBatchException(cid)">
+              排除此项：{{ cid }}
+            </label>
+          </div>
+        </details>
       </div>
       <div class="batch-confirm-row">
         <label>本次处理依据：
@@ -335,13 +461,32 @@ function confirmUndo() {
             <span class="coord-badge">{{ card.source_cells[0]?.coordinate || '来源格' }}</span>
             <NTag size="small" type="warning">{{ card.code === 'identity_conflict' ? '双语冲突' : card.code === 'source_revision' ? '划线修订' : card.code === 'source_comment' ? '批注' : '待核对' }}</NTag>
             <NTag size="small" type="info">影响 {{ card.affected_count }} 个时间点：{{ card.members.map(m => m.time_point).join(' / ') }}</NTag>
+            <NButton v-if="card.needs_history_review" size="tiny" secondary type="warning" @click="emit('history', card.primary_candidate_id || '', card.needs_approval || false)">
+              {{ card.needs_approval ? '复核历史采用' : '查看历史冲突' }}
+            </NButton>
+            <a v-if="card.needs_advanced_tool" class="advanced-tool-link" :href="'#/legacy?view=ledger&project=' + encodeURIComponent(props.project) + '&upload=' + encodeURIComponent(props.source) + '&sheet=' + encodeURIComponent(props.section) + '&task=' + encodeURIComponent(card.task_id)">
+              在原表处理工具打开本项
+            </a>
+            <NButton v-if="card.primary_candidate_id" size="tiny" secondary text @click="emit('edit', card.primary_candidate_id)">
+              单格抽屉修改
+            </NButton>
           </div>
           <h3 class="card-title">{{ card.title }}</h3>
         </div>
 
         <div class="card-body">
           <div class="source-evidence-box">
-            <div class="evidence-text">{{ card.source_cells[0]?.text || '（原件单元格为空或无法直接读取）' }}</div>
+            <div class="evidence-text">
+              <template v-if="card.revisions?.result?.segments?.length">
+                <span v-for="(seg, sIdx) in card.revisions.result.segments" :key="sIdx">
+                  <del v-if="seg.struck" class="struck-text">{{ seg.text }}</del>
+                  <span v-else>{{ seg.text }}</span>
+                </span>
+              </template>
+              <template v-else>
+                {{ card.source_cells[0]?.text || '（原件单元格为空或无法直接读取）' }}
+              </template>
+            </div>
             <div v-if="card.source_cells[0]?.comment" class="evidence-comment">
               <strong>批注：</strong>{{ card.source_cells[0].comment }}
             </div>
@@ -367,10 +512,26 @@ function confirmUndo() {
 
           <!-- Edit & Reason Box within Card -->
           <div v-if="cardSelectedChoice[card.task_id] !== undefined" class="in-card-edit">
-            <div v-for="f in card.fields" :key="f" class="field-input-row">
-              <label>{{ fieldNames[f] || f }}</label>
-              <NInput v-model:value="cardCustomFields[card.task_id][f]" :placeholder="fieldNames[f]" :disabled="busy" />
-            </div>
+            <template v-if="card.quick_choices[cardSelectedChoice[card.task_id]]?.operation === 'manual'">
+              <div v-for="f in card.fields" :key="f" class="field-input-row">
+                <label>{{ fieldNames[f] || f }}</label>
+                <NInput v-model:value="cardCustomFields[card.task_id][f]" :placeholder="fieldNames[f]" :disabled="busy" />
+              </div>
+              <div v-if="card.fields.includes('result') && card.affected_count > 1" class="manual-result-warn">
+                <span>结果值涉及多个时间点，须点击‘打开单格抽屉’逐格修改：</span>
+                <NButton size="tiny" type="primary" secondary @click="emit('edit', card.primary_candidate_id || '')">打开单格抽屉</NButton>
+              </div>
+            </template>
+            <template v-else>
+              <div v-if="Object.keys(cardCustomFields[card.task_id] || {}).length" class="readonly-fields-preview">
+                <span v-for="(v, k) in cardCustomFields[card.task_id]" :key="k">
+                  {{ fieldNames[k] || k }}: <strong>{{ v }}</strong>
+                </span>
+              </div>
+              <div class="switch-manual-row">
+                <NButton text size="tiny" type="info" @click="switchToManual(card)">改为人工输入解释</NButton>
+              </div>
+            </template>
 
             <div class="reason-input-row">
               <label>核对依据（必填）</label>
@@ -406,12 +567,20 @@ function confirmUndo() {
       </NAlert>
     </div>
 
+    <!-- Pagination Bar (Bottom) -->
+    <div v-if="taskCardsTotal > pageSize" class="pagination-bar" style="margin-top: 16px;">
+      <span>第 {{ Math.floor(offset / pageSize) + 1 }} / {{ Math.ceil(taskCardsTotal / pageSize) || 1 }} 页</span>
+      <NButtonGroup>
+        <NButton size="small" :disabled="offset <= 0 || busy" @click="prevPage">上一页</NButton>
+        <NButton size="small" :disabled="offset + pageSize >= taskCardsTotal || busy" @click="nextPage">下一页</NButton>
+      </NButtonGroup>
+    </div>
+
     <!-- Resolved group at bottom -->
     <details v-if="resolvedCards.length" class="resolved-group">
       <summary>本次已处理 ({{ resolvedCards.length }}) 项任务</summary>
       <div v-for="card in resolvedCards" :key="card.task_id" class="resolved-strip">
         <span class="resolved-text">✓ 已核对 · {{ card.source_cells[0]?.coordinate }} · {{ card.title }} (解决 {{ card.affected_count }} 条)</span>
-        <NButton size="tiny" text @click="resolvedTaskIds.delete(card.task_id)">展开重核</NButton>
       </div>
     </details>
 
@@ -432,26 +601,36 @@ function confirmUndo() {
 
 <style scoped>
 .import-source-review { padding: 16px; background: #ffffff; }
-.review-top-bar { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
+.review-top-bar { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
 .top-meta h2 { margin: 0 0 4px; font-size: 1.15rem; color: #0f172a; }
 .counts-badge { font-size: 0.85rem; color: #475569; font-weight: 500; }
 .top-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.category-filter-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.filter-label { font-size: 0.88rem; font-weight: 600; color: #334155; }
+.category-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.pagination-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 0.88rem; color: #64748b; }
 .batch-preview-box { background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 12px; margin-bottom: 16px; }
+.batch-members-box { margin-top: 8px; border: 1px solid #fde68a; border-radius: 4px; padding: 6px 10px; background: #ffffff; }
 .batch-confirm-row { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
 .task-cards-list { display: flex; flex-direction: column; gap: 16px; }
 .task-card { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
 .card-header { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
-.card-badges { display: flex; align-items: center; gap: 8px; }
+.card-badges { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .coord-badge { background: #e0f2fe; color: #0284c7; font-weight: 600; font-family: monospace; padding: 2px 8px; border-radius: 4px; font-size: 0.9rem; }
+.advanced-tool-link { font-size: 0.85rem; color: #0284c7; text-decoration: underline; margin-left: 4px; }
 .card-title { margin: 0; font-size: 1.05rem; color: #1e293b; }
 .card-body { display: flex; flex-direction: column; gap: 12px; }
 .source-evidence-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 14px; }
 .evidence-text { font-family: monospace; font-size: 0.95rem; line-height: 1.5; color: #0f172a; white-space: pre-wrap; font-weight: 500; }
+.struck-text { color: #d03050; text-decoration: line-through; background-color: #fef0f0; padding: 0 2px; border-radius: 2px; }
 .evidence-comment { margin-top: 6px; font-size: 0.85rem; color: #b45309; }
 .card-detail { margin: 0; font-size: 0.9rem; color: #475569; line-height: 1.4; }
 .quick-choices-bar { display: flex; align-items: center; gap: 10px; margin-top: 4px; flex-wrap: wrap; }
 .choice-prompt { font-size: 0.88rem; font-weight: 600; color: #334155; }
 .in-card-edit { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; margin-top: 8px; display: flex; flex-direction: column; gap: 10px; }
+.readonly-fields-preview { font-size: 0.88rem; color: #334155; display: flex; gap: 12px; }
+.switch-manual-row { margin-bottom: 4px; }
+.manual-result-warn { font-size: 0.85rem; color: #b45309; display: flex; align-items: center; gap: 8px; }
 .field-input-row { display: flex; align-items: center; gap: 10px; }
 .field-input-row label { min-width: 60px; font-size: 0.88rem; font-weight: 600; color: #475569; }
 .reason-input-row label { font-size: 0.88rem; font-weight: 600; color: #475569; margin-bottom: 4px; display: block; }
