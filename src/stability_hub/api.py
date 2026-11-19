@@ -400,7 +400,8 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
                               category: str = "", focus: str = "", offset: int = Query(0, ge=0),
                               limit: int | None = Query(None, ge=1, le=100)):
         require(operator, Capability.VIEW)
-        from .review_tasks import blocker_cards, blocker_category, blocker_index, blocker_summary, build_action_groups, current_review
+        from .review_tasks import (blocker_cards, blocker_category, blocker_index, blocker_summary,
+                                   build_action_groups, build_task_cards, current_review)
         with store.read() as conn:
             upload = workflow._upload(conn, preview_id)
             preview, sheets, flights, tasks, _ = current_review(workflow, conn, upload, operator, _shared=True)
@@ -442,10 +443,12 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
                     AND u.action='undo_review_batch'
                     AND json_extract(u.detail_json,'$.batch_id')=json_extract(b.detail_json,'$.batch_id'))
                 ORDER BY b.sequence DESC LIMIT 1""", (preview_id, section)).fetchone()
+            task_cards = build_task_cards(conn, upload, preview, flight, sheets, tasks, index=index)
             return {'groups': groups, 'manual': manual, 'batch_members': batch_members,
                     'base_revision': flight.base_revision, 'undo_batch_id': undo[0] if undo and flight.state != 'committed' else None,
                     'summary': summary, 'total': len(selected), 'offset': offset,
-                    'blockers': blocker_cards(conn, upload, preview, flight, sheets, tasks, index=index, references=references)}
+                    'blockers': blocker_cards(conn, upload, preview, flight, sheets, tasks, index=index, references=references),
+                    'task_cards': task_cards}
 
     @app.post('/api/v1/previews/{preview_id}/v5/tasks/preview')
     def source_task_preview(preview_id: str,command: TaskBatchScope,operator: ActorDependency):
@@ -1175,6 +1178,7 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
                 from .review_tasks import enrich_sheet_preflight
                 view = preflight(workflow, conn, upload, selected, operator, preview=result, sheets=physical)[0]
                 view = enrich_sheet_preflight(conn, upload, result, view, physical_sheets=physical)
+            all_candidates = result.candidates
             if result.sheet_confirmation_required:
                 result = result.model_copy(update={"candidates": tuple(
                     candidate for candidate in result.candidates if candidate.location.section == selected)})
@@ -1184,8 +1188,42 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
                     AND json_extract(detail_json,'$.section')=? ORDER BY sequence DESC LIMIT 1""",
                     (preview_id, selected)).fetchone()
                 receipt = json.loads(row[0]) if row else None
+
+            committed_sections = {
+                r[0] for r in conn.execute(
+                    "SELECT json_extract(detail_json, '$.section') FROM workflow_events WHERE subject_id=? AND action='confirm_sheet'",
+                    (preview_id,)
+                )
+            }
+            section_statuses = []
+            for s in sections:
+                cands = [c for c in all_candidates if c.location.section == s]
+                c_count = len(cands)
+                if s in committed_sections:
+                    sec_state = "committed"
+                    unresolved = 0
+                elif not cands:
+                    sec_state = "empty"
+                    unresolved = 0
+                elif all(not c.received for c in cands):
+                    sec_state = "not_received"
+                    unresolved = sum(1 for c in cands if c.issues)
+                elif any(c.issues for c in cands):
+                    sec_state = "needs_review"
+                    unresolved = sum(1 for c in cands if c.issues)
+                else:
+                    sec_state = "ready"
+                    unresolved = 0
+                section_statuses.append({
+                    "section": s,
+                    "state": sec_state,
+                    "unresolved_count": unresolved,
+                    "candidate_count": c_count,
+                })
+
             return {"preview": result, "sections": sections, "section": selected, "commit_receipt": receipt,
-                    "preflight": view.model_dump(mode="json") if view else None}
+                    "preflight": view.model_dump(mode="json") if view else None,
+                    "section_statuses": section_statuses}
 
     @app.post('/api/v1/previews/{preview_id}/sync-worksheets')
     def sync_confirmed_worksheets(preview_id: str, operator: ActorDependency, section: str | None = None):

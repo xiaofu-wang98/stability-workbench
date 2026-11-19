@@ -88,7 +88,7 @@ async function loadSamples(base: string, init: RequestInit) {
   }
 }
 
-watch(() => route.fullPath, async (_, __, onCleanup) => {
+watch([() => route.path, () => route.params.project, () => route.params.sheet], async (_, __, onCleanup) => {
   const controller = new AbortController();
   onCleanup(() => controller.abort());
   const init = { signal: controller.signal };
@@ -344,7 +344,7 @@ async function refreshSheet() {
         </table>
       </section>
     </template>
-    <ImportWorkspace v-if="page === 'import'" :key="route.fullPath" :projects="projects" />
+    <ImportWorkspace v-if="page === 'import'" :projects="projects" />
     <Specifications v-if="page === 'specifications'" />
     <ScanWorkspace v-if="page === 'scans'" />
     <section v-if="page === 'trends'" class="panel">

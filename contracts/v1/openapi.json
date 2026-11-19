@@ -16189,6 +16189,15 @@
               }
             ],
             "title": "Commit Receipt"
+          },
+          "section_statuses": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Section Statuses",
+            "default": []
           }
         },
         "additionalProperties": false,

@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { nextTick, onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { NAlert, NButton, NInput, NSpin } from 'naive-ui';
 import { api, type StandardAssessment } from './api';
 
+const route = useRoute();
 type Value = { text: string; result_version_id: string; source_ids: string[] };
 type Cell = { slot_id: string; slot_key: { batch: string; item: string; method: string; condition: string;
   study: string; study_id: string; presentation: string; reporting_basis?: string; month: number | null; day: number | null };
@@ -10,8 +12,8 @@ type Cell = { slot_id: string; slot_key: { batch: string; item: string; method: 
 const props = defineProps<{ project: string }>();
 const cells = ref<Cell[]>([]);
 const labels = ref<Record<string, string>>({});
-const input = ref('');
-const batch = ref('');
+const input = ref(String(route.query.batch || ''));
+const batch = ref(String(route.query.batch || ''));
 const sampleFilter = ref('');
 type BatchOverview = { samples: { id: string; material_stage: string; sample_type: string; presentation: string; packaging: string; purpose: string }[];
   studies: { id: string; name: string; sample_id?: string; points: string[]; identity: { study_id: string; condition: string };
@@ -146,10 +148,26 @@ function search() {
   batch.value = input.value.trim();
   study.value = selectedStudy.value;
 }
+
+function scrollToResults() {
+  if (route.query.focus === 'results') {
+    nextTick(() => {
+      document.getElementById('project-results-view')?.scrollIntoView({ behavior: 'smooth' });
+    });
+  }
+}
+
+onMounted(() => {
+  scrollToResults();
+});
+
+watch(() => route.query.focus, () => {
+  scrollToResults();
+});
 </script>
 
 <template>
-  <section class="panel">
+  <section id="project-results-view" class="panel">
     <h2>检测结果</h2>
     <form class="result-controls" @submit.prevent="search">
       <NInput v-model:value="input" aria-label="结果批号" placeholder="输入批号筛选" clearable />

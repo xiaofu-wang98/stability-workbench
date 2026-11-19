@@ -14,7 +14,15 @@ const batch = ref(String(route.query.batch || ''));
 const study = ref<string | null>(typeof route.query.study === 'string' ? route.query.study : null);
 const studyId = ref('');
 const condition = ref('');
-const kind = ref<'summary' | 'xlsx' | 'docx' | 'stability' | 'confirmation' | 'quick' | 'controlled'>(route.query.format === 'confirmation' ? 'confirmation' : 'xlsx');
+const kind = ref<'summary' | 'xlsx' | 'docx' | 'stability' | 'confirmation' | 'quick' | 'controlled'>(
+  route.query.format === 'controlled'
+    ? 'controlled'
+    : route.query.format === 'confirmation'
+    ? 'confirmation'
+    : (['summary', 'xlsx', 'docx', 'stability', 'quick'].includes(String(route.query.format))
+      ? (route.query.format as any)
+      : 'xlsx')
+);
 type Sample = { id: string; batch: string; presentation: string; sample_type: string; purpose: string };
 type SampleRole = 'selected' | 'before' | 'after';
 type AlignmentField = 'presentation' | 'study_id';

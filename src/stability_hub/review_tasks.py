@@ -607,13 +607,53 @@ def blocker_summary(index):
                            for code, counts in categories.items()}}
 
 
-def blocker_cards(conn, upload, preview, flight, sheets, tasks, *, index=None, references=None):
-    """Expose each preflight reference once, even when several share a decision."""
+_WORKBOOK_CELL_CACHE = {}
+
+
+def get_sheet_cells_snapshot(path, source_hash: str, section: str):
+    import hashlib
     from openpyxl import load_workbook
-    from openpyxl.utils import get_column_letter
     from pathlib import Path
     from .workflow_common import WorkflowError
-    import hashlib
+
+    path = Path(path)
+    stat = path.stat()
+    cache_key = (str(path.resolve()), source_hash, section)
+    cached = _WORKBOOK_CELL_CACHE.get(cache_key)
+    if cached is not None and cached["mtime_ns"] == stat.st_mtime_ns and cached["size"] == stat.st_size:
+        return cached["cells"]
+
+    file_bytes = path.read_bytes()
+    if hashlib.sha256(file_bytes).hexdigest() != source_hash:
+        raise WorkflowError("source_changed", "冻结 Excel 校验失败，无法核对原格。", 409)
+
+    book = load_workbook(path, read_only=False, rich_text=True)
+    try:
+        sheet = book[section]
+        cells = {}
+        for row in sheet.iter_rows():
+            for cell in row:
+                if cell.value is not None or cell.comment:
+                    cells[cell.coordinate] = (
+                        str(cell.value) if cell.value is not None else "",
+                        cell.comment.text if cell.comment else "",
+                    )
+        if len(_WORKBOOK_CELL_CACHE) >= 32:
+            _WORKBOOK_CELL_CACHE.pop(next(iter(_WORKBOOK_CELL_CACHE)))
+        _WORKBOOK_CELL_CACHE[cache_key] = {
+            "mtime_ns": stat.st_mtime_ns,
+            "size": stat.st_size,
+            "cells": cells,
+        }
+        return cells
+    finally:
+        book.close()
+
+
+def blocker_cards(conn, upload, preview, flight, sheets, tasks, *, index=None, references=None):
+    """Expose each preflight reference once, even when several share a decision."""
+    from openpyxl.utils import get_column_letter
+    from pathlib import Path
 
     index = blocker_index(flight, tasks) if index is None else index
     candidates = {candidate.id: candidate for candidate in preview.candidates}
@@ -623,36 +663,214 @@ def blocker_cards(conn, upload, preview, flight, sheets, tasks, *, index=None, r
     if not references:
         return []
     path = Path(conn.execute("SELECT stored_path FROM documents WHERE sha256=?", (upload["source_hash"],)).fetchone()[0])
-    if hashlib.sha256(path.read_bytes()).hexdigest() != upload["source_hash"]:
-        raise WorkflowError("source_changed", "冻结 Excel 校验失败，无法核对原格。", 409)
-    book = load_workbook(path, read_only=False, rich_text=True)
-    try:
-        sheet = book[flight.section]
-        cards = []
-        for reference in references:
-            kind, _, subject = reference.partition(":")
-            matching = index[reference]
-            candidate = candidates.get(subject)
-            region = regions.get(subject)
-            coordinates = list(region["coordinates"]) if region else []
-            for location in [*(loc for task in matching for loc in task.evidence),
-                             *([candidate.location] if candidate else [])]:
-                if location.section == flight.section:
-                    coordinates.append(get_column_letter(location.column) + str(location.row))
-            originals = []
-            for coordinate in dict.fromkeys(coordinates):
-                if ":" in coordinate:
-                    originals.append({"coordinate": coordinate, "text": "原件嵌入对象，请打开原件查看。"})
-                    continue
-                cell = sheet[coordinate]
-                originals.append({"coordinate": coordinate, "text": str(cell.value) if cell.value is not None else "",
-                                  "comment": cell.comment.text if cell.comment else ""})
-            cards.append({"id": reference, "kind": kind, "section": flight.section, "cells": originals,
-                          "candidate_id": candidate.id if candidate else None, "tasks": matching,
-                          "region_summary": region.get("summary") or region.get("basis", "") if region else ""})
-        return cards
-    finally:
-        book.close()
+    cells_snapshot = get_sheet_cells_snapshot(path, upload["source_hash"], flight.section)
+    cards = []
+    for reference in references:
+        kind, _, subject = reference.partition(":")
+        matching = index[reference]
+        candidate = candidates.get(subject)
+        region = regions.get(subject)
+        coordinates = list(region["coordinates"]) if region else []
+        for location in [*(loc for task in matching for loc in task.evidence),
+                         *([candidate.location] if candidate else [])]:
+            if location.section == flight.section:
+                coordinates.append(get_column_letter(location.column) + str(location.row))
+        originals = []
+        for coordinate in dict.fromkeys(coordinates):
+            if ":" in coordinate:
+                originals.append({"coordinate": coordinate, "text": "原件嵌入对象，请打开原件查看。"})
+                continue
+            text, comment = cells_snapshot.get(coordinate, ("", ""))
+            originals.append({"coordinate": coordinate, "text": text, "comment": comment})
+        cards.append({"id": reference, "kind": kind, "section": flight.section, "cells": originals,
+                      "candidate_id": candidate.id if candidate else None, "tasks": matching,
+                      "region_summary": region.get("summary") or region.get("basis", "") if region else ""})
+    return cards
+
+
+def build_task_cards(conn, upload, preview, flight, sheets, tasks, *, index=None):
+    from openpyxl.utils import get_column_letter
+    from pathlib import Path
+    import re
+
+    index = blocker_index(flight, tasks) if index is None else index
+    candidates = {candidate.id: candidate for candidate in preview.candidates}
+    path = Path(conn.execute("SELECT stored_path FROM documents WHERE sha256=?", (upload["source_hash"],)).fetchone()[0])
+    cells_snapshot = get_sheet_cells_snapshot(path, upload["source_hash"], flight.section)
+
+    active_task_ids = {t.id for ref, matching in index.items() if not ref.startswith("not_received") for t in matching}
+    section_tasks = [t for t in tasks if t.section == flight.section and t.id in active_task_ids]
+
+    task_cards = []
+    seen_tasks = set()
+    for task in section_tasks:
+        if task.id in seen_tasks:
+            continue
+        seen_tasks.add(task.id)
+
+        coords = []
+        for loc in task.evidence:
+            if loc.section == flight.section:
+                coords.append(get_column_letter(loc.column) + str(loc.row))
+        for m in task.members:
+            cid = m.get("candidate_id")
+            c = candidates.get(cid)
+            if c and c.location.section == flight.section:
+                for k, loc in (c.evidence or {}).items():
+                    if loc.section == flight.section and k in task.fields:
+                        coords.append(get_column_letter(loc.column) + str(loc.row))
+        coords = list(dict.fromkeys(coords))
+        source_cells = []
+        for coord in coords:
+            text, comment = cells_snapshot.get(coord, ("", ""))
+            source_cells.append({"coordinate": coord, "text": text, "comment": comment})
+
+        members_list = []
+        for m in task.members:
+            cid = m.get("candidate_id")
+            c = candidates.get(cid)
+            if c:
+                coord = get_column_letter(c.location.column) + str(c.location.row)
+                tp = ""
+                if c.record and c.record.key:
+                    m_val = getattr(c.record.key, "month", None)
+                    d_val = getattr(c.record.key, "day", None)
+                    if m_val is not None:
+                        tp = f"{m_val}M"
+                    elif d_val is not None:
+                        tp = f"{d_val}D"
+                if not tp:
+                    tp = c.raw_fields.get("time_point", "") or getattr(c, "interpreted_fields", {}).get("time_point", "")
+
+                batch_val = ""
+                if c.record and c.record.key:
+                    batch_val = getattr(c.record.key, "batch", "") or ""
+                if not batch_val:
+                    batch_val = c.raw_fields.get("batch", "") or getattr(c, "inherited_fields", {}).get("batch", "") or getattr(c, "interpreted_fields", {}).get("batch", "")
+
+                raw_val = c.raw_fields.get("result", "")
+                curr_val = c.record.result.raw_text if (c.record and c.record.result) else raw_val
+
+                members_list.append({
+                    "candidate_id": cid,
+                    "coordinate": coord,
+                    "time_point": tp or "0M",
+                    "batch": batch_val,
+                    "current_value": curr_val,
+                    "raw_value": raw_val,
+                })
+
+        primary_cell = source_cells[0] if source_cells else {"coordinate": "", "text": "", "comment": ""}
+        coord_label = primary_cell["coordinate"]
+        raw_text = primary_cell["text"]
+
+        lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+        zh_choice, en_choice = None, None
+        for line in lines:
+            has_zh = bool(re.search(r'[\u4e00-\u9fa5]', line))
+            has_en = bool(re.search(r'[A-Za-z]', line))
+            clean_token = re.sub(r'[:：].*$', '', line).strip()
+            clean_token = re.sub(r'[（\(][^）\)]*[）\)]', '', clean_token).strip()
+            if has_zh and not zh_choice:
+                zh_choice = clean_token or line
+            elif has_en and not en_choice:
+                en_choice = clean_token or line
+
+        title = ""
+        detail_text = ""
+        quick_choices = []
+        field_name = task.fields[0] if task.fields else "subresult"
+
+        if task.code in ("identity_conflict", "method_conflict") or (zh_choice and en_choice and len(lines) >= 2):
+            if zh_choice and en_choice:
+                title = f"双语冲突：{zh_choice} vs {en_choice}"
+                detail_text = f"原件单元格 {coord_label} 存在中英文双语差异（{zh_choice} / {en_choice}），影响 {len(members_list)} 个时间点。请核对原件后选择适用标准。"
+                quick_choices.append({
+                    "label": f"采用中文：{zh_choice}",
+                    "fields": {field_name: zh_choice},
+                    "operation": "manual",
+                    "default_reason": "原表英文标注笔误，以中文标注为准",
+                })
+                quick_choices.append({
+                    "label": f"采用英文：{en_choice}",
+                    "fields": {field_name: en_choice},
+                    "operation": "manual",
+                    "default_reason": "以原表英文标注为准",
+                })
+            else:
+                title = f"检项冲突待核对 · {coord_label}"
+                detail_text = f"原件单元格 {coord_label} 检项标注存在争议，影响 {len(members_list)} 个时间点。"
+        elif task.code == "source_revision":
+            title = f"划线修订待核对 · {coord_label}"
+            detail_text = f"原件单元格 {coord_label} 包含划线修订文本。请核对是否采纳新值。"
+            quick_choices.append({
+                "label": "采纳修订新值",
+                "fields": {},
+                "operation": "keep_active",
+                "default_reason": "核对未划线正文无误，采纳修订后数值",
+            })
+            quick_choices.append({
+                "label": "保留原值（不采纳修订）",
+                "fields": {},
+                "operation": "exclude",
+                "default_reason": "核对不采纳划线变动，保留原记录",
+            })
+        elif task.code == "source_comment" or (task.proposal and task.proposal.get("operation") == "keep_body"):
+            title = f"单元格批注待核对 · {coord_label}"
+            comment_str = primary_cell.get("comment") or ""
+            detail_text = f"原件单元格 {coord_label} 存在批注{('：' + comment_str) if comment_str else ''}。请核对是否保留正文。"
+            quick_choices.append({
+                "label": "确认批注并保留正文",
+                "fields": {},
+                "operation": "keep_body",
+                "default_reason": "核对批注确认有效，保留正文结果",
+            })
+        elif task.code in ("identity", "identity_ambiguity"):
+            title = f"样品身份待核对 · {coord_label}"
+            detail_text = f"待核对样品批号、规格或考察条件等信息（影响 {len(members_list)} 条结果）。"
+            identity_opts = task.proposal.get("identity_options") or {}
+            for k, val in identity_opts.items():
+                quick_choices.append({
+                    "label": f"采用{k}：{val}",
+                    "fields": {field_name: val},
+                    "operation": "manual",
+                    "default_reason": f"核对原件确认采用{val}",
+                })
+        else:
+            title = task.detail or f"{task.code} 待核对"
+            detail_text = f"原件单元格 {coord_label} 待核对，影响 {len(members_list)} 条结果。"
+            if task.proposal and task.proposal.get("operation"):
+                op = task.proposal["operation"]
+                quick_choices.append({
+                    "label": "采用系统建议处理",
+                    "fields": {},
+                    "operation": op,
+                    "default_reason": "核对确认系统建议处理方式有效",
+                })
+
+        quick_choices.append({
+            "label": "确认为无效记录（不采用）",
+            "fields": {},
+            "operation": "exclude",
+            "default_reason": "确认为无效记录，不予采用",
+        })
+
+        task_cards.append({
+            "task_id": task.id,
+            "code": task.code,
+            "title": title,
+            "detail_text": detail_text,
+            "source_cells": source_cells,
+            "affected_count": len(members_list),
+            "members": members_list,
+            "fields": list(task.fields),
+            "quick_choices": quick_choices,
+            "proposal": task.proposal,
+            "actions": list(task.actions),
+            "can_exclude_members": len(members_list) > 1,
+        })
+
+    return task_cards
 
 
 def build_action_groups(tasks, physical_sheets, section, preview):
