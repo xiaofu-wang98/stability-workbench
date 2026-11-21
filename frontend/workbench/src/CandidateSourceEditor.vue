@@ -109,8 +109,8 @@ async function quickSave() {
       <template #header>
         <div class="drawer-header">
           <div class="header-title">
-            <span class="coord-badge">{{ candidate.location.section }}!{{ cellAddress(candidate.location.row, candidate.location.column) }}</span>
-            <span>{{ editable ? '核对/修改原格解释' : '查看原格' }}</span>
+            <span class="coord-badge" :title="candidate.location.section + '!' + cellAddress(candidate.location.row, candidate.location.column)">{{ candidate.location.section }}!{{ cellAddress(candidate.location.row, candidate.location.column) }}</span>
+            <span class="header-title-text">{{ editable ? '核对/修改原格解释' : '查看原格' }}</span>
           </div>
           <div class="nav-buttons">
             <NButton size="tiny" secondary :disabled="!prevAnomalyId" @click="prevAnomalyId && emit('navigate', prevAnomalyId)">上一个异常</NButton>
@@ -220,8 +220,9 @@ async function quickSave() {
 </template>
 
 <style scoped>
-.drawer-header { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 12px; }
-.header-title { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; color: var(--text-primary); }
+.drawer-header { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 10px; min-width: 0; }
+.header-title { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14.5px; color: var(--text-primary); min-width: 0; flex: 1; }
+.header-title-text { white-space: nowrap; flex-shrink: 0; }
 .coord-badge {
   background: var(--brand-soft);
   color: var(--brand);
@@ -229,10 +230,14 @@ async function quickSave() {
   padding: 2px 8px;
   border-radius: var(--radius-sm);
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 700;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.nav-buttons { display: flex; gap: 6px; }
+.nav-buttons { display: flex; gap: 6px; flex-shrink: 0; }
 .drawer-body { display: flex; flex-direction: column; gap: 16px; }
 
 .orig-card {

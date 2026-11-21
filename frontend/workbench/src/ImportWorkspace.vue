@@ -772,7 +772,7 @@ function syncWorksheets() {
 
       <p role="status" class="upload-status-line">{{ uploadStatus || (busy ? "正在读取文件，请稍候…" : !file ? "选择来源文件。" : !role ? "请选择文件用途。" : role !== "protocol" && !project ? "请选择目标项目，或根据原件查找项目。" : "文件已准备好，可以开始解析。") }}</p>
 
-      <div class="entry-actions upload-cta-bar">
+      <div v-if="role" class="entry-actions upload-cta-bar">
         <NButton v-if="role === 'protocol'" type="primary" :loading="busy" :disabled="busy || !file" @click="parseProtocol">解析方案</NButton>
         <template v-else-if="role">
           <NButton type="primary" :loading="busy" :disabled="busy || !file || !project" @click="upload">解析并核对</NButton>
