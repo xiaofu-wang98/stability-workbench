@@ -13,7 +13,7 @@ const emit = defineEmits<{ saved: [] }>();
 const labels: Record<string, string> = { keep_active: '核对并保留未划线正文', keep_body: '核对并保留正文',
   manual: '人工明确此问题的解释', exclude: '不采用本候选', keep_single: '确认合并排版' };
 const actions = props.issue.actions.filter(action => Object.hasOwn(labels, action));
-const action = ref(actions[0] || '');
+const action = ref('');
 const reason = ref('');
 const values = ref<Record<string, string>>({});
 const busy = ref(false);
@@ -72,6 +72,7 @@ function save() {
       <div class="action-select-row">
         <label>处理方式
           <select v-model="action" :disabled="busy">
+            <option value="">请选择</option>
             <option v-for="item in actions" :key="item" :value="item">{{ labels[item] }}</option>
           </select>
         </label>

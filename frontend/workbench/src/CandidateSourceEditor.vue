@@ -17,8 +17,14 @@ const emit = defineEmits<{ saved: []; close: []; review: [candidate: string]; na
 const message = useMessage();
 const candidate = computed(() => props.candidate);
 const editable = computed(() => candidate.value.allowed_actions.includes('edit'));
-const current = computed(() => ({ ...candidate.value.interpreted_fields, ...candidate.value.corrections }));
+const savedOverrides = ref<Record<string, string>>({});
+const current = computed(() => ({ ...candidate.value.interpreted_fields, ...candidate.value.corrections, ...savedOverrides.value }));
 const values = ref<Record<string, string>>({ ...current.value });
+watch(() => props.candidate.id, () => {
+  savedOverrides.value = {};
+  plan.value = undefined;
+  reason.value = '';
+});
 watch(current, val => { values.value = { ...val }; }, { deep: true });
 
 const reason = ref('');
@@ -40,6 +46,16 @@ const nextAnomalyId = computed(() => currIdx.value >= 0 && currIdx.value < anoma
 const focusedFields = computed(() => {
   const list = [...new Set((candidate.value.issues || []).flatMap(i => i.fields || []))];
   return list.length ? list : ['result', 'subresult'];
+});
+
+const revisionFieldOrder = ['result', 'test_item', 'criterion', 'subresult', 'method'];
+const primaryRevision = computed<Revision | undefined>(() => {
+  const revs = candidate.value.revisions;
+  if (!revs) return undefined;
+  for (const f of [...focusedFields.value, ...revisionFieldOrder]) {
+    if (revs[f]?.segments?.length) return revs[f];
+  }
+  return Object.values(revs).find(r => r?.segments?.length);
 });
 
 const quickReasons = ['数据录入笔误更正', '核对原始记录无误', '按新版标准更正', '仪器重新校准后复测'];
@@ -70,6 +86,9 @@ function save() {
   if (!preview) return;
   return run(async () => {
     await api(endpoint.value, request('PATCH', preview.command));
+    savedOverrides.value = { ...savedOverrides.value, ...preview.command.fields };
+    plan.value = undefined;
+    reason.value = '';
     try { message.success('已保存单元格修改草稿'); } catch {}
     emit('saved');
   });
@@ -104,14 +123,14 @@ async function quickSave() {
         <div class="orig-card">
           <div class="card-label">原件原文</div>
           <div class="card-text">
-            <template v-if="candidate.revisions?.result?.segments?.length">
-              <span v-for="(seg, idx) in candidate.revisions.result.segments" :key="idx">
+            <template v-if="primaryRevision?.segments?.length">
+              <span v-for="(seg, idx) in primaryRevision.segments" :key="idx">
                 <del v-if="seg.struck" class="struck-text">{{ seg.text }}</del>
                 <span v-else>{{ seg.text }}</span>
               </span>
             </template>
             <template v-else>
-              {{ sourceReviewText(candidate.detail, candidate.revisions?.result) }}
+              {{ sourceReviewText(candidate.detail, primaryRevision) }}
             </template>
           </div>
           <div v-if="candidate.comment" class="comment-text"><strong>批注：</strong>{{ candidate.comment }}</div>
@@ -119,7 +138,7 @@ async function quickSave() {
 
         <NAlert v-if="error" type="error" role="alert" style="margin-bottom: 12px;">{{ error }}</NAlert>
 
-        <section v-if="candidate.issues && candidate.issues.length" class="issues-section">
+        <section v-if="editable && candidate.issues && candidate.issues.length" class="issues-section">
           <h4>待核对原格问题 ({{ candidate.issues.length }})</h4>
           <CandidateIssueReview v-for="issue in candidate.issues" :key="issue.id"
             :issue="issue" :source="source" :candidate="candidate.id" :candidate-revision="candidate.candidate_revision"
@@ -128,7 +147,7 @@ async function quickSave() {
 
         <section v-if="editable" class="focused-fields-section">
           <h4>快速修正出错字段 ({{ focusedFields.length }})</h4>
-          <form @submit.prevent="quickSave">
+          <form @submit.prevent="quickSave" @input="plan = undefined" @change="plan = undefined">
             <div v-for="field in focusedFields" :key="field" class="field-row">
               <label>
                 <div class="field-meta">
@@ -144,7 +163,7 @@ async function quickSave() {
                 <NInput v-model:value="reason" placeholder="请输入修改说明..." :disabled="processing" />
               </label>
               <div class="quick-pills">
-                <NButton v-for="pill in quickReasons" :key="pill" size="tiny" secondary type="info" :disabled="processing" @click="reason = pill">
+                <NButton v-for="pill in quickReasons" :key="pill" size="tiny" secondary type="info" :disabled="processing" @click="reason = pill; plan = undefined">
                   {{ pill }}
                 </NButton>
               </div>
@@ -154,14 +173,14 @@ async function quickSave() {
               <NButton type="primary" attr-type="submit" :loading="processing" :disabled="processing || !Object.keys(differences).length || !reason.trim()">
                 一键保存修改草稿
               </NButton>
-              <NButton v-if="Object.keys(differences).length && reason.trim()" secondary :disabled="processing" @click="inspect">
+              <NButton secondary :disabled="processing || !Object.keys(differences).length || !reason.trim()" @click="inspect">
                 预览变动
               </NButton>
             </div>
           </form>
         </section>
 
-        <section v-if="plan" aria-label="解释修改预览" class="plan-preview">
+        <section v-if="editable && plan" aria-label="解释修改预览" class="plan-preview">
           <h4>本次解释预览</h4>
           <ul><li v-for="(value, field) in plan.command.fields" :key="field">
             {{ sourceFieldLabels[field] }}：{{ current[field] || '空白' }} → {{ value || '空白' }}
@@ -174,14 +193,14 @@ async function quickSave() {
           <summary>展开全部 18 个底层字段（高级修改）</summary>
           <div class="matrix-table-wrap">
             <table class="fields-table">
-              <thead><tr><th>字段</th><th>原文</th><th>当前</th><th>本次修改</th></tr></thead>
+              <thead><tr><th>字段</th><th>原文</th><th>当前</th><th v-if="editable">本次修改</th></tr></thead>
               <tbody>
                 <tr v-for="(label, field) in sourceFieldLabels" :key="field">
                   <th>{{ label }}</th>
                   <td>{{ candidate.raw_fields[field] || '—' }}</td>
                   <td>{{ current[field] || '—' }}</td>
                   <td v-if="editable">
-                    <input v-model="values[field]" :disabled="processing" />
+                    <input v-model="values[field]" :disabled="processing" @input="plan = undefined" />
                   </td>
                 </tr>
               </tbody>

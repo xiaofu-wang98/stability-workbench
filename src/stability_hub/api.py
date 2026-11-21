@@ -413,14 +413,17 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
             selected = [ref for ref, matching in index.items() if
                         (limit is None or not ref.startswith("not_received")) and
                         (not category or any(blocker_category(ref, task) == category for task in matching))]
+            # Blockers and task cards are different lists; each keeps its own page
+            # position so a focus hit in one can never shift the other.
+            blocker_offset = offset
             if focus and limit:
                 position = next((i for i, ref in enumerate(selected)
                                  if ref.partition(":")[2] == focus or any(task.id == focus for task in index[ref])), None)
                 if position is not None:
-                    offset = (position // limit) * limit
-            if limit and offset and offset >= len(selected):
-                offset = (max(len(selected) - 1, 0) // limit) * limit
-            references = selected[offset:offset + limit] if limit is not None else selected
+                    blocker_offset = (position // limit) * limit
+            if limit and blocker_offset and blocker_offset >= len(selected):
+                blocker_offset = (max(len(selected) - 1, 0) // limit) * limit
+            references = selected[blocker_offset:blocker_offset + limit] if limit is not None else selected
             active_tasks = {task.id for ref, matching in index.items() if not ref.startswith("not_received") for task in matching}
             manual = [
                 {'id': task.id, 'detail': task.detail, 'fields': task.fields, 'evidence': task.evidence,
@@ -446,18 +449,22 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
             task_cards = build_task_cards(conn, upload, preview, flight, sheets, tasks, index=index)
             filtered_cards = [card for card in task_cards if card.get("category") == category] if category else task_cards
             task_cards_total = len(filtered_cards)
+            card_offset = offset
             if focus and limit:
                 pos = next((i for i, card in enumerate(filtered_cards)
                             if card["task_id"] == focus or any(m.get("candidate_id") == focus for m in card.get("members", []))), None)
                 if pos is not None:
-                    offset = (pos // limit) * limit
-            if limit and offset and offset >= len(filtered_cards):
-                offset = (max(len(filtered_cards) - 1, 0) // limit) * limit
-            paged_cards = filtered_cards[offset:offset + limit] if limit is not None else filtered_cards
+                    card_offset = (pos // limit) * limit
+            if limit and card_offset and card_offset >= len(filtered_cards):
+                card_offset = (max(len(filtered_cards) - 1, 0) // limit) * limit
+            paged_cards = filtered_cards[card_offset:card_offset + limit] if limit is not None else filtered_cards
 
+            # 'offset' stays the task-card page position consumed by the workbench;
+            # blockers report their own position explicitly.
             return {'groups': groups, 'manual': manual, 'batch_members': batch_members,
                     'base_revision': flight.base_revision, 'undo_batch_id': undo[0] if undo and flight.state != 'committed' else None,
-                    'summary': summary, 'total': len(selected), 'offset': offset,
+                    'summary': summary, 'total': len(selected), 'offset': card_offset,
+                    'blockers_offset': blocker_offset, 'task_cards_offset': card_offset,
                     'blockers': blocker_cards(conn, upload, preview, flight, sheets, tasks, index=index, references=references),
                     'task_cards': paged_cards, 'task_cards_total': task_cards_total}
 
@@ -1196,6 +1203,7 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
 
                 section_statuses = []
                 flight_by_sec = {f.section: f for f in flights}
+                from .review_tasks import blocker_index, blocker_summary
                 for s in sections:
                     f = flight_by_sec.get(s)
                     c_count = sum(1 for c in all_candidates if c.location.section == s)
@@ -1205,12 +1213,12 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
                     elif f.state == "committed":
                         sec_state = "committed"
                         unresolved = 0
-                    elif any(u == "not_received" or u.startswith("not_received:") for u in f.unresolved):
-                        sec_state = "not_received"
-                        unresolved = f.pending_decision_count
                     else:
-                        sec_state = f.state
-                        unresolved = f.pending_decision_count
+                        # Real decisions only: a not_received receipt placeholder is
+                        # a save step, not a source question awaiting review.
+                        unresolved = blocker_summary(blocker_index(f, tasks))["tasks"]
+                        sec_state = ("not_received" if any(u == "not_received" or u.startswith("not_received:")
+                                                           for u in f.unresolved) else f.state)
                     section_statuses.append({
                         "section": s,
                         "state": sec_state,

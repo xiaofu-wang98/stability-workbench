@@ -158,6 +158,7 @@ const sectionOptions = computed(() => sections.value.map(s => {
   if (st) {
     if (st.state === 'committed') tag = ' [✓ 已入库]';
     else if (st.state === 'not_received') tag = ' [○ 待接收]';
+    else if (st.state === 'ready') tag = ' [● 待写入]';
     else if (st.unresolved_count > 0) tag = ` [⚠ 待核对: ${st.unresolved_count}]`;
   }
   return { label: s + tag, value: s };
@@ -300,24 +301,26 @@ async function selectSection(value: string | null, loaded?: WorkspacePreview) {
   linkedSheets.value = [];
   if (value) {
     const query = new URLSearchParams({ section: value });
-    const view = loaded ?? await api<WorkspacePreview>(path.value + '/workspace?' + query);
-    preview.value = view.preview;
-    if (view.section_statuses) sectionStatuses.value = view.section_statuses;
-    preflight.value = view.preflight ?? undefined;
-    commitReceipt.value = view.commit_receipt ?? undefined;
-    worksheetSync.value = commitReceipt.value?.worksheet_sync ?? [];
-    if (candidates.value.some(candidate => candidate.lifecycle === 'submitted')) {
-      linkedSheets.value = await api(path.value + '/worksheets?' + query);
-    }
-    void router.replace({
-      path: '/import',
-      query: {
-        ...route.query,
-        project: preview.value?.project || project.value || undefined,
-        source: preview.value?.preview_id,
-        section: section.value || undefined,
-      },
-    });
+    try {
+      const view = loaded ?? await api<WorkspacePreview>(path.value + '/workspace?' + query);
+      preview.value = view.preview;
+      if (view.section_statuses) sectionStatuses.value = view.section_statuses;
+      preflight.value = view.preflight ?? undefined;
+      commitReceipt.value = view.commit_receipt ?? undefined;
+      worksheetSync.value = commitReceipt.value?.worksheet_sync ?? [];
+      if (candidates.value.some(candidate => candidate.lifecycle === 'submitted')) {
+        linkedSheets.value = await api(path.value + '/worksheets?' + query);
+      }
+      await router.replace({
+        path: '/import',
+        query: {
+          ...route.query,
+          project: preview.value?.project || project.value || undefined,
+          source: preview.value?.preview_id,
+          section: section.value || undefined,
+        },
+      });
+    } catch {}
   }
 }
 async function open(id: string, selected?: string) {
@@ -338,7 +341,7 @@ async function open(id: string, selected?: string) {
   } else if (candidates.value.some(candidate => candidate.lifecycle === 'submitted')) {
     linkedSheets.value = await api(path.value + '/worksheets');
   }
-  void router.replace({
+  await router.replace({
     path: '/import',
     query: {
       ...route.query,
@@ -534,10 +537,15 @@ async function viewCandidateTask(id: string) {
 }
 function refreshReview(reopenCandidate?: string) {
   return run(async () => {
-    reviewRefreshToken.value++;
-    if (preview.value) {
-      const query = section.value ? '?section=' + encodeURIComponent(section.value) : '';
-      const view = await api<WorkspacePreview>(path.value + '/workspace' + query);
+    const query = section.value ? '?section=' + encodeURIComponent(section.value) : '';
+    const workspaceReq = preview.value
+      ? api<WorkspacePreview>(path.value + '/workspace' + query)
+      : Promise.resolve(undefined);
+    const reloadReq = reviewSources.value
+      ? (sourceReviewRef.value?.reload() ?? Promise.resolve())
+      : Promise.resolve();
+    const [view] = await Promise.all([workspaceReq, reloadReq]);
+    if (view) {
       preview.value = view.preview;
       if (view.section_statuses) sectionStatuses.value = view.section_statuses;
       preflight.value = view.preflight ?? undefined;
@@ -807,7 +815,7 @@ function syncWorksheets() {
       <div v-if="preview.sheet_confirmation_required" class="sheet-select-row">
         <label>选择工作表：
           <NSelect filterable :value="section" :disabled="busy" placeholder="选择工作表"
-            :options="sectionOptions" :on-update:value="value => checkDirtyAndConfirm(() => { taskFocus = ''; run(() => selectSection(value)); })" />
+            :options="sectionOptions" @update:value="value => checkDirtyAndConfirm(() => { taskFocus = ''; selectSection(value); })" />
         </label>
         <span v-if="sheetProgressText" class="sheet-progress-pill">{{ sheetProgressText }}</span>
       </div>

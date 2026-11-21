@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
-import { NAlert, NButton, NButtonGroup, NInput, NModal, NTag, useMessage } from 'naive-ui';
+import { computed, onMounted, ref, watch } from 'vue';
+import { NAlert, NButton, NButtonGroup, NInput, NModal, NSelect, NTag, useMessage } from 'naive-ui';
 import { api } from './api';
-import { cellAddress, sourceFieldLabels as fieldNames, sourceRevision, sourceReviewText as describeTask } from './sourceReviewText';
+import { cellAddress, sourceFieldLabels as fieldNames, type Revision } from './sourceReviewText';
 import type { SourceCandidate } from './CandidateSourceEditor.vue';
 
 const props = defineProps<{
@@ -26,19 +26,31 @@ const emit = defineEmits<{
 
 const message = useMessage();
 
-export type QuickChoice = { label: string; fields?: Record<string, string>; operation?: string; default_reason?: string };
+export type QuickChoice = {
+  label: string;
+  fields?: Record<string, string>;
+  operation?: string;
+  default_reason?: string;
+  role?: string;
+  requires_input?: boolean;
+  input_fields?: string[];
+};
 export type TaskMember = { candidate_id: string; coordinate: string; time_point: string; batch: string; current_value: string; raw_value: string };
+export type GuidanceOption = string | { value: string; label?: string };
 export type TaskCard = {
   task_id: string;
   code: string;
   category?: string;
   title: string;
   detail_text: string;
+  detail?: string;
+  exception?: string | null;
   source_cells: { coordinate: string; text: string; comment?: string }[];
   affected_count: number;
   members: TaskMember[];
   fields: string[];
   quick_choices: QuickChoice[];
+  manual_entry?: { type: string; label: string; fields?: string[]; candidate_id?: string } | null;
   proposal: { eligible?: boolean; operation?: string; identity_options?: Record<string, string> };
   actions: string[];
   can_exclude_members: boolean;
@@ -46,8 +58,8 @@ export type TaskCard = {
   needs_approval?: boolean;
   primary_candidate_id?: string;
   needs_advanced_tool?: boolean;
-  revisions?: { result?: { segments?: { text: string; struck?: boolean }[] } };
-  guidance?: { question?: string; help?: string; name_options?: string[] } | null;
+  revisions?: Record<string, Revision>;
+  guidance?: { title?: string; question?: string; help?: string; name_options?: GuidanceOption[] } | null;
 };
 
 type Group = { group_id: string; title: string; reason: string; scope: object; decision_count: number };
@@ -72,12 +84,60 @@ const groups = ref<Group[]>([]);
 const tasks = ref<ManualTask[]>([]);
 const blockers = ref<Blocker[]>([]);
 const taskCards = ref<TaskCard[]>([]);
-const resolvedTaskIds = ref<Set<string>>(new Set());
 
 const cardSelectedChoice = ref<Record<string, number>>({});
 const cardReasons = ref<Record<string, string>>({});
 const cardCustomFields = ref<Record<string, Record<string, string>>>({});
 const cardExceptions = ref<Record<string, string[]>>({});
+
+const identityEnumOptions: Record<string, { value: string; label: string }[]> = {
+  sample_type: [
+    { value: 'DS', label: 'DS（原液）' },
+    { value: 'DP', label: 'DP（制剂）' },
+    { value: 'placebo', label: 'placebo（安慰剂）' },
+  ],
+  study: [
+    { value: 'long_term', label: 'long_term（长期）' },
+    { value: 'accelerated', label: 'accelerated（加速）' },
+    { value: 'stress', label: 'stress（强力破坏）' },
+    { value: 'release', label: 'release（放行）' },
+  ],
+  purpose: [
+    { value: 'routine', label: 'routine（常规稳定性）' },
+    { value: 'reference', label: 'reference（参考品）' },
+    { value: 'unknown', label: 'unknown（未注明）' },
+  ],
+};
+
+const revisionFieldOrder = ['result', 'test_item', 'criterion', 'subresult', 'method'];
+
+function cardPrimaryRevision(card: TaskCard): Revision | undefined {
+  const revs = card.revisions;
+  if (!revs) return undefined;
+  for (const f of [...(card.fields || []), ...revisionFieldOrder]) {
+    if (revs[f]?.segments?.length) return revs[f];
+  }
+  return Object.values(revs).find(r => r?.segments?.length);
+}
+
+function cardRevisionSegments(card: TaskCard) {
+  return cardPrimaryRevision(card)?.segments || [];
+}
+
+function activeTextForField(card: TaskCard, field: string): string {
+  const rev = card.revisions?.[field] || cardPrimaryRevision(card);
+  if (!rev) return '';
+  if (rev.active_text?.trim()) return rev.active_text.trim();
+  return (rev.segments || []).filter(s => !s.struck).map(s => s.text).join('').trim();
+}
+
+function guidanceOptionValue(opt: GuidanceOption): string {
+  return typeof opt === 'string' ? opt : opt.value;
+}
+
+function guidanceOptionLabel(opt: GuidanceOption): string {
+  return typeof opt === 'string' ? opt : (opt.label || opt.value);
+}
 
 const plan = ref<Plan>();
 const selected = ref<Group>();
@@ -193,18 +253,36 @@ function nextPage() {
   void loadQueue();
 }
 
+async function previewExcludeCandidate(candidateId: string) {
+  const group: Group = {
+    group_id: candidateId, title: '核对所选原格的排除范围', reason: '', decision_count: 1,
+    scope: { section: props.section, candidate_ids: [candidateId], operation: 'exclude_selected' },
+  };
+  selected.value = group;
+  reason.value = '';
+  batchExcluded.value = [];
+  key = crypto.randomUUID();
+  plan.value = await post('/tasks/preview', group.scope);
+}
+
 onMounted(() => run(async () => {
   await loadQueue(props.focus);
   if (props.excludeCandidate) {
-    const group: Group = {
-      group_id: props.excludeCandidate, title: '核对所选原格的排除范围', reason: '', decision_count: 1,
-      scope: { section: props.section, candidate_ids: [props.excludeCandidate], operation: 'exclude_selected' },
-    };
-    selected.value = group;
-    key = crypto.randomUUID();
-    plan.value = await post('/tasks/preview', group.scope);
+    await previewExcludeCandidate(props.excludeCandidate);
   }
 }));
+
+watch(() => props.excludeCandidate, (cid) => {
+  if (cid) void run(() => previewExcludeCandidate(cid));
+});
+
+watch(() => props.focus, (val) => {
+  if (val) {
+    category.value = '';
+    offset.value = 0;
+    void run(() => loadQueue(val));
+  }
+});
 
 watch(() => props.refreshToken, () => {
   void loadQueue();
@@ -221,18 +299,45 @@ function selectChoice(card: TaskCard, idx: number) {
   cardCustomFields.value[card.task_id] = { ...(choice.fields || {}) };
 }
 
+function selectGuidanceOption(card: TaskCard, opt: GuidanceOption) {
+  const val = guidanceOptionValue(opt);
+  const existingIdx = card.quick_choices.findIndex(q => q.fields?.test_item === val);
+  if (existingIdx !== -1) {
+    selectChoice(card, existingIdx);
+    return;
+  }
+  switchToManual(card);
+  cardCustomFields.value[card.task_id] = { ...(cardCustomFields.value[card.task_id] || {}), test_item: val };
+  if (!cardReasons.value[card.task_id]?.trim()) {
+    cardReasons.value[card.task_id] = `核对说明，指定分项为${val}`;
+  }
+}
+
 function switchToManual(card: TaskCard) {
-  let mIdx = card.quick_choices.findIndex(q => q.operation === 'manual');
+  if (!card.fields.length && card.primary_candidate_id) {
+    emit('edit', card.primary_candidate_id);
+    return;
+  }
+  let mIdx = card.quick_choices.findIndex(q => q.operation === 'manual' && q.requires_input);
+  if (mIdx === -1) {
+    mIdx = card.quick_choices.findIndex(q => q.operation === 'manual' && !Object.keys(q.fields || {}).length);
+  }
   if (mIdx === -1) {
     card.quick_choices.push({
-      label: '人工输入解释',
+      label: '填写人工解释',
       operation: 'manual',
-      fields: Object.fromEntries(card.fields.map(f => [f, ''])),
+      requires_input: true,
+      fields: {},
       default_reason: '核对原件后人工输入解释',
     });
     mIdx = card.quick_choices.length - 1;
   }
   selectChoice(card, mIdx);
+}
+
+function canOfferManualButton(card: TaskCard): boolean {
+  if (card.quick_choices.some(q => q.operation === 'manual' && q.requires_input)) return false;
+  return card.actions.includes('manual') || card.actions.includes('edit') || Boolean(card.exception);
 }
 
 async function applyTaskCard(card: TaskCard) {
@@ -243,19 +348,29 @@ async function applyTaskCard(card: TaskCard) {
   }
   const choice = card.quick_choices[choiceIdx];
   const op = (choice?.operation as any) || 'manual';
-  const fields = cardCustomFields.value[card.task_id] || choice?.fields || {};
+  const rawFields = cardCustomFields.value[card.task_id] || choice?.fields || {};
+  const fields = op === 'manual'
+    ? Object.fromEntries(Object.entries(rawFields).filter(([, v]) => typeof v === 'string' && v.trim() !== ''))
+    : rawFields;
+  if (op === 'manual' && !Object.keys(fields).length) {
+    message.warning('请填写至少一个需要确认的字段值');
+    return;
+  }
   const reasonText = cardReasons.value[card.task_id]?.trim() || choice?.default_reason || '核对原件后保存决定';
   const rawExcluded = cardExceptions.value[card.task_id];
   const excluded = Array.isArray(rawExcluded) ? rawExcluded : [];
 
   await run(async () => {
-    const scope = {
+    const scope: Record<string, unknown> = {
       section: props.section,
       task_ids: [card.task_id],
       operation: op,
       fields,
       exclude_candidate_ids: excluded,
     };
+    if (op === 'classify') {
+      scope.role = choice?.role || 'auxiliary';
+    }
     const previewResult = await post<{ base_revision: number; fingerprint: string; changes: any[] }>('/tasks/preview', scope);
     if (!previewResult.changes?.length && op !== 'exclude') {
       throw new Error('未检测到需要生效的改动，请核对所选选项或参数。');
@@ -267,27 +382,29 @@ async function applyTaskCard(card: TaskCard) {
       idempotency_key: crypto.randomUUID(),
       scope,
     });
-    resolvedTaskIds.value.add(card.task_id);
-    resolvedCardsHistory.value.push(card);
+    if (excluded.length === 0) {
+      resolvedCardsHistory.value.push(card);
+    }
     delete cardSelectedChoice.value[card.task_id];
+    cardExceptions.value[card.task_id] = [];
     const prevCount = taskCardsTotal.value || activeCards.value.length;
-    const newCount = Math.max(0, prevCount - 1);
+    const newCount = excluded.length > 0 ? prevCount : Math.max(0, prevCount - 1);
+    const resolvedCount = Math.max(0, card.affected_count - excluded.length);
     const coord = card.source_cells[0]?.coordinate || '来源格';
     try {
-      message.success(`已保存 ${coord}（合并解决 ${card.affected_count} 条），剩余待核对：${prevCount} → ${newCount}`);
+      message.success(`已保存 ${coord}（合并解决 ${resolvedCount} 条），剩余待核对：${prevCount} → ${newCount}`);
     } catch {}
     emit('saved');
   });
 }
 
 const resolvedCardsHistory = ref<TaskCard[]>([]);
-const activeCards = computed(() => taskCards.value.filter(c => !resolvedTaskIds.value.has(c.task_id)));
+// Authoritative source is always loadQueue()'s taskCards; never filter by a client-side blacklist.
+const activeCards = computed(() => taskCards.value);
 const resolvedCards = computed(() => {
-  const fromHistory = resolvedCardsHistory.value;
-  const current = taskCards.value.filter(c => resolvedTaskIds.value.has(c.task_id));
   const seen = new Set<string>();
   const list: TaskCard[] = [];
-  for (const c of [...fromHistory, ...current]) {
+  for (const c of resolvedCardsHistory.value) {
     if (!seen.has(c.task_id)) {
       seen.add(c.task_id);
       list.push(c);
@@ -347,6 +464,7 @@ function confirmUndo() {
       reason: undoReason.value.trim(),
     });
     undoModalVisible.value = false;
+    resolvedCardsHistory.value = [];
     try { message.success('已撤销上一次批量处理'); } catch {}
     emit('saved');
   });
@@ -477,8 +595,8 @@ function confirmUndo() {
         <div class="card-body">
           <div class="source-evidence-box">
             <div class="evidence-text">
-              <template v-if="card.revisions?.result?.segments?.length">
-                <span v-for="(seg, sIdx) in card.revisions.result.segments" :key="sIdx">
+              <template v-if="cardRevisionSegments(card).length">
+                <span v-for="(seg, sIdx) in cardRevisionSegments(card)" :key="sIdx">
                   <del v-if="seg.struck" class="struck-text">{{ seg.text }}</del>
                   <span v-else>{{ seg.text }}</span>
                 </span>
@@ -493,10 +611,33 @@ function confirmUndo() {
           </div>
           <p class="card-detail">{{ card.detail_text }}</p>
 
+          <NAlert v-if="card.exception" type="warning" class="card-exception-alert">
+            须人工处理：{{ card.exception }}
+          </NAlert>
+
+          <div v-if="card.guidance" class="card-guidance-box">
+            <div v-if="card.guidance.question" class="guidance-question">{{ card.guidance.question }}</div>
+            <div v-if="card.guidance.help" class="guidance-help">{{ card.guidance.help }}</div>
+            <div v-if="card.guidance.name_options?.length" class="guidance-options">
+              <span class="guidance-opt-label">可选分项：</span>
+              <NButton
+                v-for="(opt, oIdx) in card.guidance.name_options"
+                :key="oIdx"
+                size="tiny"
+                secondary
+                type="info"
+                :disabled="busy"
+                @click="selectGuidanceOption(card, opt)"
+              >
+                {{ guidanceOptionLabel(opt) }}
+              </NButton>
+            </div>
+          </div>
+
           <!-- Quick Choice Buttons -->
           <div class="quick-choices-bar">
             <span class="choice-prompt">快捷选择：</span>
-            <NButtonGroup>
+            <NButtonGroup v-if="card.quick_choices.length">
               <NButton
                 v-for="(choice, idx) in card.quick_choices"
                 :key="idx"
@@ -508,6 +649,26 @@ function confirmUndo() {
                 {{ choice.label }}
               </NButton>
             </NButtonGroup>
+            <NButton
+              v-if="canOfferManualButton(card)"
+              size="small"
+              secondary
+              type="info"
+              :disabled="busy"
+              @click="switchToManual(card)"
+            >
+              填写人工解释
+            </NButton>
+            <NButton
+              v-else-if="!card.quick_choices.length && card.primary_candidate_id"
+              size="small"
+              secondary
+              type="info"
+              :disabled="busy"
+              @click="emit('edit', card.primary_candidate_id)"
+            >
+              打开单格抽屉修改
+            </NButton>
           </div>
 
           <!-- Edit & Reason Box within Card -->
@@ -515,7 +676,31 @@ function confirmUndo() {
             <template v-if="card.quick_choices[cardSelectedChoice[card.task_id]]?.operation === 'manual'">
               <div v-for="f in card.fields" :key="f" class="field-input-row">
                 <label>{{ fieldNames[f] || f }}</label>
-                <NInput v-model:value="cardCustomFields[card.task_id][f]" :placeholder="fieldNames[f]" :disabled="busy" />
+                <NSelect
+                  v-if="identityEnumOptions[f]"
+                  :value="cardCustomFields[card.task_id][f] || null"
+                  :options="identityEnumOptions[f]"
+                  :placeholder="'请选择' + (fieldNames[f] || f)"
+                  :disabled="busy"
+                  clearable
+                  @update:value="val => { cardCustomFields[card.task_id][f] = val || ''; }"
+                />
+                <NInput
+                  v-else
+                  v-model:value="cardCustomFields[card.task_id][f]"
+                  :placeholder="fieldNames[f] || f"
+                  :disabled="busy"
+                />
+                <NButton
+                  v-if="!identityEnumOptions[f] && activeTextForField(card, f)"
+                  size="tiny"
+                  secondary
+                  type="info"
+                  :disabled="busy"
+                  @click="cardCustomFields[card.task_id][f] = activeTextForField(card, f)"
+                >
+                  带入未划线原文
+                </NButton>
               </div>
               <div v-if="card.fields.includes('result') && card.affected_count > 1" class="manual-result-warn">
                 <span>结果值涉及多个时间点，须点击‘打开单格抽屉’逐格修改：</span>
@@ -625,6 +810,12 @@ function confirmUndo() {
 .struck-text { color: #d03050; text-decoration: line-through; background-color: #fef0f0; padding: 0 2px; border-radius: 2px; }
 .evidence-comment { margin-top: 6px; font-size: 0.85rem; color: #b45309; }
 .card-detail { margin: 0; font-size: 0.9rem; color: #475569; line-height: 1.4; }
+.card-exception-alert { margin-top: 2px; }
+.card-guidance-box { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; padding: 8px 12px; display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; color: #0c4a6e; }
+.guidance-question { font-weight: 600; }
+.guidance-help { color: #334155; font-size: 0.84rem; }
+.guidance-options { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.guidance-opt-label { font-size: 0.84rem; font-weight: 600; color: #0369a1; }
 .quick-choices-bar { display: flex; align-items: center; gap: 10px; margin-top: 4px; flex-wrap: wrap; }
 .choice-prompt { font-size: 0.88rem; font-weight: 600; color: #334155; }
 .in-card-edit { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; margin-top: 8px; display: flex; flex-direction: column; gap: 10px; }

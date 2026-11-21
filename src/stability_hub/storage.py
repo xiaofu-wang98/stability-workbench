@@ -29,6 +29,8 @@ class Store:
         self.db = self.home / "history.sqlite"
         with self.connect() as conn:
             conn.execute("PRAGMA journal_mode=WAL")
+            # Durability is a compliance invariant: keep SQLite's default
+            # synchronous=FULL. Never trade committed audit records for speed.
             migrate(conn, self.db)
 
     @contextmanager
@@ -36,6 +38,10 @@ class Store:
         """A SQLite-enforced read-only snapshot; never migrates or commits writes."""
         conn = sqlite3.connect(self.db.as_uri() + '?mode=ro', uri=True, timeout=10, factory=SnapshotConnection)
         conn.undo_sets = {}
+        # Request-local reuse of derived review state. Every value is computed
+        # from one committed snapshot, so it may be published immediately.
+        conn.review_states = {}
+        conn.read_only = True
         conn.row_factory = sqlite3.Row
         try:
             conn.execute('BEGIN')
