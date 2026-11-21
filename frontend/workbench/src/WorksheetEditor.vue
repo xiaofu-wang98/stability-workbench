@@ -673,19 +673,19 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.worksheet-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
-.worksheet-controls.is-editing { padding: 12px; margin-bottom: 8px; background: #eef6f3; border: 1px solid #d3e5df; border-radius: 10px; }
-.worksheet-controls [role="status"] { margin-left: auto; color: #395a53; font-size: 13px; }
-.worksheet-editor { border-radius: 10px; overflow: hidden; height: min(64vh, 660px); min-height: 360px; border: 1px solid #dbe5e2; }
-.extra-form { display: grid; gap: 10px; max-width: 480px; margin: 12px 0; padding: 14px; background: white; border: 1px solid #dbe5e2; border-radius: 8px; }
-.extra-form label { display: grid; gap: 4px; }
-.extra-form input, .extra-form textarea { font: inherit; padding: 6px; border: 1px solid #aabdb8; border-radius: 5px; }
+.worksheet-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 14px 0; }
+.worksheet-controls.is-editing { padding: 12px 16px; margin-bottom: 10px; background: var(--brand-soft); border: 1px solid var(--brand-border); border-radius: var(--radius-md); }
+.worksheet-controls [role="status"] { margin-left: auto; color: var(--brand); font-size: 13px; font-weight: 600; }
+.worksheet-editor { border-radius: var(--radius-md); overflow: hidden; height: min(64vh, 660px); min-height: 360px; border: 1px solid var(--border); box-shadow: var(--shadow-card); }
+.extra-form { display: grid; gap: 12px; max-width: 520px; margin: 14px 0; padding: 16px 18px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-card); }
+.extra-form label { display: grid; gap: 5px; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+.extra-form input, .extra-form textarea { font: inherit; padding: 7px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
 .quick-reasons { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
-.quick-title { font-size: 12px; color: #637772; }
+.quick-title { font-size: 12px; color: var(--text-muted); }
 .buttons { display: flex; gap: 10px; margin-top: 6px; }
 .recovery-box { margin: 12px 0; }
 .recovery-actions { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
-.draft-textarea { width: 100%; font-size: 12px; padding: 6px; border: 1px solid #aabdb8; border-radius: 4px; }
+.draft-textarea { width: 100%; font-size: 12.5px; padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
 .mt-2 { margin-top: 8px; }
 .mb-2 { margin-bottom: 8px; }
 </style>

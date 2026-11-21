@@ -14,7 +14,15 @@ const batch = ref(String(route.query.batch || ''));
 const study = ref<string | null>(typeof route.query.study === 'string' ? route.query.study : null);
 const studyId = ref('');
 const condition = ref('');
-const kind = ref<'summary' | 'xlsx' | 'docx' | 'stability' | 'confirmation' | 'quick' | 'controlled'>(route.query.format === 'confirmation' ? 'confirmation' : 'xlsx');
+const kind = ref<'summary' | 'xlsx' | 'docx' | 'stability' | 'confirmation' | 'quick' | 'controlled'>(
+  route.query.format === 'controlled'
+    ? 'controlled'
+    : route.query.format === 'confirmation'
+    ? 'confirmation'
+    : (['summary', 'xlsx', 'docx', 'stability', 'quick'].includes(String(route.query.format))
+      ? (route.query.format as any)
+      : 'xlsx')
+);
 type Sample = { id: string; batch: string; presentation: string; sample_type: string; purpose: string };
 type SampleRole = 'selected' | 'before' | 'after';
 type AlignmentField = 'presentation' | 'study_id';
@@ -406,13 +414,22 @@ function href(item: Delivery) {
 </template>
 
 <style scoped>
-.delivery-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.delivery-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px 16px; }
 .delivery-form h2, .delivery-form p, .delivery-form > a, .delivery-actions { grid-column: 1 / -1; }
-.delivery-form label { display: grid; gap: 5px; }
-.report-settings { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: 12px; border: 1px solid #dbe5e2; }
-.report-settings p { grid-column: 1 / -1; margin: 0; }
-.delivery-actions { display: flex; align-items: center; gap: 12px; }
+.delivery-form label { display: grid; gap: 5px; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+.report-settings {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.report-settings p { grid-column: 1 / -1; margin: 0; font-size: 13px; color: var(--text-secondary); }
+.delivery-actions { display: flex; align-items: center; gap: 12px; padding-top: 8px; border-top: 1px solid var(--border); }
 .delivery-changes p { white-space: pre-wrap; }
-.quick-groups { grid-column: 1 / -1; }
-.quick-groups label { display: inline-flex; align-items: center; }
+.quick-groups { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.quick-groups label { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
 </style>

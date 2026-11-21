@@ -400,7 +400,8 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
                               category: str = "", focus: str = "", offset: int = Query(0, ge=0),
                               limit: int | None = Query(None, ge=1, le=100)):
         require(operator, Capability.VIEW)
-        from .review_tasks import blocker_cards, blocker_category, blocker_index, blocker_summary, build_action_groups, current_review
+        from .review_tasks import (blocker_cards, blocker_category, blocker_index, blocker_summary,
+                                   build_action_groups, build_task_cards, current_review)
         with store.read() as conn:
             upload = workflow._upload(conn, preview_id)
             preview, sheets, flights, tasks, _ = current_review(workflow, conn, upload, operator, _shared=True)
@@ -412,14 +413,17 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
             selected = [ref for ref, matching in index.items() if
                         (limit is None or not ref.startswith("not_received")) and
                         (not category or any(blocker_category(ref, task) == category for task in matching))]
+            # Blockers and task cards are different lists; each keeps its own page
+            # position so a focus hit in one can never shift the other.
+            blocker_offset = offset
             if focus and limit:
                 position = next((i for i, ref in enumerate(selected)
                                  if ref.partition(":")[2] == focus or any(task.id == focus for task in index[ref])), None)
                 if position is not None:
-                    offset = (position // limit) * limit
-            if limit and offset and offset >= len(selected):
-                offset = (max(len(selected) - 1, 0) // limit) * limit
-            references = selected[offset:offset + limit] if limit is not None else selected
+                    blocker_offset = (position // limit) * limit
+            if limit and blocker_offset and blocker_offset >= len(selected):
+                blocker_offset = (max(len(selected) - 1, 0) // limit) * limit
+            references = selected[blocker_offset:blocker_offset + limit] if limit is not None else selected
             active_tasks = {task.id for ref, matching in index.items() if not ref.startswith("not_received") for task in matching}
             manual = [
                 {'id': task.id, 'detail': task.detail, 'fields': task.fields, 'evidence': task.evidence,
@@ -442,10 +446,27 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
                     AND u.action='undo_review_batch'
                     AND json_extract(u.detail_json,'$.batch_id')=json_extract(b.detail_json,'$.batch_id'))
                 ORDER BY b.sequence DESC LIMIT 1""", (preview_id, section)).fetchone()
+            task_cards = build_task_cards(conn, upload, preview, flight, sheets, tasks, index=index)
+            filtered_cards = [card for card in task_cards if card.get("category") == category] if category else task_cards
+            task_cards_total = len(filtered_cards)
+            card_offset = offset
+            if focus and limit:
+                pos = next((i for i, card in enumerate(filtered_cards)
+                            if card["task_id"] == focus or any(m.get("candidate_id") == focus for m in card.get("members", []))), None)
+                if pos is not None:
+                    card_offset = (pos // limit) * limit
+            if limit and card_offset and card_offset >= len(filtered_cards):
+                card_offset = (max(len(filtered_cards) - 1, 0) // limit) * limit
+            paged_cards = filtered_cards[card_offset:card_offset + limit] if limit is not None else filtered_cards
+
+            # 'offset' stays the task-card page position consumed by the workbench;
+            # blockers report their own position explicitly.
             return {'groups': groups, 'manual': manual, 'batch_members': batch_members,
                     'base_revision': flight.base_revision, 'undo_batch_id': undo[0] if undo and flight.state != 'committed' else None,
-                    'summary': summary, 'total': len(selected), 'offset': offset,
-                    'blockers': blocker_cards(conn, upload, preview, flight, sheets, tasks, index=index, references=references)}
+                    'summary': summary, 'total': len(selected), 'offset': card_offset,
+                    'blockers_offset': blocker_offset, 'task_cards_offset': card_offset,
+                    'blockers': blocker_cards(conn, upload, preview, flight, sheets, tasks, index=index, references=references),
+                    'task_cards': paged_cards, 'task_cards_total': task_cards_total}
 
     @app.post('/api/v1/previews/{preview_id}/v5/tasks/preview')
     def source_task_preview(preview_id: str,command: TaskBatchScope,operator: ActorDependency):
@@ -1165,27 +1186,61 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
         with store.read() as conn:
             upload = workflow._upload(conn, preview_id)
             result = workflow._preview(conn, upload, operator, fresh=True)
-            physical = coverage(conn, upload) if result.sheet_confirmation_required else []
-            sections = [sheet["section"] for sheet in physical]
-            if section is not None and section not in sections:
-                raise WorkflowError("unknown_sheet", "链接中的工作表已无法定位，请重新选择工作表。", 404)
-            selected = section if section is not None else next(iter(sections), None)
-            view = None
-            if selected is not None:
-                from .review_tasks import enrich_sheet_preflight
-                view = preflight(workflow, conn, upload, selected, operator, preview=result, sheets=physical)[0]
-                view = enrich_sheet_preflight(conn, upload, result, view, physical_sheets=physical)
             if result.sheet_confirmation_required:
+                from .review_tasks import current_review, enrich_sheet_preflight
+                preview, physical_sheets, flights, tasks, _ = current_review(workflow, conn, upload, operator, _shared=True)
+                result = preview
+                physical = physical_sheets
+                sections = [sheet["section"] for sheet in physical]
+                if section is not None and section not in sections:
+                    raise WorkflowError("unknown_sheet", "链接中的工作表已无法定位，请重新选择工作表。", 404)
+                selected = section if section is not None else next(iter(sections), None)
+                flight = next((f for f in flights if f.section == selected), None)
+                view = enrich_sheet_preflight(conn, upload, result, flight, physical_sheets=physical) if flight else None
+                all_candidates = result.candidates
                 result = result.model_copy(update={"candidates": tuple(
                     candidate for candidate in result.candidates if candidate.location.section == selected)})
+
+                section_statuses = []
+                flight_by_sec = {f.section: f for f in flights}
+                from .review_tasks import blocker_index, blocker_summary
+                for s in sections:
+                    f = flight_by_sec.get(s)
+                    c_count = sum(1 for c in all_candidates if c.location.section == s)
+                    if f is None:
+                        sec_state = "empty"
+                        unresolved = 0
+                    elif f.state == "committed":
+                        sec_state = "committed"
+                        unresolved = 0
+                    else:
+                        # Real decisions only: a not_received receipt placeholder is
+                        # a save step, not a source question awaiting review.
+                        unresolved = blocker_summary(blocker_index(f, tasks))["tasks"]
+                        sec_state = ("not_received" if any(u == "not_received" or u.startswith("not_received:")
+                                                           for u in f.unresolved) else f.state)
+                    section_statuses.append({
+                        "section": s,
+                        "state": sec_state,
+                        "unresolved_count": unresolved,
+                        "candidate_count": c_count,
+                    })
+            else:
+                sections = []
+                selected = None
+                view = preflight(workflow, conn, upload, None, operator, preview=result)[0] if result.candidates else None
+                section_statuses = []
+
             receipt = None
             if view and view.state == "committed":
                 row = conn.execute("""SELECT detail_json FROM workflow_events WHERE subject_id=? AND action='confirm_sheet'
                     AND json_extract(detail_json,'$.section')=? ORDER BY sequence DESC LIMIT 1""",
                     (preview_id, selected)).fetchone()
                 receipt = json.loads(row[0]) if row else None
+
             return {"preview": result, "sections": sections, "section": selected, "commit_receipt": receipt,
-                    "preflight": view.model_dump(mode="json") if view else None}
+                    "preflight": view.model_dump(mode="json") if view else None,
+                    "section_statuses": section_statuses}
 
     @app.post('/api/v1/previews/{preview_id}/sync-worksheets')
     def sync_confirmed_worksheets(preview_id: str, operator: ActorDependency, section: str | None = None):

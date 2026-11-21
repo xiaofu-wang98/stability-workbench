@@ -190,6 +190,7 @@ class WorkspacePreview(Model):
     section: str | None
     preflight: dict | None = None
     commit_receipt: dict | None = None
+    section_statuses: tuple[dict, ...] = ()
 
 
 class ExternalReference(Model):

@@ -234,12 +234,9 @@ function saveSpecification() {
 <style scoped>
 .scan-controls { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
 details { margin-top: 14px; }
-.scan-review { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(300px, 1fr); gap: 16px; margin-top: 14px; }
-.scan-review iframe { width: 100%; min-height: 550px; height: 70vh; border: 1px solid #dbe5e2; }
+.scan-review { display: grid; grid-template-columns: minmax(360px, 1fr) minmax(360px, 1fr); gap: 18px; margin-top: 14px; }
+.scan-review iframe { width: 100%; min-height: 550px; height: 70vh; border: 1px solid var(--border); border-radius: var(--radius-md); }
 .scan-findings { min-width: 0; max-height: 70vh; overflow: auto; }
-.scan-criteria, .scan-criteria fieldset { display: grid; gap: 8px; max-width: 720px; margin-top: 12px; }
-.scan-criteria label { display: grid; gap: 4px; }
-@media (max-width: 900px) {
-  .scan-review { grid-template-columns: minmax(0, 1fr); }
-}
+.scan-criteria, .scan-criteria fieldset { display: grid; gap: 8px; max-width: 720px; margin-top: 12px; border-color: var(--border); border-radius: var(--radius-md); }
+.scan-criteria label { display: grid; gap: 4px; font-size: 13px; font-weight: 500; color: var(--text-secondary); }
 </style>

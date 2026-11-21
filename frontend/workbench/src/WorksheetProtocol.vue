@@ -93,6 +93,6 @@ function save() {
 </template>
 
 <style scoped>
-.protocol-form { display: grid; gap: 9px; max-width: 750px; padding: 14px; margin: 12px 0; background: white; }
+.protocol-form { display: grid; gap: 10px; max-width: 760px; padding: 16px 18px; margin: 12px 0; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-card); }
 .protocol-actions { display: flex; gap: 8px; }
 </style>

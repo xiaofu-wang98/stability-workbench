@@ -219,7 +219,8 @@ function save() {
 </template>
 
 <style scoped>
-.sample-form, .coa-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 12px 0; }
-.matrix { margin: 12px 0; }
-textarea { min-width: 9rem; resize: vertical; }
+.sample-form, .coa-actions { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 12px 0; }
+.sample-form label { display: grid; gap: 4px; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+.matrix { margin: 14px 0; }
+textarea { min-width: 10rem; resize: vertical; }
 </style>

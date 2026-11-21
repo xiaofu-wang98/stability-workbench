@@ -67,7 +67,7 @@ function add() {
   </section>
 </template>
 <style scoped>
-.spec-picker { padding: 16px; background: #f1f7fb; border: 1px solid #bdd1e0; border-radius: 8px; margin: 12px 0; }
-.spec-picker select { max-width: 100%; margin: 8px; }
+.spec-picker { padding: 16px 18px; background: var(--brand-soft); border: 1px solid var(--brand-border); border-radius: var(--radius-md); margin: 14px 0; }
+.spec-picker select { max-width: 100%; margin: 8px 0; }
 td { white-space: pre-wrap; }
 </style>
