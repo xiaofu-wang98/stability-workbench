@@ -169,8 +169,12 @@ const categoryLabels: Record<string, string> = {
   'source_revision': '删除线／删',
   'deleted_source': '整格删除',
   'source_comment': '批注与解释',
+  'identity': '来源身份',
+  'identity_ambiguity': '检项歧义',
   'identity_conflict': '双语身份冲突',
   'method_conflict': '方法中英冲突',
+  'numeric_format': '数字格式',
+  'formula_result': '公式结果',
   'row_exclusion': '整行不采用建议',
   'region': '来源区域',
   'unprojected_region': '未投影区域',
@@ -372,7 +376,7 @@ async function applyTaskCard(card: TaskCard) {
       scope.role = choice?.role || 'auxiliary';
     }
     const previewResult = await post<{ base_revision: number; fingerprint: string; changes: any[] }>('/tasks/preview', scope);
-    if (!previewResult.changes?.length && op !== 'exclude') {
+    if (!previewResult.changes?.length) {
       throw new Error('未检测到需要生效的改动，请核对所选选项或参数。');
     }
     await post('/tasks/apply', {
@@ -582,7 +586,7 @@ function confirmUndo() {
             <NButton v-if="card.needs_history_review" size="tiny" secondary type="warning" @click="emit('history', card.primary_candidate_id || '', card.needs_approval || false)">
               {{ card.needs_approval ? '复核历史采用' : '查看历史冲突' }}
             </NButton>
-            <a v-if="card.needs_advanced_tool" class="advanced-tool-link" :href="'#/legacy?view=ledger&project=' + encodeURIComponent(props.project) + '&upload=' + encodeURIComponent(props.source) + '&sheet=' + encodeURIComponent(props.section) + '&task=' + encodeURIComponent(card.task_id)">
+            <a v-if="card.needs_advanced_tool" class="advanced-tool-link" :href="'/legacy?view=ledger&project=' + encodeURIComponent(props.project) + '&upload=' + encodeURIComponent(props.source) + '&sheet=' + encodeURIComponent(props.section) + '&task=' + encodeURIComponent(card.task_id)">
               在原表处理工具打开本项
             </a>
             <NButton v-if="card.primary_candidate_id" size="tiny" secondary text @click="emit('edit', card.primary_candidate_id)">

@@ -99,7 +99,7 @@ defineExpose({ isDirty });
 async function quickSave() {
   if (!editable.value || !Object.keys(differences.value).length || !reason.value.trim()) return;
   await inspect();
-  if (plan.value) await save();
+  if (plan.value?.record) await save();
 }
 </script>
 

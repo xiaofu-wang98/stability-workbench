@@ -301,26 +301,24 @@ async function selectSection(value: string | null, loaded?: WorkspacePreview) {
   linkedSheets.value = [];
   if (value) {
     const query = new URLSearchParams({ section: value });
-    try {
-      const view = loaded ?? await api<WorkspacePreview>(path.value + '/workspace?' + query);
-      preview.value = view.preview;
-      if (view.section_statuses) sectionStatuses.value = view.section_statuses;
-      preflight.value = view.preflight ?? undefined;
-      commitReceipt.value = view.commit_receipt ?? undefined;
-      worksheetSync.value = commitReceipt.value?.worksheet_sync ?? [];
-      if (candidates.value.some(candidate => candidate.lifecycle === 'submitted')) {
-        linkedSheets.value = await api(path.value + '/worksheets?' + query);
-      }
-      await router.replace({
-        path: '/import',
-        query: {
-          ...route.query,
-          project: preview.value?.project || project.value || undefined,
-          source: preview.value?.preview_id,
-          section: section.value || undefined,
-        },
-      });
-    } catch {}
+    const view = loaded ?? await api<WorkspacePreview>(path.value + '/workspace?' + query);
+    preview.value = view.preview;
+    if (view.section_statuses) sectionStatuses.value = view.section_statuses;
+    preflight.value = view.preflight ?? undefined;
+    commitReceipt.value = view.commit_receipt ?? undefined;
+    worksheetSync.value = commitReceipt.value?.worksheet_sync ?? [];
+    if (candidates.value.some(candidate => candidate.lifecycle === 'submitted')) {
+      linkedSheets.value = await api(path.value + '/worksheets?' + query);
+    }
+    await router.replace({
+      path: '/import',
+      query: {
+        ...route.query,
+        project: preview.value?.project || project.value || undefined,
+        source: preview.value?.preview_id,
+        section: section.value || undefined,
+      },
+    });
   }
 }
 async function open(id: string, selected?: string) {
@@ -815,7 +813,7 @@ function syncWorksheets() {
       <div v-if="preview.sheet_confirmation_required" class="sheet-select-row">
         <label>选择工作表：
           <NSelect filterable :value="section" :disabled="busy" placeholder="选择工作表"
-            :options="sectionOptions" @update:value="value => checkDirtyAndConfirm(() => { taskFocus = ''; selectSection(value); })" />
+            :options="sectionOptions" @update:value="value => checkDirtyAndConfirm(() => { taskFocus = ''; run(() => selectSection(value)); })" />
         </label>
         <span v-if="sheetProgressText" class="sheet-progress-pill">{{ sheetProgressText }}</span>
       </div>

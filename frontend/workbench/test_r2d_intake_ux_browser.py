@@ -384,8 +384,9 @@ def main():
                 expect(region_card.get_by_role('button', name='确认辅助用途（不入库）')).to_be_visible()
                 legacy_link = region_card.locator('a.advanced-tool-link')
                 expect(legacy_link).to_be_visible()
-                assert '#/legacy' in (legacy_link.get_attribute('href') or ''), f"Invalid legacy link: {legacy_link.get_attribute('href')}"
-                print("  [PASS] 来源区域分类展示「确认辅助用途（不入库）」按钮与 #/legacy 兜底链接")
+                legacy_href = legacy_link.get_attribute('href') or ''
+                assert legacy_href.startswith('/legacy?view=ledger') and '#/legacy' not in legacy_href, f"Invalid legacy link: {legacy_href}"
+                print("  [PASS] 来源区域分类展示「确认辅助用途（不入库）」按钮与 /legacy 根路径兜底链接")
                 cat_bar.get_by_role('button', name='全部').click()
 
                 # 8. 底部表格联动（查看关联任务 / 预览不采用 / 去核对修改）与修改抽屉深度断言及脏状态保护
