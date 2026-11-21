@@ -178,6 +178,21 @@ const progressText = computed(() => {
   if (sourceOnly.value && current.can_commit) return '已接收 · 可确认辅助来源归档';
   return current.can_commit ? '已接收 · 可正式写入' : '已接收 · 待核对';
 });
+
+const workflowSteps = computed(() => {
+  const check = preflight.value;
+  const committed = check?.state === 'committed';
+  const received = Boolean(check && !needsReceipt.value);
+  const resolved = Boolean(committed || (received && check?.can_commit));
+  const sheetDone = Boolean(!preview.value?.sheet_confirmation_required || section.value);
+  return [
+    { num: 1, label: '选择工作表', state: sheetDone ? 'done' : 'active' },
+    { num: 2, label: '接收候选', state: committed || received ? 'done' : sheetDone ? 'active' : 'pending' },
+    { num: 3, label: '核对争议', state: resolved ? 'done' : received ? 'active' : 'pending' },
+    { num: 4, label: '写入入库', state: committed ? 'done' : resolved ? 'active' : 'pending' },
+    { num: 5, label: '同步 / 查看结果', state: committed ? 'active' : 'pending' },
+  ];
+});
 const reviewCandidates = computed(() => {
   const check = preflight.value;
   if (!check) return [];
@@ -689,82 +704,122 @@ function syncWorksheets() {
 </script>
 
 <template>
-  <NAlert v-if="error" type="error" role="alert">{{ error }}</NAlert>
+  <NAlert v-if="error" type="error" role="alert" style="margin-bottom: 14px;">{{ error }}</NAlert>
   <p v-if="status" role="status" class="import-status-banner">{{ status }}</p>
-  <section v-if="!preview" class="panel import-panel upload-panel">
-    <h2>导入稳定性数据</h2>
-    <div class="upload-links">
-      <RouterLink :to="{ path: '/specifications', query: { project: project || undefined } }">质量标准 Word：导入、查看或用于建表</RouterLink>
-      <RouterLink to="/scans">识别扫描 PDF</RouterLink>
-      <RouterLink :to="{ path: '/projects' }">查看全部项目数据</RouterLink>
-      <RouterLink :to="{ path: '/new' }">新建研究表</RouterLink>
-      <RouterLink :to="{ path: '/deliveries' }">查看报告生成与交付</RouterLink>
-    </div>
-    <div class="file-picker">
-      <label>选择来源文件 Excel 或 Word
-        <input type="file" accept=".xlsx,.docx" :disabled="busy" @change="choose">
-      </label>
-      <small v-if="file">已选：{{ file.name }}</small>
-    </div>
-    <div class="upload-project">
-      <label>目标项目
-        <NSelect :value="project || null" filterable clearable placeholder="输入项目编号或名称快速搜索 (如 501 / IP281)..."
-          :options="projects.map(p => ({ value: p.project, label: p.project + (p.name ? ' · ' + p.name : '') }))"
-          @update:value="project = $event || ''" />
-      </label>
-    </div>
-    <label>文件用途
-      <select v-model="role" :disabled="busy" @change="changeRole">
-        <option value="">请选择文件用途</option>
-        <option value="stability_source">稳定性结果</option>
-        <option value="release_coa">放行结果／CoA</option>
-        <option value="protocol">稳定性方案 Word</option>
-      </select>
-    </label>
-    <details :open="!projects.length">
-      <summary>新建项目</summary>
-      <form @submit.prevent="createProject">
-        <label>项目编号 <input name="project" :value="suggestions.length === 1 ? suggestions[0] : ''" required></label>
-        <label>项目名称 <input name="name" required></label>
-        <NButton attr-type="submit" :loading="busy">创建项目</NButton>
-      </form>
-    </details>
-    <details v-if="role && role !== 'protocol'">
-      <summary>补充原件未注明的身份</summary>
-      <div class="identity-fields" @input="uploadKey = ''" @change="uploadKey = ''">
-        <label>批号 <input v-model="defaults.batch" :disabled="busy"></label>
-        <label>规格 <input v-model="defaults.presentation" :disabled="busy"></label>
-        <label>方案编号 <input v-model="defaults.study_id" :disabled="busy"></label>
-        <label>条件 <input v-model="defaults.condition" :disabled="busy"></label>
-        <label>材料类别 <select v-model="defaults.sample_type" :disabled="busy"><option value="">沿用原件</option><option value="DS">原液</option><option value="DP">制剂</option><option value="placebo">安慰剂</option></select></label>
-        <label>考察类型 <select v-model="defaults.study" :disabled="busy"><option value="">沿用原件</option><option value="long_term">长期</option><option value="accelerated">加速</option><option value="stress">强力破坏</option></select></label>
-      </div>
-    </details>
-    <p role="status">{{ uploadStatus || (busy ? "正在读取文件，请稍候…" : !file ? "选择来源文件。" : !role ? "请选择文件用途。" : role !== "protocol" && !project ? "请选择目标项目，或根据原件查找项目。" : "文件已准备好，可以开始解析。") }}</p>
-    <div class="entry-actions">
-      <NButton v-if="role === 'protocol'" type="primary" :loading="busy" :disabled="busy || !file" @click="parseProtocol">解析方案</NButton>
-      <template v-else-if="role">
-        <NButton type="primary" :loading="busy" :disabled="busy || !file || !project" @click="upload">解析并核对</NButton>
-        <NButton :disabled="busy || !file" @click="inspectResult">根据原件查找项目</NButton>
-      </template>
-    </div>
-    <ul v-if="summaries.length" class="list">
-      <li v-for="item in summaries" :key="item.preview_id">
-        <NButton text :disabled="busy" @click="run(() => open(item.preview_id))">{{ item.filename }}</NButton>
-        <span>{{ item.draft }} 条尚未提交</span>
-      </li>
-    </ul>
-    <ul v-if="role === 'protocol' && planDrafts.length" class="list">
-      <li v-for="draft in planDrafts" :key="draft.id">
-        <NButton text :disabled="busy" @click="run(async () => { protocol = await api<Protocol>('/plan-drafts/' + draft.id); })">{{ draft.filename }}</NButton>
-      </li>
-    </ul>
-  </section>
 
-  <details v-if="!preview" class="panel">
-    <summary>回传从工作台下载的研究表 Excel</summary>
-    <StudyWorkbook :disabled="busy" @historical-source="fromWorkbook" />
-  </details>
+  <!-- Desktop 2-Column Upload View -->
+  <div v-if="!preview" class="import-landing-grid">
+    <section class="panel import-panel upload-panel">
+      <div class="upload-panel-head">
+        <h2>导入稳定性数据</h2>
+        <span class="upload-hint">支持稳定性汇总 Excel（.xlsx）及方案 Word（.docx）</span>
+      </div>
+
+      <div class="file-picker">
+        <div class="file-picker-icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
+          </svg>
+        </div>
+        <div class="file-picker-body">
+          <label>选择来源文件 Excel 或 Word
+            <input type="file" accept=".xlsx,.docx" :disabled="busy" @change="choose">
+          </label>
+          <small v-if="file">已选：{{ file.name }}</small>
+        </div>
+      </div>
+
+      <div class="upload-form-grid">
+        <div class="upload-project">
+          <label>目标项目
+            <NSelect :value="project || null" filterable clearable placeholder="输入项目编号或名称快速搜索 (如 501 / IP281)..."
+              :options="projects.map(p => ({ value: p.project, label: p.project + (p.name ? ' · ' + p.name : '') }))"
+              @update:value="project = $event || ''" />
+          </label>
+        </div>
+        <label class="upload-role-field">文件用途
+          <select v-model="role" :disabled="busy" @change="changeRole">
+            <option value="">请选择文件用途</option>
+            <option value="stability_source">稳定性结果</option>
+            <option value="release_coa">放行结果／CoA</option>
+            <option value="protocol">稳定性方案 Word</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="upload-disclosures">
+        <details v-if="role && role !== 'protocol'" class="disclosure-card">
+          <summary>补充原件未注明的身份</summary>
+          <div class="identity-fields" @input="uploadKey = ''" @change="uploadKey = ''">
+            <label>批号 <input v-model="defaults.batch" :disabled="busy"></label>
+            <label>规格 <input v-model="defaults.presentation" :disabled="busy"></label>
+            <label>方案编号 <input v-model="defaults.study_id" :disabled="busy"></label>
+            <label>条件 <input v-model="defaults.condition" :disabled="busy"></label>
+            <label>材料类别 <select v-model="defaults.sample_type" :disabled="busy"><option value="">沿用原件</option><option value="DS">原液</option><option value="DP">制剂</option><option value="placebo">安慰剂</option></select></label>
+            <label>考察类型 <select v-model="defaults.study" :disabled="busy"><option value="">沿用原件</option><option value="long_term">长期</option><option value="accelerated">加速</option><option value="stress">强力破坏</option></select></label>
+          </div>
+        </details>
+
+        <details :open="!projects.length" class="disclosure-card">
+          <summary>新建项目</summary>
+          <form class="inline-create-form" @submit.prevent="createProject">
+            <label>项目编号 <input name="project" :value="suggestions.length === 1 ? suggestions[0] : ''" required></label>
+            <label>项目名称 <input name="name" required></label>
+            <NButton attr-type="submit" :loading="busy">创建项目</NButton>
+          </form>
+        </details>
+      </div>
+
+      <p role="status" class="upload-status-line">{{ uploadStatus || (busy ? "正在读取文件，请稍候…" : !file ? "选择来源文件。" : !role ? "请选择文件用途。" : role !== "protocol" && !project ? "请选择目标项目，或根据原件查找项目。" : "文件已准备好，可以开始解析。") }}</p>
+
+      <div class="entry-actions upload-cta-bar">
+        <NButton v-if="role === 'protocol'" type="primary" :loading="busy" :disabled="busy || !file" @click="parseProtocol">解析方案</NButton>
+        <template v-else-if="role">
+          <NButton type="primary" :loading="busy" :disabled="busy || !file || !project" @click="upload">解析并核对</NButton>
+          <NButton secondary :disabled="busy || !file" @click="inspectResult">根据原件查找项目</NButton>
+        </template>
+      </div>
+    </section>
+
+    <div class="import-side-col">
+      <section class="panel side-card">
+        <div class="side-card-head">
+          <h3>历史导入记录</h3>
+          <span v-if="project" class="side-project-tag">{{ project }}</span>
+        </div>
+        <ul v-if="summaries.length" class="list compact-list">
+          <li v-for="item in summaries" :key="item.preview_id">
+            <NButton text type="primary" :disabled="busy" @click="run(() => open(item.preview_id))">{{ item.filename }}</NButton>
+            <NTag size="small" :type="item.draft > 0 ? 'warning' : 'success'">{{ item.draft }} 条尚未提交</NTag>
+          </li>
+        </ul>
+        <p v-else class="side-empty">{{ project ? '该项目暂无历史导入记录。' : '选择目标项目后可查看历史导入与未提交记录。' }}</p>
+        <ul v-if="role === 'protocol' && planDrafts.length" class="list compact-list">
+          <li v-for="draft in planDrafts" :key="draft.id">
+            <NButton text type="primary" :disabled="busy" @click="run(async () => { protocol = await api<Protocol>('/plan-drafts/' + draft.id); })">{{ draft.filename }}</NButton>
+          </li>
+        </ul>
+      </section>
+
+      <details class="panel side-card">
+        <summary>回传从工作台下载的研究表 Excel</summary>
+        <div style="margin-top: 12px;">
+          <StudyWorkbook :disabled="busy" @historical-source="fromWorkbook" />
+        </div>
+      </details>
+
+      <section class="panel side-card">
+        <h3>快捷入口</h3>
+        <div class="upload-links">
+          <RouterLink :to="{ path: '/specifications', query: { project: project || undefined } }">质量标准 Word：导入、查看或用于建表</RouterLink>
+          <RouterLink to="/scans">识别扫描 PDF</RouterLink>
+          <RouterLink :to="{ path: '/projects' }">查看全部项目数据</RouterLink>
+          <RouterLink :to="{ path: '/new' }">新建研究表</RouterLink>
+          <RouterLink :to="{ path: '/deliveries' }">查看报告生成与交付</RouterLink>
+        </div>
+      </section>
+    </div>
+  </div>
 
   <template v-if="protocol && !preview">
     <section class="panel">
@@ -795,32 +850,52 @@ function syncWorksheets() {
   <template v-if="preview">
     <section id="current-source" class="panel import-panel import-review">
       <div class="file-header-row">
-        <div>
+        <div class="file-header-info">
           <h2>{{ preview.filename }}</h2>
-          <div class="meta-row">目标项目 {{ preview.project }} · <a :href="'/api/v1' + path + '/file'">下载原件</a></div>
+          <div class="meta-row">
+            <span class="meta-chip">目标项目 {{ preview.project }}</span>
+            <a :href="'/api/v1' + path + '/file'">下载原件</a>
+            <span class="meta-sep">·</span>
+            <a :href="reviewUrl" target="_blank" rel="noopener">在新标签打开当前核对范围</a>
+          </div>
         </div>
         <div class="header-actions">
-          <NButton :disabled="busy" @click="checkDirtyAndConfirm(returnToList)">返回导入列表</NButton>
+          <NButton secondary :disabled="busy" @click="checkDirtyAndConfirm(returnToList)">返回导入列表</NButton>
         </div>
       </div>
 
-      <details v-if="scopeIdentities.length"><summary>本表批次、材料与条件 · {{ scopeIdentities.length }} 组</summary>
-        <ul><li v-for="identity in scopeIdentities" :key="identity">{{ identity }}</li></ul>
-      </details>
-      <a :href="reviewUrl" target="_blank" rel="noopener">在新标签打开当前核对范围</a>
+      <!-- 5-Step Horizontal Workflow Stepper -->
+      <ol class="workflow-stepper" aria-label="导入核对流程">
+        <li v-for="step in workflowSteps" :key="step.num" :class="['step-item', 'step-' + step.state]">
+          <span class="step-dot">{{ step.state === 'done' ? '✓' : step.num }}</span>
+          <span class="step-label">{{ step.label }}</span>
+        </li>
+      </ol>
 
-      <!-- Multi-sheet progress navigation -->
-      <div v-if="preview.sheet_confirmation_required" class="sheet-select-row">
-        <label>选择工作表：
-          <NSelect filterable :value="section" :disabled="busy" placeholder="选择工作表"
-            :options="sectionOptions" @update:value="value => checkDirtyAndConfirm(() => { taskFocus = ''; run(() => selectSection(value)); })" />
-        </label>
-        <span v-if="sheetProgressText" class="sheet-progress-pill">{{ sheetProgressText }}</span>
+      <!-- Multi-sheet progress navigation & Status Strip -->
+      <div class="sheet-toolbar">
+        <div v-if="preview.sheet_confirmation_required" class="sheet-select-row">
+          <label>选择工作表：
+            <NSelect filterable :value="section" :disabled="busy" placeholder="选择工作表"
+              :options="sectionOptions" @update:value="value => checkDirtyAndConfirm(() => { taskFocus = ''; run(() => selectSection(value)); })" />
+          </label>
+          <span v-if="sheetProgressText" class="sheet-progress-pill">{{ sheetProgressText }}</span>
+        </div>
+
+        <div class="sheet-metrics-strip">
+          <NTag size="small" :type="preflight?.state === 'committed' ? 'success' : preflight?.can_commit ? 'info' : 'warning'" class="source-progress">
+            {{ progressText }}
+          </NTag>
+          <span class="range-summary-pill">当前范围 {{ candidates.length }} 条 · 尚未提交 {{ candidates.filter(c => c.lifecycle === 'draft').length }} 条</span>
+        </div>
       </div>
 
-      <p class="source-progress">{{ progressText }}</p>
+      <details v-if="scopeIdentities.length" class="scope-identities-box">
+        <summary>本表批次、材料与条件 · {{ scopeIdentities.length }} 组</summary>
+        <ul><li v-for="identity in scopeIdentities" :key="identity">{{ identity }}</li></ul>
+      </details>
+
       <NAlert v-if="!candidates.length" type="warning">当前范围没有识别到结果。请先核对工作表的来源区域和用途。</NAlert>
-      <div>当前范围 {{ candidates.length }} 条 · 尚未提交 {{ candidates.filter(c => c.lifecycle === 'draft').length }} 条</div>
 
       <NAlert v-if="preflight && !preflight.can_commit && preflight.state !== 'committed'" type="warning">
         <span v-if="preflight.blocker_reasons.length">{{ preflight.blocker_reasons.join('；') }}</span>
@@ -828,7 +903,7 @@ function syncWorksheets() {
         <p v-if="blockerCount">还有 {{ blockerCount }} 个争议或复核引用。请在下方按类型查看独立任务。</p>
         <span v-if="preflight.review_required.length">{{ preflight.review_required.length }} 条结果的处理决定待复核。</span>
         <span v-if="!unreceived.length && !preflight.blocker_reasons.length && !unresolvedIssues.length && !preflight.review_required.length">此工作表还未通过写入预检。</span>
-        <NButton text :disabled="busy" @click="showSourceReview">查看本表来源核对建议</NButton>
+        <NButton text type="primary" :disabled="busy" @click="showSourceReview">查看本表来源核对建议</NButton>
       </NAlert>
 
       <!-- Prominent committed receipt card -->
@@ -855,26 +930,30 @@ function syncWorksheets() {
         </div>
       </NAlert>
 
-      <ul v-if="worksheetSync.some(item => item.status === 'needs_input')">
+      <ul v-if="worksheetSync.some(item => item.status === 'needs_input')" class="needs-input-list">
         <li v-for="item in worksheetSync.filter(entry => entry.status === 'needs_input')" :key="item.slot_id">
           {{ item.batch }} · {{ item.condition }} · {{ item.reason }}
           <RouterLink :to="{ path: '/new', query: { project: preview.project || project, batch: item.batch, slot: item.slot_id } }">补齐并建表</RouterLink>
         </li>
       </ul>
 
-      <p v-if="preflight && (preflight.state === 'ready' || preflight.state === 'committed') && preflightCounts.length">
+      <p v-if="preflight && (preflight.state === 'ready' || preflight.state === 'committed') && preflightCounts.length" class="preflight-counts-line">
         {{ preflight.state === 'ready' ? '待提交范围' : '已提交范围' }}：{{ preflightCounts.join(' · ') }}
       </p>
 
       <div class="entry-actions import-review-actions">
-        <NButton v-if="preflight && needsReceipt" :disabled="busy" @click="receiveSheet">
-          {{ unreceived.length ? '接收 ' + unreceived.length + ' 条候选供核对' : '接收原件供区域核对' }}</NButton>
-        <NButton type="primary" :loading="busy" :disabled="preview.sheet_confirmation_required ? !preflight?.can_commit || preflight.state === 'committed' : !initial.length"
-          @click="commit">{{ sourceOnly ? '确认只归档辅助来源' : preview.sheet_confirmation_required ? '核对无误，写入本工作表' : '核对无误，写入 ' + initial.length + ' 条首次结果' }}</NButton>
-        <RouterLink :to="'/projects/' + encodeURIComponent(preview.project)">打开项目数据</RouterLink>
-        <RouterLink :to="{ path: '/deliveries', query: { project: preview.project, format: 'controlled' } }">打开生成与交付</RouterLink>
-        <RouterLink v-for="sheet in linkedSheets" :key="sheet.id" :to="'/worksheets/' + encodeURIComponent(sheet.id)">打开研究表 {{ sheet.name }}</RouterLink>
-        <NButton v-if="preflight?.state !== 'committed' && nextSection" :disabled="busy" @click="checkDirtyAndConfirm(() => run(() => selectSection(nextSection)))">继续处理下一个工作表</NButton>
+        <div class="primary-actions-group">
+          <NButton v-if="preflight && needsReceipt" type="warning" :disabled="busy" @click="receiveSheet">
+            {{ unreceived.length ? '接收 ' + unreceived.length + ' 条候选供核对' : '接收原件供区域核对' }}</NButton>
+          <NButton type="primary" :loading="busy" :disabled="preview.sheet_confirmation_required ? !preflight?.can_commit || preflight.state === 'committed' : !initial.length"
+            @click="commit">{{ sourceOnly ? '确认只归档辅助来源' : preview.sheet_confirmation_required ? '核对无误，写入本工作表' : '核对无误，写入 ' + initial.length + ' 条首次结果' }}</NButton>
+          <NButton v-if="preflight?.state !== 'committed' && nextSection" secondary :disabled="busy" @click="checkDirtyAndConfirm(() => run(() => selectSection(nextSection)))">继续处理下一个工作表</NButton>
+        </div>
+        <div class="secondary-links-group">
+          <RouterLink class="inline-nav-link" :to="'/projects/' + encodeURIComponent(preview.project)">打开项目数据</RouterLink>
+          <RouterLink class="inline-nav-link" :to="{ path: '/deliveries', query: { project: preview.project, format: 'controlled' } }">打开生成与交付</RouterLink>
+          <RouterLink v-for="sheet in linkedSheets" :key="sheet.id" class="inline-nav-link" :to="'/worksheets/' + encodeURIComponent(sheet.id)">打开研究表 {{ sheet.name }}</RouterLink>
+        </div>
       </div>
     </section>
 
@@ -1019,46 +1098,257 @@ function syncWorksheets() {
 </template>
 
 <style scoped>
-.import-panel { display: grid; gap: 12px; max-width: 800px; justify-items: start; }
-.import-review { max-width: none; }
-.file-header-row { display: flex; justify-content: flex-start; align-items: center; gap: 24px; width: 100%; }
-.meta-row { font-size: 0.9rem; color: #475569; margin-top: 4px; }
-.sheet-select-row { display: flex; align-items: center; gap: 12px; width: 100%; margin: 8px 0; }
-.sheet-select-row label { display: flex; align-items: center; gap: 8px; min-width: 300px; font-weight: 500; }
-.sheet-progress-pill { font-size: 0.85rem; color: #0284c7; background: #e0f2fe; padding: 4px 10px; border-radius: 9999px; font-weight: 500; }
-.committed-card { width: 100%; margin: 12px 0; }
-.committed-title { font-weight: 600; font-size: 1.05rem; }
-.committed-next-actions { display: flex; gap: 12px; margin-top: 12px; align-items: center; flex-wrap: wrap; }
-.next-link-btn { display: inline-flex; align-items: center; justify-content: center; padding: 6px 14px; border-radius: 4px; border: 1px solid #cbd5e1; background: #ffffff; color: #1e293b; text-decoration: none; font-size: 0.9rem; font-weight: 500; }
-.next-link-btn:hover { background: #f8fafc; border-color: #94a3b8; }
-.import-review-actions { width: 100%; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }
-.import-review h2 { margin: 0; max-width: 100%; overflow-wrap: anywhere; }
-.import-review :deep(.n-alert) { width: 100%; }
-.import-review :deep(.n-alert p) { margin: 6px 0; }
-.import-panel :deep(.n-select) { width: min(100%, 480px); }
-form { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0; }
-.identity-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; margin: 10px 0; }
-.identity-fields label { display: grid; gap: 3px; }
-.source-text { white-space: pre-wrap; }
-.conflict-form { display: grid; gap: 10px; }
-.conflict-form label { display: grid; gap: 4px; }
-.upload-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 900px; align-items: start; gap: 18px; }
-.upload-panel > :is(.file-picker, .entry-actions, .list, details, p) { grid-column: 1 / -1; width: 100%; }
-.upload-panel > h2 { margin: 0; }
-.upload-panel form { align-items: end; }
-.upload-panel form label { display: grid; gap: 6px; }
-.upload-links { grid-column: 1 / -1; justify-self: start; padding: 12px; background: #eef5fa; border-radius: 8px; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; }
-.upload-project, .upload-panel > label { display: grid; gap: 6px; width: 100%; }
-.upload-panel > .file-picker { padding: 18px; background: #f4faf8; border: 1px dashed #8eb9ae; border-radius: 10px; gap: 10px; }
-.file-picker small { margin-left: 8px; font-weight: 400; color: #526a65; }
-.file-picker input { max-width: 100%; }
-.file-picker input::file-selector-button { padding: 7px 12px; margin-right: 10px; border: 1px solid #b7d2ca; border-radius: 6px; color: #174f45; background: white; cursor: pointer; font: inherit; }
-.matrix-filter-bar { margin-bottom: 8px; }
-.anomaly-row { background: #fffbeb; }
-.row-status-text { margin-bottom: 4px; font-size: 0.85rem; }
-.row-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-@media (max-width: 650px) {
-  .upload-panel { grid-template-columns: minmax(0, 1fr); }
-  .upload-links { justify-self: start; }
+.import-status-banner {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  background: var(--brand-soft);
+  border: 1px solid var(--brand-border);
+  border-radius: var(--radius-md);
+  color: var(--brand);
+  font-size: 13.5px;
+  font-weight: 500;
 }
+
+/* Desktop 2-Column Upload View */
+.import-landing-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(380px, 0.95fr);
+  gap: 20px;
+  align-items: start;
+}
+.import-panel { display: flex; flex-direction: column; gap: 16px; }
+.upload-panel { margin-top: 0; }
+.upload-panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.upload-panel-head h2 { margin: 0; }
+.upload-hint { font-size: 12.5px; color: var(--text-muted); }
+
+.file-picker {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 20px;
+  background: var(--bg-subtle);
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.file-picker:hover { border-color: var(--brand); background: var(--brand-soft); }
+.file-picker-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--brand);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.file-picker-body { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1; }
+.file-picker-body label { display: flex; flex-direction: column; gap: 6px; font-weight: 600; font-size: 13.5px; color: var(--text-primary); }
+.file-picker small { color: var(--brand); font-weight: 500; font-size: 12.5px; }
+.file-picker input { max-width: 100%; font-size: 13px; color: var(--text-secondary); }
+.file-picker input::file-selector-button {
+  padding: 6px 14px;
+  margin-right: 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 500;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.file-picker input::file-selector-button:hover { border-color: var(--brand); color: var(--brand); }
+
+.upload-form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(200px, 0.9fr);
+  gap: 14px;
+  align-items: end;
+}
+.upload-project label,
+.upload-role-field { display: flex; flex-direction: column; gap: 6px; font-weight: 600; font-size: 13px; color: var(--text-secondary); }
+.upload-project :deep(.n-select) { width: 100%; }
+
+.upload-disclosures { display: flex; flex-direction: column; gap: 10px; }
+.disclosure-card {
+  padding: 12px 14px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.inline-create-form { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-top: 10px; }
+.inline-create-form label { display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+.identity-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+.identity-fields label { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; font-weight: 500; color: var(--text-secondary); }
+.upload-status-line { margin: 0; font-size: 13px; color: var(--text-secondary); }
+.upload-cta-bar { width: 100%; }
+
+.import-side-col { display: flex; flex-direction: column; gap: 16px; }
+.side-card { margin-top: 0; padding: 18px 20px; }
+.side-card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.side-card-head h3 { margin: 0; }
+.side-project-tag {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand);
+  background: var(--brand-soft);
+  border: 1px solid var(--brand-border);
+  padding: 2px 8px;
+  border-radius: 9999px;
+}
+.compact-list li { justify-content: space-between; padding: 9px 4px; }
+.side-empty { margin: 6px 0 0; font-size: 13px; color: var(--text-muted); }
+.upload-links { display: flex; flex-direction: column; gap: 8px; font-size: 13.5px; }
+.upload-links a {
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.upload-links a:hover { border-color: var(--brand-border); background: var(--brand-soft); color: var(--brand); text-decoration: none; }
+
+/* Post-Upload Review Header & 5-Step Horizontal Stepper */
+.import-review { max-width: none; margin-top: 0; }
+.file-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  width: 100%;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.file-header-info { min-width: 0; }
+.import-review h2 { margin: 0; font-size: 18px; overflow-wrap: anywhere; }
+.meta-row { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-secondary); margin-top: 6px; flex-wrap: wrap; }
+.meta-chip {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--brand);
+  background: var(--brand-soft);
+  padding: 2px 8px;
+  border-radius: 9999px;
+}
+.meta-sep { color: var(--border-strong); }
+
+.workflow-stepper {
+  list-style: none;
+  margin: 0;
+  padding: 12px 16px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.step-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.step-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--bg-surface);
+  border: 1.5px solid var(--border-strong);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.step-done { color: var(--success-fg); }
+.step-done .step-dot { background: var(--success-bg); border-color: var(--success-fg); color: var(--success-fg); }
+.step-active { color: var(--brand); font-weight: 600; }
+.step-active .step-dot { background: var(--brand); border-color: var(--brand); color: #ffffff; }
+
+.sheet-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.sheet-select-row { display: flex; align-items: center; gap: 12px; }
+.sheet-select-row label { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 13.5px; color: var(--text-secondary); white-space: nowrap; }
+.sheet-select-row :deep(.n-select) { width: 420px; }
+.sheet-progress-pill {
+  font-size: 12.5px;
+  color: var(--brand);
+  background: var(--brand-soft);
+  border: 1px solid var(--brand-border);
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.sheet-metrics-strip { display: flex; align-items: center; gap: 10px; }
+.range-summary-pill { font-size: 13px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.scope-identities-box { font-size: 13px; color: var(--text-secondary); }
+.scope-identities-box ul { margin: 6px 0 0; padding-left: 20px; }
+
+.committed-card { width: 100%; }
+.committed-title { font-weight: 600; font-size: 15px; }
+.committed-next-actions { display: flex; gap: 10px; margin-top: 12px; align-items: center; flex-wrap: wrap; }
+.next-link-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  text-decoration: none;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.next-link-btn:hover { background: var(--brand-soft); border-color: var(--brand-border); color: var(--brand); text-decoration: none; }
+
+.needs-input-list { margin: 0; padding-left: 20px; font-size: 13.5px; color: var(--text-secondary); }
+.preflight-counts-line { margin: 0; font-size: 13px; color: var(--text-secondary); font-weight: 500; }
+
+.import-review-actions {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.primary-actions-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.secondary-links-group { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.inline-nav-link {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+}
+.inline-nav-link:hover { color: var(--brand); border-color: var(--brand-border); background: var(--brand-soft); text-decoration: none; }
+
+.import-review :deep(.n-alert) { width: 100%; }
+.import-review :deep(.n-alert p) { margin: 5px 0; }
+.source-text { white-space: pre-wrap; }
+.conflict-form { display: grid; gap: 10px; max-width: 520px; }
+.conflict-form label { display: grid; gap: 4px; font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+.matrix-filter-bar { margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; font-size: 13.5px; font-weight: 500; color: var(--text-secondary); }
+.anomaly-row td { background: #fffdf5; }
+.row-status-text { margin-bottom: 6px; font-size: 12.5px; color: var(--text-secondary); }
+.row-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 </style>

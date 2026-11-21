@@ -153,11 +153,25 @@ async function refreshSheet() {
 </script>
 
 <template>
-  <header :class="{ 'entry-heading': ['new', 'import', 'worksheets'].includes(page) }">
-    <h1>{{ sheet?.name || project || titles[page] }}</h1>
+  <header class="page-header" :class="{ 'entry-heading': ['new', 'import', 'worksheets'].includes(page) }">
+    <div class="page-header-main">
+      <h1>{{ sheet?.name || project || titles[page] }}</h1>
+      <p v-if="page === 'home'" class="page-subtitle">稳定性研究、结果与交付</p>
+      <p v-else-if="sheet" class="page-subtitle">
+        <RouterLink :to="'/projects/' + encodeURIComponent(sheet.project)">{{ sheet.project }}</RouterLink>
+        · {{ sheet.identity.batch }} · {{ sheet.identity.condition }} {{ sheet.identity.orientation }}
+      </p>
+    </div>
+    <div v-if="sheet" class="page-header-actions">
+      <RouterLink class="header-ghost-link" :to="{ path: '/new', query: { project: sheet.project, copy: sheet.id } }">复制研究表结构</RouterLink>
+      <RouterLink v-if="sheet.copied_from" class="header-ghost-link" :to="'/worksheets/' + sheet.copied_from.sheet_id">查看结构来源 · 计划版本 {{ sheet.copied_from.plan_version }}</RouterLink>
+      <a v-if="sheet.protocol_draft_id" class="header-ghost-link" :href="'/api/v1/plan-drafts/' + sheet.protocol_draft_id + '/file'">下载原方案<template v-if="sheet.protocol_table"> · 表 {{ sheet.protocol_table }}</template></a>
+      <NButton type="primary" size="small" :disabled="editingSheet" :loading="operating" @click="confirmation">生成确认表 Excel</NButton>
+      <NButton type="error" secondary size="small" :disabled="editingSheet || operating" @click="removeSheet">删除研究表</NButton>
+      <a v-if="download" class="download-pill" :href="download">下载确认表</a>
+    </div>
   </header>
-  <p v-if="page === 'home'" class="subtitle">稳定性研究、结果与交付</p>
-  <NAlert v-if="error" type="error" role="alert">{{ error }}</NAlert>
+  <NAlert v-if="error" type="error" role="alert" style="margin-bottom: 16px;">{{ error }}</NAlert>
   <NSpin v-if="busy" aria-label="正在读取数据" />
   <div v-else>
     <NewWorksheet v-if="page === 'new'" :key="route.fullPath" :projects="projects" />
@@ -165,11 +179,14 @@ async function refreshSheet() {
       <RouterLink v-for="[path, label] in actions" :key="path" :to="path" :aria-label="label === '新建研究表' ? '创建新研究表' : undefined">{{ label }} <span aria-hidden="true">↗</span></RouterLink>
     </div>
     <section v-if="page === 'home' || (page === 'projects' && !project)" class="panel">
-      <h2>项目目录</h2>
-      <NInput v-model:value="search" placeholder="搜索项目编号或名称" aria-label="搜索项目" clearable />
-      <ul class="list">
+      <div class="section-bar">
+        <h2>项目目录</h2>
+        <span class="section-count">共 {{ filtered.length }} 个项目</span>
+      </div>
+      <NInput v-model:value="search" placeholder="搜索项目编号或名称" aria-label="搜索项目" clearable style="max-width: 420px;" />
+      <ul class="list project-list">
         <li v-for="p in filtered" :key="p.project">
-          <RouterLink :to="'/projects/' + encodeURIComponent(p.project)">{{ p.project }}</RouterLink>
+          <RouterLink class="project-code-link" :to="'/projects/' + encodeURIComponent(p.project)">{{ p.project }}</RouterLink>
           <span>{{ p.name }}</span>
         </li>
       </ul>
@@ -280,13 +297,6 @@ async function refreshSheet() {
     </section>
     <ProjectResults v-if="page === 'projects' && project" :key="project" :project="project" />
     <template v-if="sheet">
-      <p><RouterLink :to="{ path: '/new', query: { project: sheet.project, copy: sheet.id } }">复制研究表结构</RouterLink></p>
-      <p v-if="sheet.copied_from"><RouterLink :to="'/worksheets/' + sheet.copied_from.sheet_id">查看结构来源 · 计划版本 {{ sheet.copied_from.plan_version }}</RouterLink></p>
-      <p v-if="sheet.protocol_draft_id"><a :href="'/api/v1/plan-drafts/' + sheet.protocol_draft_id + '/file'">下载原方案<template v-if="sheet.protocol_table"> · 表 {{ sheet.protocol_table }}</template></a></p>
-      <p class="subtitle"><RouterLink :to="'/projects/' + encodeURIComponent(sheet.project)">{{ sheet.project }}</RouterLink> · {{ sheet.identity.batch }} · {{ sheet.identity.condition }} {{ sheet.identity.orientation }}</p>
-      <NButton :disabled="editingSheet" :loading="operating" @click="confirmation">生成确认表 Excel</NButton>
-      <NButton type="error" :disabled="editingSheet || operating" @click="removeSheet">删除研究表</NButton>
-      <a v-if="download" :href="download"> 下载确认表</a>
       <StudyWorkbook :key="sheet.id" :sheet-id="sheet.id" :disabled="editingSheet"
         @saved="refreshSheet" />
       <HistoricalRows :key="'history-' + sheet.id" :sheet-id="sheet.id" :disabled="editingSheet" @saved="refreshSheet" />
@@ -358,29 +368,61 @@ async function refreshSheet() {
 </template>
 
 <style scoped>
-.outside-limit { color: #9d2424; background: #fde8e8; font-weight: 700; }
-.worksheet-matrix { border: 1px solid #afc4d5; border-radius: 9px; padding: 0; }
+.page-header-main { display: flex; flex-direction: column; gap: 4px; }
+.page-subtitle { margin: 0; color: var(--text-secondary); font-size: 13.5px; }
+.page-header-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.header-ghost-link {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+.header-ghost-link:hover { color: var(--brand); border-color: var(--brand-border); background: var(--brand-soft); text-decoration: none; }
+.download-pill {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--success-fg);
+  background: var(--success-bg);
+  border: 1px solid var(--success-border);
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+}
+
+.section-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.section-bar h2 { margin: 0; }
+.section-count { font-size: 12.5px; color: var(--text-muted); font-weight: 500; }
+.project-code-link { font-family: var(--font-mono); font-weight: 600; min-width: 110px; }
+
+.outside-limit { color: var(--danger-fg); background: var(--danger-bg); font-weight: 700; padding: 1px 4px; border-radius: 4px; }
+.worksheet-matrix { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 0; }
 .worksheet-matrix table { table-layout: fixed; min-width: 1240px; width: 100%; border-collapse: separate; border-spacing: 0; }
-.worksheet-matrix th,.worksheet-matrix td { padding: 8px 10px; border-right: 1px solid #becfdd; border-bottom: 1px solid #becfdd; white-space: pre-wrap; overflow-wrap: anywhere; vertical-align: top; background: #fff; }
-.worksheet-matrix thead th { background: #9ec4e2; color: #102d49; }
+.worksheet-matrix th, .worksheet-matrix td { padding: 10px 12px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); white-space: pre-wrap; overflow-wrap: anywhere; vertical-align: top; background: var(--bg-surface); }
+.worksheet-matrix thead th { background: var(--bg-subtle); color: var(--text-secondary); font-weight: 600; }
 .worksheet-matrix thead tr:first-child th:first-child { width: 205px; }
 .worksheet-matrix thead tr:first-child th:nth-child(2) { width: 225px; }
-.worksheet-matrix .template-option { background: #d5e7f4; }
+.worksheet-matrix .template-option { background: var(--brand-soft); color: var(--text-primary); }
 .worksheet-matrix details { font-size: 12px; margin-top: 6px; }
 
-.worksheet-criterion { white-space: pre-wrap; margin: 4px 0 0; font-weight: normal; }
+.worksheet-criterion { white-space: pre-wrap; margin: 4px 0 0; font-weight: normal; color: var(--text-secondary); font-size: 12.5px; }
 .worksheet-notes li { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; overflow-wrap: anywhere; }
 .worksheet-notes p { margin: 0; white-space: pre-wrap; }
 
-.project-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-.sample-cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; margin: 12px 0 18px; }
-.sample-card { border: 1px solid #d4e4df; border-radius: 8px; }
-.sample-card-header { display: flex; justify-content: space-between; align-items: center; width: 100%; }
-.sample-meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; font-size: 12px; margin-bottom: 8px; color: #2d3748; }
-.meta-label { color: #718096; font-weight: 500; }
-.sample-worksheets-box { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #e2e8f0; font-size: 12px; }
-.sample-sheets-list { list-style: none; padding: 0; margin: 4px 0 0; display: grid; gap: 3px; }
-.muted-tag { font-size: 11px; color: #718096; }
-.empty-hint { color: #a0aec0; font-size: 12px; margin: 4px 0; }
-.sample-card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.project-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.project-header-row h2 { margin: 0; }
+.sample-cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; margin: 12px 0 20px; }
+.sample-card { border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-card); }
+.sample-card-header { display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 8px; }
+.sample-batch-title { font-family: var(--font-mono); font-size: 14px; color: var(--text-primary); }
+.sample-meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; font-size: 12.5px; margin-bottom: 10px; color: var(--text-primary); }
+.meta-label { color: var(--text-muted); font-weight: 500; }
+.sample-worksheets-box { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); font-size: 12.5px; }
+.group-title { font-weight: 600; color: var(--text-secondary); }
+.sample-sheets-list { list-style: none; padding: 0; margin: 6px 0 0; display: grid; gap: 4px; }
+.muted-tag { font-size: 11.5px; color: var(--text-muted); }
+.empty-hint { color: var(--text-muted); font-size: 12px; margin: 4px 0; display: inline-block; }
+.sample-card-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.all-study-search { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
 </style>

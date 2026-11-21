@@ -107,16 +107,19 @@ function save() {
 </template>
 
 <style scoped>
-.candidate-issue { padding: 0.8rem; margin-bottom: 0.8rem; background: #fdfdfd; border: 1px solid #e2e8e6; border-radius: 4px; }
-.issue-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.4rem; }
-.evidence-loc { font-size: 0.82rem; color: #64748b; }
-.hint-text { color: #f59e0b; font-size: 0.85rem; margin: 0.2rem 0; }
-.no-action-text { color: #6b7280; font-size: 0.85rem; }
-.action-select-row select { padding: 4px 8px; border-radius: 4px; border: 1px solid #cbd5e1; }
-.field-edit-row { margin: 0.5rem 0; }
-.field-edit-row textarea { width: 100%; padding: 4px 8px; font: inherit; }
-.reason-row { margin: 0.6rem 0; }
-.reason-pills { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
-.button-row { margin-top: 0.6rem; }
-.confirm-box { margin-top: 0.6rem; padding: 0.6rem; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 4px; }
+.candidate-issue { padding: 12px 14px; margin-bottom: 10px; background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--radius-md); }
+.issue-header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.evidence-loc { font-family: var(--font-mono); font-size: 12px; color: var(--brand); }
+.hint-text { color: var(--warning-fg); font-size: 12.5px; margin: 4px 0; }
+.no-action-text { color: var(--text-muted); font-size: 12.5px; }
+.action-select-row label { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+.action-select-row select { padding: 5px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--bg-surface); min-height: 34px; }
+.field-edit-row { margin: 8px 0; display: flex; flex-direction: column; gap: 4px; }
+.field-edit-row label { font-size: 12.5px; font-weight: 600; color: var(--text-secondary); }
+.field-edit-row textarea { width: 100%; padding: 6px 10px; font: inherit; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); }
+.reason-row { margin: 10px 0; }
+.reason-row label { font-size: 12.5px; font-weight: 600; color: var(--text-secondary); display: flex; flex-direction: column; gap: 4px; }
+.reason-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.button-row { margin-top: 10px; }
+.confirm-box { margin-top: 10px; padding: 10px 12px; background: var(--success-bg); border: 1px solid var(--success-border); border-radius: var(--radius-sm); }
 </style>
