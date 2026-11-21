@@ -45,7 +45,7 @@ function save() {
   </form>
 </template>
 <style scoped>
-.event-form { display: grid; gap: 9px; max-width: 650px; padding: 14px; margin: 12px 0; background: white; }
-.event-form label { display: grid; gap: 5px; }
+.event-form { display: grid; gap: 10px; max-width: 680px; padding: 16px 18px; margin: 12px 0; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-card); }
+.event-form label { display: grid; gap: 5px; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
 .buttons { display: flex; gap: 8px; }
 </style>

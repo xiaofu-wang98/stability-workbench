@@ -20,13 +20,21 @@ const study = computed(() => ({ long_term: '长期试验 / Long-term study', acc
   </div>
 </template>
 <style scoped>
-.study-template-meta { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 1px; background: #afc4d5; border: 1px solid #afc4d5; border-radius: 9px; overflow: hidden; margin: 16px 0; }
-.field { min-width: 0; display: grid; grid-template-columns: minmax(110px,32%) minmax(0,1fr); }
-.field b,.field span { padding: 8px 10px; white-space: pre-line; overflow-wrap: anywhere; }
-.field b { background: #9ec4e2; color: #102d49; font-weight: 600; }
-.field span { background: white; }
-.field .option { background: #d5e7f4; }
+.study-template-meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin: 16px 0;
+  box-shadow: var(--shadow-card);
+}
+.field { min-width: 0; display: grid; grid-template-columns: minmax(112px, 34%) minmax(0, 1fr); }
+.field b, .field span { padding: 9px 12px; white-space: pre-line; overflow-wrap: anywhere; font-size: 13px; }
+.field b { background: var(--bg-subtle); color: var(--text-secondary); font-weight: 600; }
+.field span { background: var(--bg-surface); color: var(--text-primary); }
+.field .option { background: var(--brand-soft); color: var(--text-primary); }
 .condition { grid-column: span 3; }
-@media(max-width:1100px) { .study-template-meta { grid-template-columns: repeat(2,minmax(0,1fr)); } .condition { grid-column: 1 / -1; } }
-@media(max-width:520px) { .study-template-meta { grid-template-columns: 1fr; } }
 </style>

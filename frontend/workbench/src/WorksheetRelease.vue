@@ -320,11 +320,12 @@ function saveSingle(remove = false) {
 
 <style scoped>
 .release-panel {
-  background: #ffffff;
-  border: 1px solid #c9ded7;
-  border-radius: 8px;
-  padding: 16px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 18px 20px;
   margin: 14px 0;
+  box-shadow: var(--shadow-card);
 }
 .panel-header {
   display: flex;
@@ -334,12 +335,10 @@ function saveSingle(remove = false) {
 }
 .panel-header h2 {
   margin: 0;
-  font-size: 16px;
-  color: #174a45;
+  font-size: 15.5px;
+  color: var(--text-primary);
 }
-.mb-3 {
-  margin-bottom: 12px;
-}
+.mb-3 { margin-bottom: 12px; }
 .batch-controls {
   display: flex;
   align-items: center;
@@ -350,25 +349,28 @@ function saveSingle(remove = false) {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 500;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-secondary);
 }
 .date-label input {
   font: inherit;
-  padding: 5px 8px;
-  border: 1px solid #aabdb8;
-  border-radius: 4px;
+  padding: 5px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
 }
 .preview-summary {
   margin: 10px 0;
-  padding: 8px 12px;
-  background: #f4f8f6;
-  border-radius: 6px;
+  padding: 10px 14px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
 }
 .batch-table-container {
   max-height: 420px;
   overflow-y: auto;
-  border: 1px solid #dbe5e2;
-  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   margin: 12px 0;
 }
 .batch-table {
@@ -377,81 +379,40 @@ function saveSingle(remove = false) {
   font-size: 13px;
 }
 .batch-table th, .batch-table td {
-  padding: 8px 10px;
-  border-bottom: 1px solid #e7eeec;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
   text-align: left;
 }
 .batch-table thead th {
-  background: #eef6f3;
-  color: #1a4a40;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
   position: sticky;
   top: 0;
   z-index: 1;
 }
-.row-matched {
-  background: #fbfdfc;
-}
-.row-conflict {
-  background: #fdf5f5;
-}
-.conflict-text {
-  color: #c53030;
-  font-weight: 500;
-}
-.new-value {
-  color: #18794e;
-  font-weight: 600;
-  display: block;
-}
-.muted-source {
-  color: #718096;
-  font-size: 11px;
-}
+.row-matched { background: var(--bg-surface); }
+.row-conflict { background: var(--danger-bg); }
+.conflict-text { color: var(--danger-fg); font-weight: 500; }
+.new-value { color: var(--success-fg); font-weight: 600; display: block; }
+.muted-source { color: var(--text-muted); font-size: 11.5px; }
 .batch-submit-section {
   display: grid;
   gap: 10px;
   margin-top: 14px;
   padding-top: 12px;
-  border-top: 1px solid #e2ece8;
+  border-top: 1px solid var(--border);
 }
-.basis-label {
-  display: grid;
-  gap: 4px;
-  font-weight: 500;
-}
-.quick-reasons {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-.quick-title {
-  font-size: 12px;
-  color: #637772;
-}
-.actions-bar {
-  display: flex;
-  gap: 10px;
-  margin-top: 8px;
-}
-.single-form {
-  display: grid;
-  gap: 12px;
-  margin-top: 10px;
-}
-.single-form label {
-  display: grid;
-  gap: 4px;
-}
+.basis-label { display: grid; gap: 4px; font-weight: 600; font-size: 13px; color: var(--text-secondary); }
+.quick-reasons { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.quick-title { font-size: 12px; color: var(--text-muted); }
+.actions-bar { display: flex; gap: 10px; margin-top: 8px; }
+.single-form { display: grid; gap: 12px; margin-top: 10px; }
+.single-form label { display: grid; gap: 4px; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
 .single-form input, .single-form select {
   font: inherit;
-  padding: 6px;
-  border: 1px solid #aabdb8;
-  border-radius: 4px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
 }
-.buttons {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
+.buttons { display: flex; gap: 10px; align-items: center; }
 </style>

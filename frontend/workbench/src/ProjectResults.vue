@@ -262,7 +262,17 @@ watch(() => route.query.focus, () => {
 </template>
 
 <style scoped>
-.outside-limit { color: #9d2424; background: #fde8e8; font-weight: 700; }
-.result-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 10px 0; }
-.result-controls .n-input { width: min(100%, 260px); }
+.outside-limit { color: var(--danger-fg); background: var(--danger-bg); font-weight: 700; padding: 1px 5px; border-radius: 4px; }
+.result-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0;
+  padding: 10px 14px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.result-controls .n-input { width: 260px; }
 </style>

@@ -160,6 +160,6 @@ function save() {
 </template>
 
 <style scoped>
-.standard-links { display: grid; gap: 10px; max-width: 850px; background: white; padding: 14px; margin: 12px 0; }
+.standard-links { display: grid; gap: 10px; max-width: 880px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 16px 18px; margin: 12px 0; box-shadow: var(--shadow-card); }
 .buttons { display: flex; gap: 8px; }
 </style>
