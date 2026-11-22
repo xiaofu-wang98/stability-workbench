@@ -20,7 +20,7 @@ def compact(text):
 
 
 def method_lines(text):
-    """Bilingual method descriptions (Chinese line + English method translation) are equivalent."""
+    """Bilingual method descriptions and explicit pharmacopoeial parent-child pairs are equivalent."""
     merged = re.sub(r'(?<=型)\s*[\r\n]+\s*(?=(?:CE[\s-]*SDS|毛细管))', '', str(text or ''), flags=re.I)
     lines = [v.strip() for v in merged.splitlines() if v.strip()]
     if len(lines) != 2:
@@ -28,6 +28,10 @@ def method_lines(text):
     has_cn = [any('\u4e00' <= ch <= '\u9fff' for ch in line) for line in lines]
     if (has_cn[0] and not has_cn[1]) or (has_cn[1] and not has_cn[0]):
         return lines[:1]
+    from .platform_catalog import are_parent_child_methods
+    child = are_parent_child_methods(lines[0], lines[1])
+    if child:
+        return [child]
     return lines
 
 

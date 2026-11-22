@@ -8611,6 +8611,311 @@
         }
       }
     },
+    "/api/v1/catalog/platform": {
+      "get": {
+        "summary": "Get Platform Catalog",
+        "operationId": "get_platform_catalog_api_v1_catalog_platform_get",
+        "parameters": [
+          {
+            "name": "category_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Category Code"
+            }
+          },
+          {
+            "name": "subcategory_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Subcategory Code"
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Query"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/platform/assays": {
+      "post": {
+        "summary": "Post Platform Assay",
+        "operationId": "post_platform_assay_api_v1_catalog_platform_assays_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Payload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/platform/aliases": {
+      "post": {
+        "summary": "Post Platform Alias",
+        "operationId": "post_platform_alias_api_v1_catalog_platform_aliases_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Payload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/catalog/promote": {
+      "post": {
+        "summary": "Promote Catalog Item",
+        "operationId": "promote_catalog_item_api_v1_projects__project__catalog_promote_post",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/templates": {
+      "get": {
+        "summary": "Get Templates",
+        "operationId": "get_templates_api_v1_templates_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/templates/guide": {
+      "get": {
+        "summary": "Get Templates Guide",
+        "operationId": "get_templates_guide_api_v1_templates_guide_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/templates/{template_id}/download": {
+      "get": {
+        "summary": "Download Template",
+        "operationId": "download_template_api_v1_templates__template_id__download_get",
+        "parameters": [
+          {
+            "name": "template_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Template Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/previews/{preview_id}/cleaning-audit": {
+      "get": {
+        "summary": "Preview Cleaning Audit",
+        "operationId": "preview_cleaning_audit_api_v1_previews__preview_id__cleaning_audit_get",
+        "parameters": [
+          {
+            "name": "preview_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Preview Id"
+            }
+          },
+          {
+            "name": "section",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Section"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/deliveries": {
       "get": {
         "summary": "Deliveries",
@@ -10973,6 +11278,26 @@
             "title": "Method Version",
             "default": "not_reported"
           },
+          "category_code": {
+            "type": "string",
+            "title": "Category Code",
+            "default": ""
+          },
+          "subcategory_code": {
+            "type": "string",
+            "title": "Subcategory Code",
+            "default": ""
+          },
+          "display_order": {
+            "type": "integer",
+            "title": "Display Order",
+            "default": 999
+          },
+          "platform_assay_id": {
+            "type": "string",
+            "title": "Platform Assay Id",
+            "default": ""
+          },
           "specification_links": {
             "items": {
               "$ref": "#/components/schemas/SpecificationCriterion"
@@ -11156,6 +11481,26 @@
             "minLength": 1,
             "title": "Method Version",
             "default": "not_reported"
+          },
+          "category_code": {
+            "type": "string",
+            "title": "Category Code",
+            "default": ""
+          },
+          "subcategory_code": {
+            "type": "string",
+            "title": "Subcategory Code",
+            "default": ""
+          },
+          "display_order": {
+            "type": "integer",
+            "title": "Display Order",
+            "default": 999
+          },
+          "platform_assay_id": {
+            "type": "string",
+            "title": "Platform Assay Id",
+            "default": ""
           },
           "specification_links": {
             "items": {
@@ -12005,6 +12350,26 @@
             "minLength": 1,
             "title": "Method Version",
             "default": "not_reported"
+          },
+          "category_code": {
+            "type": "string",
+            "title": "Category Code",
+            "default": ""
+          },
+          "subcategory_code": {
+            "type": "string",
+            "title": "Subcategory Code",
+            "default": ""
+          },
+          "display_order": {
+            "type": "integer",
+            "title": "Display Order",
+            "default": 999
+          },
+          "platform_assay_id": {
+            "type": "string",
+            "title": "Platform Assay Id",
+            "default": ""
           }
         },
         "additionalProperties": false,
@@ -12060,6 +12425,26 @@
             "minLength": 1,
             "title": "Method Version",
             "default": "not_reported"
+          },
+          "category_code": {
+            "type": "string",
+            "title": "Category Code",
+            "default": ""
+          },
+          "subcategory_code": {
+            "type": "string",
+            "title": "Subcategory Code",
+            "default": ""
+          },
+          "display_order": {
+            "type": "integer",
+            "title": "Display Order",
+            "default": 999
+          },
+          "platform_assay_id": {
+            "type": "string",
+            "title": "Platform Assay Id",
+            "default": ""
           }
         },
         "additionalProperties": false,
@@ -14016,6 +14401,16 @@
               }
             ],
             "title": "Reporting Basis"
+          },
+          "category_code": {
+            "type": "string",
+            "title": "Category Code",
+            "default": ""
+          },
+          "subcategory_code": {
+            "type": "string",
+            "title": "Subcategory Code",
+            "default": ""
           }
         },
         "additionalProperties": false,

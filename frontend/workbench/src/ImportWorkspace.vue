@@ -6,6 +6,7 @@ import { api, type Project } from './api';
 import { DOMAIN_DEFINITIONS, STABILITY_INTAKE_SCENARIOS, type IntakeScenarioId } from './domains/domainRegistry';
 import { useWorkbenchContextStore } from './stores/workbenchContext';
 import ActionNextStepBanner, { type NextStepAction } from './components/ActionNextStepBanner.vue';
+import AutoCleanAuditDrawer from './components/AutoCleanAuditDrawer.vue';
 import ImportSourceReview from './ImportSourceReview.vue';
 import CandidateSourceEditor, { type SourceCandidate } from './CandidateSourceEditor.vue';
 import { cellAddress, sourceReviewText } from './sourceReviewText';
@@ -1307,6 +1308,14 @@ function syncWorksheets() {
         </div>
       </div>
     </section>
+
+    <!-- Tier-A Deterministic Auto-Cleaning Audit Drawer & One-Click Catalog Promote -->
+    <AutoCleanAuditDrawer
+      v-if="preview?.preview_id"
+      :preview-id="preview.preview_id"
+      :section="section"
+      :project="preview.project"
+    />
 
     <!-- Source Review Panel (Phase 2.2) -->
     <div v-if="reviewSources && section" id="sourceReviewPanel" ref="sourceReviewPanel">

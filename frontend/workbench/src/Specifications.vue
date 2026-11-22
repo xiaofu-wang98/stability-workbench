@@ -12,7 +12,7 @@ const route = useRoute();
 const ctx = useWorkbenchContextStore();
 type Summary = { id: string; filename: string };
 type Specification = Summary & { scope: string; material_scope: string; linked_projects?: { project: string; count: number; is_current: number }[]; rows: {
-  table: number; row: number; column: number; page?: number; category: string; item: string;
+  table: number; row: number; column: number; page?: number; category: string; category_name_zh?: string; subcategory_name_zh?: string; item: string;
   method: string; sop: string; criterion: string;
 }[] };
 const list = ref<Summary[]>([]);
@@ -101,8 +101,8 @@ function upload(event: Event) {
       <p class="spec-rail-desc">上传 Word 标准并核对条款后加入项目检项字典，再用于研究表与放行 COA。</p>
 
       <label class="spec-upload-box">
-        <span>选择 Word 标准</span>
-        <input type="file" accept=".docx" :disabled="busy" @change="upload">
+        <span>选择 Word / Excel 标准</span>
+        <input type="file" accept=".docx,.xlsx" :disabled="busy" @change="upload">
       </label>
       <p v-if="busy" role="status" class="muted" style="margin: 8px 0 0;">正在读取质量标准…</p>
 
@@ -193,7 +193,13 @@ function upload(event: Event) {
               <thead><tr><th>原件位置</th><th>类别与检项</th><th>方法</th><th>SOP 编号</th><th>标准原文</th></tr></thead>
               <tbody><tr v-for="row in selected.rows" :key="row.table + ':' + row.row">
                 <td><span v-if="row.page">PDF 第 {{ row.page }} 页 · </span><template v-if="row.table">表 {{ row.table }} · 行 {{ row.row }} · 列 {{ row.column }}</template><template v-else>人工录入条款 {{ row.row }}</template></td>
-                <td>{{ [row.category, row.item].filter(Boolean).join('\n') }}</td><td>{{ row.method }}</td>
+                <td>
+                  <div v-if="row.category_name_zh" style="margin-bottom: 4px; display: flex; gap: 4px; flex-wrap: wrap;">
+                    <NTag size="tiny" type="info" :bordered="false">{{ row.category_name_zh }}</NTag>
+                    <NTag v-if="row.subcategory_name_zh" size="tiny" :bordered="false">{{ row.subcategory_name_zh }}</NTag>
+                  </div>
+                  {{ [row.category, row.item].filter(Boolean).join('\n') }}
+                </td><td>{{ row.method }}</td>
                 <td>{{ row.sop }}</td><td>{{ row.criterion }}</td>
               </tr></tbody>
             </table>

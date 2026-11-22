@@ -16,6 +16,7 @@ VERSION = "excel-number-2"
 LEGACY_VERSION = "excel-number-1"
 PERCENT = re.compile(r"0(?:\.0+)?%")
 PLAIN = re.compile(r"(?:General|0|0\.0+|0\.0+[Ee][+-]0+)")
+PURE_DECIMAL = re.compile(r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?$")
 
 
 def source_value(cell):
@@ -54,9 +55,9 @@ def legacy_interpret_result(raw, text, unit, result_type):
         return result.model_copy(
             update={"raw_text": text, "interpretation": {**basis, "rule": "text_percent"}}
         )
-    if kind == "date" or is_date_format(fmt) and NUMBER.fullmatch(stripped):
+    if kind == "date" or is_date_format(fmt) and PURE_DECIMAL.fullmatch(stripped):
         raise NeedsReview("numeric_format", "日期格式不能直接作为检测数值，请核对来源后明确解释。")
-    if NUMBER.fullmatch(stripped) and kind not in {"s", "inlineStr"}:
+    if PURE_DECIMAL.fullmatch(stripped) and kind not in {"s", "inlineStr"}:
         if PERCENT.fullmatch(fmt):
             if unit not in {"", "%", "％"}:
                 raise NeedsReview("numeric_format", "百分比格式与检测单位冲突，请明确解释值及单位。")
@@ -103,9 +104,9 @@ def interpret_result(raw, text, unit, result_type):
         return result.model_copy(
             update={"raw_text": text, "interpretation": {**basis, "rule": "text_percent"}}
         )
-    if kind == "date" or is_date_format(fmt) and NUMBER.fullmatch(stripped):
+    if kind == "date" or is_date_format(fmt) and PURE_DECIMAL.fullmatch(stripped):
         raise NeedsReview("numeric_format", f"Excel按日期显示；系统读取 {stripped}，需确认这是否为检测数值。")
-    if NUMBER.fullmatch(stripped) and kind not in {"s", "inlineStr"}:
+    if PURE_DECIMAL.fullmatch(stripped) and kind not in {"s", "inlineStr"}:
         from .excel_formats import render, UnsupportedNumberFormat
 
         try:

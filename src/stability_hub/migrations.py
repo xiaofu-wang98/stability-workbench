@@ -9,8 +9,82 @@ from .workflow_schema import STATEMENTS
 from .source_schema import SCHEMA as SOURCE_SCHEMA
 from .worksheet_schema import SCHEMA as WORKSHEET_SCHEMA
 
-CURRENT_VERSION = 20
+CURRENT_VERSION = 21
 MIGRATIONS = {
+    21: (
+        """CREATE TABLE IF NOT EXISTS platform_categories (
+            code TEXT PRIMARY KEY,
+            display_order INTEGER NOT NULL,
+            name_zh TEXT NOT NULL,
+            name_en TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT ''
+        )""",
+        """CREATE TABLE IF NOT EXISTS platform_subcategories (
+            code TEXT PRIMARY KEY,
+            category_code TEXT NOT NULL REFERENCES platform_categories(code),
+            display_order INTEGER NOT NULL,
+            name_zh TEXT NOT NULL,
+            name_en TEXT NOT NULL
+        )""",
+        """CREATE TABLE IF NOT EXISTS platform_assays (
+            id TEXT PRIMARY KEY,
+            code TEXT NOT NULL UNIQUE,
+            category_code TEXT NOT NULL REFERENCES platform_categories(code),
+            subcategory_code TEXT NOT NULL DEFAULT '',
+            display_order INTEGER NOT NULL DEFAULT 999,
+            name_zh TEXT NOT NULL,
+            name_en TEXT NOT NULL DEFAULT '',
+            default_unit TEXT NOT NULL DEFAULT '',
+            pharmacopoeia_scope TEXT NOT NULL DEFAULT '',
+            modality_tags_json TEXT NOT NULL DEFAULT '[]',
+            is_builtin INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'active',
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""",
+        """CREATE TABLE IF NOT EXISTS platform_methods (
+            id TEXT PRIMARY KEY,
+            assay_id TEXT NOT NULL REFERENCES platform_assays(id),
+            code TEXT NOT NULL,
+            name_zh TEXT NOT NULL,
+            name_en TEXT NOT NULL DEFAULT '',
+            method_family TEXT NOT NULL DEFAULT '',
+            default_unit TEXT NOT NULL DEFAULT '',
+            is_builtin INTEGER NOT NULL DEFAULT 0
+        )""",
+        """CREATE TABLE IF NOT EXISTS platform_components (
+            id TEXT PRIMARY KEY,
+            assay_id TEXT NOT NULL REFERENCES platform_assays(id),
+            method_id TEXT NOT NULL DEFAULT '',
+            code TEXT NOT NULL,
+            name_zh TEXT NOT NULL,
+            name_en TEXT NOT NULL DEFAULT '',
+            pharmacopoeia TEXT NOT NULL DEFAULT '',
+            default_unit TEXT NOT NULL DEFAULT '',
+            value_kind TEXT NOT NULL DEFAULT 'numeric',
+            display_order INTEGER NOT NULL DEFAULT 99,
+            is_builtin INTEGER NOT NULL DEFAULT 0
+        )""",
+        """CREATE TABLE IF NOT EXISTS platform_aliases (
+            id TEXT PRIMARY KEY,
+            entity_type TEXT NOT NULL CHECK(entity_type IN ('category','assay','method','component','unit')),
+            entity_id TEXT NOT NULL,
+            raw_alias TEXT NOT NULL,
+            norm_signature TEXT NOT NULL,
+            locale TEXT NOT NULL DEFAULT 'zh',
+            priority INTEGER NOT NULL DEFAULT 10,
+            source TEXT NOT NULL DEFAULT 'seed'
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_platform_aliases_lookup ON platform_aliases(entity_type, norm_signature)",
+        "CREATE INDEX IF NOT EXISTS idx_platform_assays_cat ON platform_assays(category_code, display_order)",
+        "ALTER TABLE assay_definitions ADD COLUMN category_code TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE assay_definitions ADD COLUMN subcategory_code TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE assay_definitions ADD COLUMN platform_assay_id TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE assay_definitions ADD COLUMN display_order INTEGER NOT NULL DEFAULT 999",
+        "ALTER TABLE assay_definitions ADD COLUMN source_origin TEXT NOT NULL DEFAULT 'project_custom'",
+        "ALTER TABLE assay_components ADD COLUMN platform_component_id TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE assay_components ADD COLUMN display_order INTEGER NOT NULL DEFAULT 999",
+        "INSERT INTO schema_migrations(version, description) VALUES (21, 'Platform 4-tier standard assay catalog and 6-category hierarchy')",
+    ),
     20: (
         """CREATE TABLE current_specifications (
             project TEXT NOT NULL REFERENCES workflow_projects(project),
@@ -276,6 +350,9 @@ def migrate(conn: sqlite3.Connection, database: Path) -> None:
                 config = ProjectConfig(project=code, name="TEST").model_dump_json()
                 conn.execute("""INSERT INTO workflow_projects(project,config_json,startup_config_json,purpose)
                                 VALUES (?,?,?,'sandbox')""", (code, config, config))
+            if next_version == 21:
+                from .platform_catalog import seed_platform_catalog
+                seed_platform_catalog(conn)
             conn.execute(f"PRAGMA user_version={next_version}")
         conn.commit()
     except BaseException:

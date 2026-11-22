@@ -30,7 +30,11 @@ def workbook_rows(snapshot):
     yield ("模板版本", TEMPLATE_VERSION, "数据快照", snapshot["snapshot_id"])
     yield ("检项", "方法", "方法版本", "单位", *(point["label"] for point in points))
     yield ("计划日期", "", "", "", *(point["planned_date"] for point in points))
-    for row in sheet["rows"]:
+    rows_sorted = sorted(
+        sheet["rows"],
+        key=lambda r: (r.get("category_order", 99), r.get("display_order", 999)),
+    ) if any(r.get("category_code") for r in sheet["rows"]) else sheet["rows"]
+    for row in rows_sorted:
         values = []
         for point in points:
             cell = entries.get((row["id"], point["id"]))
@@ -64,12 +68,12 @@ def workbook_rows(snapshot):
         yield from notes
     if sheet.get("release_references"):
         yield ("0M 放行引用", "放行完成日期", "核对依据", "放行结果版本")
-        for row in sheet["rows"]:
+        for row in rows_sorted:
             if reference := sheet["release_references"].get(row["id"]):
                 yield (row["label"], reference["release_completed"], reference["basis"], reference["result_version_id"])
     if any(row.get("standards") or row.get("criteria_text") for row in sheet["rows"]):
         yield ("适用标准", "方法", "标准原文", "来源")
-        for row in sheet["rows"]:
+        for row in rows_sorted:
             if criterion := row.get("criteria_text"):
                 yield (row["label"], row["method"], criterion, "本表手填标准")
             for standard in row.get("standards", []):

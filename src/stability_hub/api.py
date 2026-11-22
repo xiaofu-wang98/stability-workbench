@@ -861,8 +861,9 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
         from .specification_preview import inspect_specification
         try:
             data = file.file.read(20 * 1024 * 1024 + 1)
-            if len(data) > 20 * 1024 * 1024 or Path(file.filename or '').suffix.lower() != '.docx':
-                raise WorkflowError('invalid_document', '请选择不超过20MB的Word质量标准。')
+            suffix = Path(file.filename or '').suffix.lower()
+            if len(data) > 20 * 1024 * 1024 or suffix not in {'.docx', '.xlsx'}:
+                raise WorkflowError('invalid_document', '请选择不超过20MB的Word或Excel质量标准（.docx / .xlsx）。')
             preview = inspect_specification(data, file.filename or "")
             if not preview['rows']:
                 raise WorkflowError('specification_table_missing', '未识别到质量标准表。')
@@ -876,7 +877,7 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
         except WorkflowError:
             raise
         except (BadZipFile, KeyError, ValueError, XMLSyntaxError) as exc:
-            raise WorkflowError('invalid_document', '无法读取Word质量标准。') from exc
+            raise WorkflowError('invalid_document', '无法读取质量标准文件，请核对文件格式。') from exc
         finally:
             file.file.close()
 
@@ -980,7 +981,10 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
         source_hash = json.loads(row['preview_json']).get('scan_id', specification_id)
         if hashlib.sha256(row['source']).hexdigest() != source_hash:
             raise WorkflowError('source_integrity', '质量标准原件校验失败。', 409)
-        media_type = 'application/pdf' if source_hash != specification_id else 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        if str(row['filename']).lower().endswith('.xlsx'):
+            media_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        else:
+            media_type = 'application/pdf' if source_hash != specification_id else 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         return Response(row['source'], media_type=media_type,
                         headers={'Content-Disposition': "attachment; filename*=UTF-8''" + quote(row['filename'], safe='')})
 
@@ -1472,6 +1476,130 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
             content = package.read('report.docx')
         return Response(content,media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
                         headers={'Content-Disposition':'attachment; filename="report.docx"'})
+
+    @app.get('/api/v1/catalog/platform')
+    def get_platform_catalog(
+        operator: ActorDependency,
+        category_code: str = "",
+        subcategory_code: str = "",
+        query: str = "",
+    ):
+        require(operator, Capability.VIEW)
+        from .platform_catalog import list_platform_catalog
+        with store.read() as conn:
+            return list_platform_catalog(
+                conn,
+                category_code=category_code.strip(),
+                subcategory_code=subcategory_code.strip(),
+                query=query.strip(),
+            )
+
+    @app.post('/api/v1/catalog/platform/assays')
+    def post_platform_assay(payload: dict, operator: ActorDependency):
+        require(operator, Capability.CONFIRM_FACT)
+        from .platform_catalog import create_platform_assay
+        try:
+            with store.connect() as conn:
+                conn.execute("BEGIN IMMEDIATE")
+                return create_platform_assay(
+                    conn,
+                    category_code=str(payload.get("category_code") or "").strip(),
+                    subcategory_code=str(payload.get("subcategory_code") or "").strip(),
+                    name_zh=str(payload.get("name_zh") or "").strip(),
+                    name_en=str(payload.get("name_en") or "").strip(),
+                    default_unit=str(payload.get("default_unit") or "").strip(),
+                    pharmacopoeia_scope=str(payload.get("pharmacopoeia_scope") or "ChP/USP/EP").strip(),
+                    modality_tags=list(payload.get("modality_tags") or ["mAb"]),
+                    methods=list(payload.get("methods") or []),
+                    components=list(payload.get("components") or []),
+                    aliases=list(payload.get("aliases") or []),
+                )
+        except ValueError as exc:
+            raise WorkflowError("invalid_catalog_entry", str(exc)) from exc
+
+    @app.post('/api/v1/catalog/platform/aliases')
+    def post_platform_alias(payload: dict, operator: ActorDependency):
+        require(operator, Capability.CONFIRM_FACT)
+        from .platform_catalog import add_platform_alias
+        try:
+            with store.connect() as conn:
+                conn.execute("BEGIN IMMEDIATE")
+                return add_platform_alias(
+                    conn,
+                    entity_type=str(payload.get("entity_type") or "assay").strip(),
+                    entity_id=str(payload.get("entity_id") or "").strip(),
+                    raw_alias=str(payload.get("raw_alias") or "").strip(),
+                    source="user",
+                )
+        except ValueError as exc:
+            raise WorkflowError("invalid_catalog_alias", str(exc)) from exc
+
+    @app.post('/api/v1/projects/{project}/catalog/promote')
+    def promote_catalog_item(project: ProjectDependency, payload: dict, operator: ActorDependency):
+        from .assay_catalog import promote_to_platform_catalog
+        name_zh = str(payload.get("name_zh") or "").strip()
+        if not name_zh:
+            raise WorkflowError("invalid_catalog_entry", "请提供标准中文检项名称。")
+        return promote_to_platform_catalog(
+            store,
+            project,
+            name_zh=name_zh,
+            name_en=str(payload.get("name_en") or "").strip(),
+            method=str(payload.get("method") or "").strip(),
+            component_zh=str(payload.get("component_zh") or "").strip(),
+            component_en=str(payload.get("component_en") or "").strip(),
+            unit=str(payload.get("unit") or "").strip(),
+            result_type=str(payload.get("result_type") or "numeric").strip(),
+            category_code=str(payload.get("category_code") or "").strip(),
+            subcategory_code=str(payload.get("subcategory_code") or "").strip(),
+            aliases=list(payload.get("aliases") or []),
+            also_add_to_project=bool(payload.get("also_add_to_project", True)),
+            actor=operator,
+        )
+
+    @app.get('/api/v1/templates')
+    def get_templates(operator: ActorDependency):
+        require(operator, Capability.VIEW)
+        from .template_library import list_templates
+        return {"templates": list_templates()}
+
+    @app.get('/api/v1/templates/guide')
+    def get_templates_guide(operator: ActorDependency):
+        require(operator, Capability.VIEW)
+        guide_path = Path(__file__).resolve().parents[2] / "docs" / "标准模板最小改动填表说明.md"
+        content = guide_path.read_text(encoding="utf-8") if guide_path.is_file() else ""
+        return {"filename": "标准模板最小改动填表说明.md", "markdown": content}
+
+    @app.get('/api/v1/templates/{template_id}/download')
+    def download_template(template_id: str, operator: ActorDependency):
+        require(operator, Capability.VIEW)
+        from urllib.parse import quote
+        from .template_library import render_template
+        try:
+            filename, media_type, content = render_template(template_id)
+        except KeyError as exc:
+            raise WorkflowError("template_missing", "找不到所选标准模板。", 404) from exc
+        return Response(
+            content,
+            media_type=media_type,
+            headers={"Content-Disposition": "attachment; filename*=UTF-8''" + quote(filename, safe="")},
+        )
+
+    @app.get('/api/v1/previews/{preview_id}/cleaning-audit')
+    def preview_cleaning_audit(preview_id: str, operator: ActorDependency, section: str | None = None):
+        require(operator, Capability.VIEW)
+        from .cleaning import summarize_cleaning_audit
+        from .models import RawObservation
+        with store.read() as conn:
+            workflow._upload(conn, preview_id)
+            rows = conn.execute("SELECT raw_json FROM workflow_candidates WHERE upload_id=?", (preview_id,)).fetchall()
+        raws = []
+        for row in rows:
+            obs = RawObservation.model_validate_json(row["raw_json"])
+            if section and obs.location.section != section:
+                continue
+            raws.append(obs)
+        return summarize_cleaning_audit(raws)
 
     @app.get('/api/v1/deliveries')
     def deliveries(operator: ActorDependency, limit: Annotated[int, Query(ge=1, le=200)] = 50):

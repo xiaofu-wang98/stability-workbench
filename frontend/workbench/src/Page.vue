@@ -13,6 +13,7 @@ const Trend = defineAsyncComponent(() => import('./Trend.vue'));
 const NewWorksheet = defineAsyncComponent(() => import('./NewWorksheet.vue'));
 const ImportWorkspace = defineAsyncComponent(() => import('./ImportWorkspace.vue'));
 const Specifications = defineAsyncComponent(() => import('./Specifications.vue'));
+const CatalogTemplatesView = defineAsyncComponent(() => import('./views/CatalogTemplatesView.vue'));
 const ScanWorkspace = defineAsyncComponent(() => import('./ScanWorkspace.vue'));
 const Deliveries = defineAsyncComponent(() => import('./Deliveries.vue'));
 
@@ -54,6 +55,7 @@ const titles: Record<string, string> = {
   worksheets: '研究工作表',
   import: '导入文件',
   specifications: '质量标准与 COA',
+  catalog: '标准词典与模板库',
   scans: '扫描 PDF',
   trends: '趋势与比较',
   deliveries: '生成与历史',
@@ -64,6 +66,7 @@ const subtitles: Record<string, string> = {
   import: '统一文件导入中心：汇总 Excel、放行 CoA、方案 Word、研究表回传、质量标准与扫描 PDF',
   new: '按方案矩阵、质量标准、复制结构或空白模板快速创建研究表',
   specifications: '标准原件条款核对 → 项目检项字典登记 → 样品放行 COA 录入与 0M 联动',
+  catalog: '平台 6 大类标准总词典、别名归一化维护与全套最小改动标准模板库',
   scans: '扫描件 PDF 归档、OCR 识别对照与标准条款登记',
   trends: '按检项与方法绘制多批次趋势曲线与标准警戒线',
   deliveries: '受控表格导出、稳定性确认表、考察报告 Word 与报告版本差异对比',
@@ -208,6 +211,7 @@ async function refreshSheet() {
     />
     <ImportWorkspace v-if="page === 'import'" :projects="projects" />
     <Specifications v-if="page === 'specifications'" />
+    <CatalogTemplatesView v-if="page === 'catalog'" />
     <ScanWorkspace v-if="page === 'scans'" />
     <section v-if="page === 'trends'" class="panel trend-shell-panel">
       <div class="trend-selector-bar">

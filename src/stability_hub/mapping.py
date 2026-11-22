@@ -7,6 +7,13 @@ from .matrix_fields import interpret_raw
 from .models import ImportContext, ItemDefinition, ProjectConfig, RawObservation, RecordKey, StabilityRecord
 from .normalize import NeedsReview, normalize_month
 from .numeric_formats import interpret_result
+from .platform_catalog import (
+    match_platform_assay,
+    normalize_catalog_token,
+    normalize_component_signature,
+    normalize_method_signature,
+    units_equivalent,
+)
 
 
 class MappingAdvisor(Protocol):
@@ -81,6 +88,48 @@ def map_observation(raw: RawObservation, context: ImportContext, config: Project
         for item in config.items
         if name in {" ".join(a.split()).casefold() for a in (item.id, item.label, *item.aliases)}
     ]
+    if not matches and name and config.items:
+        # Deterministic normalized token & platform-catalog signature matching (never fuzzy).
+        norm_name = normalize_catalog_token(fields.get("test_item", ""))
+        token_matches = [
+            item
+            for item in config.items
+            if norm_name in {normalize_catalog_token(a) for a in (item.id, item.label, *item.aliases)}
+        ]
+        if len(token_matches) == 1:
+            matches = token_matches
+        elif not token_matches:
+            obs_method_sig = normalize_method_signature(fields.get("method", ""))
+            obs_parts = [p.strip() for p in re.split(r"\s*·\s*", fields.get("test_item", "")) if p.strip()]
+            obs_comp_sig = normalize_component_signature(obs_parts[-1]) if len(obs_parts) > 1 else ""
+            obs_hit = match_platform_assay(
+                raw_category=fields.get("category", ""),
+                item_text=fields.get("test_item", ""),
+                method_text=fields.get("method", ""),
+                component_text=obs_parts[-1] if len(obs_parts) > 1 else fields.get("criterion", ""),
+            )
+            if obs_hit:
+                sig_matches = []
+                for item in config.items:
+                    item_hit = match_platform_assay(
+                        item_text=item.label,
+                        method_text=item.method,
+                    )
+                    item_plat_id = item.platform_assay_id or (item_hit["id"] if item_hit else "")
+                    if item_plat_id != obs_hit["id"]:
+                        continue
+                    item_method_sig = normalize_method_signature(item.method)
+                    if obs_method_sig and item_method_sig and obs_method_sig != item_method_sig:
+                        continue
+                    item_parts = [p.strip() for p in re.split(r"\s*·\s*", item.label) if p.strip()]
+                    item_comp_sig = normalize_component_signature(item_parts[-1]) if len(item_parts) > 1 else ""
+                    if obs_comp_sig and item_comp_sig and obs_comp_sig != item_comp_sig:
+                        continue
+                    if bool(obs_comp_sig) != bool(item_comp_sig) and len(obs_parts) > 1:
+                        continue
+                    sig_matches.append(item)
+                if len(sig_matches) == 1:
+                    matches = sig_matches
     if not matches and source_facts and name:
         # A source-local identity is not a canonical dictionary entry. No fuzzy matching.
         label = " ".join(fields['test_item'].split())
@@ -90,10 +139,12 @@ def map_observation(raw: RawObservation, context: ImportContext, config: Project
         raise NeedsReview("unknown_item", f"检测项目 {fields.get('test_item')!r} 尚未匹配，请选择已有项目或确认新增。")
     item = matches[0]
     unit = fields.get("unit", "").strip() or item.unit
-    if unit != item.unit and item.unit:
+    if unit != item.unit and item.unit and not units_equivalent(unit, item.unit):
         raise NeedsReview(
             "unit_conflict", f"Expected unit {item.unit!r}, received {unit!r}; no implicit conversion"
         )
+    if item.unit and units_equivalent(unit, item.unit):
+        unit = item.unit
     method = fields.get("method", "").strip() or item.method
     version = fields.get("method_version", "").strip() or item.method_version
     if context.role == "release_coa":
