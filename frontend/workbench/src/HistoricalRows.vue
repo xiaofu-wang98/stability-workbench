@@ -45,7 +45,7 @@ function save() {
 </script>
 
 <template>
-  <details class="panel">
+  <details class="panel" open>
     <summary>补入已采用的历史结果行</summary>
     <NAlert v-if="error" type="error" role="alert">{{ error }}</NAlert>
     <NButton :disabled="disabled || busy" @click="inspect">核对当前研究范围</NButton>

@@ -3,6 +3,9 @@ import { computed, inject, nextTick, onMounted, ref, watch, type Ref } from 'vue
 import { useRoute, useRouter } from 'vue-router';
 import { NAlert, NButton, NCheckbox, NInput, NModal, NSelect, NTag, useMessage } from 'naive-ui';
 import { api, type Project } from './api';
+import { DOMAIN_DEFINITIONS, STABILITY_INTAKE_SCENARIOS, type IntakeScenarioId } from './domains/domainRegistry';
+import { useWorkbenchContextStore } from './stores/workbenchContext';
+import ActionNextStepBanner, { type NextStepAction } from './components/ActionNextStepBanner.vue';
 import ImportSourceReview from './ImportSourceReview.vue';
 import CandidateSourceEditor, { type SourceCandidate } from './CandidateSourceEditor.vue';
 import { cellAddress, sourceReviewText } from './sourceReviewText';
@@ -12,6 +15,7 @@ const props = defineProps<{ projects: Project[] }>();
 const route = useRoute();
 const router = useRouter();
 const message = useMessage();
+const ctx = useWorkbenchContextStore();
 
 type Result = { result: { raw_text: string }; key: { batch: string; item: string; method: string; time_label?: string; month?: number; day?: number } };
 type Candidate = SourceCandidate & { lifecycle: string; received: boolean; status: string;
@@ -41,9 +45,38 @@ watch(() => props.projects, (val) => {
 onMounted(() => {
   if (!projects.value.length) void api<Project[]>('/projects').then(data => { projects.value = data; });
 });
-const project = ref(String(route.query.project || ''));
+const project = ref(String(route.query.project || ctx.activeProject || ''));
 const activeProject = inject<Ref<string>>('workbenchProject');
-const role = ref(route.query.sample ? 'stability_source' : '');
+const validModes: IntakeScenarioId[] = ['stability_source', 'release_coa', 'protocol', 'workbook_return', 'specification', 'scan_pdf'];
+const initialMode = validModes.includes(String(route.query.mode) as IntakeScenarioId)
+  ? (String(route.query.mode) as IntakeScenarioId)
+  : 'stability_source';
+const intakeMode = ref<IntakeScenarioId>(initialMode);
+const role = ref(
+  route.query.sample
+    ? 'stability_source'
+    : ['stability_source', 'release_coa', 'protocol'].includes(initialMode)
+      ? initialMode
+      : 'stability_source',
+);
+const draggingFile = ref(false);
+const specList = ref<{ id: string; filename: string }[]>([]);
+const uploadedSpec = ref<{ id: string; filename: string; rows: unknown[] }>();
+const scanList = ref<{ id: string; filename: string; status: string }[]>([]);
+const uploadedScan = ref<{ id: string; filename: string }>();
+const plannedDomains = computed(() => DOMAIN_DEFINITIONS.filter(d => d.status === 'planned'));
+const scanStatusLabels: Record<string, string> = {
+  archived: '已归档', running: '识别中', completed: '已完成', failed: '识别失败', cancelled: '已取消', interrupted: '已中断',
+};
+const detectedMismatchProject = computed(() => {
+  if (!project.value || suggestions.value.length !== 1) return '';
+  const detected = suggestions.value[0];
+  if (detected === project.value) return '';
+  return projects.value.some(p => p.project === detected) ? detected : '';
+});
+const activeScenarioMeta = computed(() =>
+  STABILITY_INTAKE_SCENARIOS.find(item => item.id === intakeMode.value) ?? STABILITY_INTAKE_SCENARIOS[0],
+);
 const protocol = ref<Protocol>();
 const planDrafts = ref<{ id: string; filename: string }[]>([]);
 const defaults = ref<Record<string, string>>(route.query.batch ? { batch: String(route.query.batch) } : {});
@@ -230,6 +263,29 @@ async function run(action: () => Promise<void>) {
 async function list() {
   if (project.value) summaries.value = await api(projectPath() + '/previews?limit=50');
 }
+async function loadModeHistory(mode: IntakeScenarioId) {
+  try {
+    if (mode === 'protocol') {
+      planDrafts.value = await api('/plan-drafts');
+    } else if (mode === 'specification') {
+      specList.value = await api('/specifications');
+    } else if (mode === 'scan_pdf') {
+      scanList.value = await api('/pdf-ocr');
+    }
+  } catch {
+    // Non-blocking history read
+  }
+}
+function chooseIntakeMode(mode: IntakeScenarioId) {
+  intakeMode.value = mode;
+  error.value = '';
+  status.value = '';
+  if (['stability_source', 'release_coa', 'protocol'].includes(mode)) {
+    role.value = mode;
+    uploadKey = '';
+  }
+  void loadModeHistory(mode);
+}
 watch(project, () => {
   if (project.value && activeProject) activeProject.value = project.value;
   summaries.value = [];
@@ -240,6 +296,92 @@ watch(() => route.query.project, (newP) => {
   if (newP && String(newP) !== project.value) {
     project.value = String(newP);
   }
+});
+watch(() => route.query.mode, (newMode) => {
+  if (typeof newMode === 'string' && validModes.includes(newMode as IntakeScenarioId)) {
+    chooseIntakeMode(newMode as IntakeScenarioId);
+  }
+});
+function onDropFile(event: DragEvent) {
+  draggingFile.value = false;
+  const dropped = event.dataTransfer?.files?.[0];
+  if (!dropped) return;
+  if (intakeMode.value === 'specification') {
+    void uploadSpecificationFile(dropped);
+  } else if (intakeMode.value === 'scan_pdf') {
+    void uploadScanFile(dropped);
+  } else {
+    selectFile(dropped);
+  }
+}
+function uploadSpecificationFile(selected?: File) {
+  if (!selected) return;
+  const form = new FormData();
+  form.set('file', selected);
+  return run(async () => {
+    const result = await api<{ id: string; filename: string; rows: unknown[] }>('/specifications', { method: 'POST', body: form });
+    uploadedSpec.value = result;
+    specList.value = await api('/specifications');
+    status.value = `质量标准「${result.filename}」已归档，识别到 ${result.rows.length} 条条款。`;
+    try { message.success(status.value); } catch {}
+  });
+}
+function uploadScanFile(selected?: File) {
+  if (!selected) return;
+  const form = new FormData();
+  form.set('file', selected);
+  return run(async () => {
+    const { id } = await api<{ id: string }>('/pdf-ocr', { method: 'POST', body: form });
+    uploadedScan.value = { id, filename: selected.name };
+    scanList.value = await api('/pdf-ocr');
+    status.value = `扫描件「${selected.name}」已归档，可立即进入 OCR 识别与条款登记。`;
+    try { message.success(status.value); } catch {}
+  });
+}
+function onSpecInputChange(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const selected = input.files?.[0];
+  input.value = '';
+  if (selected) void uploadSpecificationFile(selected);
+}
+function onScanInputChange(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const selected = input.files?.[0];
+  input.value = '';
+  if (selected) void uploadScanFile(selected);
+}
+const specNextSteps = computed<NextStepAction[]>(() => {
+  if (!uploadedSpec.value) return [];
+  const qProject = project.value || undefined;
+  return [
+    {
+      label: '1. 核对条款并登记项目检项字典',
+      primary: true,
+      to: { path: '/specifications', query: { specification: uploadedSpec.value.id, project: qProject, focus: 'assays' } },
+    },
+    {
+      label: '2. 用此标准新建研究表',
+      to: { path: '/new', query: { project: qProject, specification: uploadedSpec.value.id } },
+    },
+    {
+      label: '3. 打开标准与 COA 中心',
+      to: { path: '/specifications', query: { specification: uploadedSpec.value.id, project: qProject } },
+    },
+  ];
+});
+const scanNextSteps = computed<NextStepAction[]>(() => {
+  if (!uploadedScan.value) return [];
+  return [
+    {
+      label: '1. 进入 OCR 识别与条款登记',
+      primary: true,
+      to: { path: '/scans', query: { scan: uploadedScan.value.id } },
+    },
+    {
+      label: '2. 查看全部扫描件',
+      to: '/scans',
+    },
+  ];
 });
 function selectFile(selected?: File) {
   file.value = selected;
@@ -271,6 +413,7 @@ function choose(event: Event) {
   selectFile((event.target as HTMLInputElement).files?.[0]);
 }
 function fromWorkbook(selected: File) {
+  intakeMode.value = 'stability_source';
   role.value = 'stability_source';
   selectFile(selected);
 }
@@ -297,7 +440,9 @@ async function createProject(event: Event) {
     const id = String(data.get('project')).trim();
     await post('/projects', { project: id, name: String(data.get('name')).trim() });
     projects.value = await api('/projects');
+    ctx.setProjectsSnapshot(projects.value);
     project.value = id;
+    ctx.setActiveProject(id, true);
     await list();
   });
 }
@@ -382,6 +527,7 @@ async function returnToList() {
 onMounted(() => {
   const source = String(route.query.source || '');
   const selected = String(route.query.section || '');
+  const planDraft = String(route.query.planDraft || '');
   if (source) void run(async () => {
     await open(source, selected || undefined);
     if (taskFocus.value) {
@@ -401,11 +547,26 @@ onMounted(() => {
       } catch {}
     }
   });
-  else if (project.value) void run(list);
+  else {
+    if (project.value) void run(list);
+    void loadModeHistory(intakeMode.value);
+    if (planDraft) {
+      intakeMode.value = 'protocol';
+      role.value = 'protocol';
+      void run(async () => {
+        planDrafts.value = await api('/plan-drafts');
+        protocol.value = await api<Protocol>('/plan-drafts/' + encodeURIComponent(planDraft));
+      });
+    }
+  }
 });
 function changeRole() {
   uploadKey = '';
   status.value = '';
+  if (['stability_source', 'release_coa', 'protocol'].includes(role.value)) {
+    intakeMode.value = role.value as IntakeScenarioId;
+    void loadModeHistory(intakeMode.value);
+  }
 }
 function time(record?: Result) {
   if (!record) return '';
@@ -707,136 +868,326 @@ function syncWorksheets() {
   <NAlert v-if="error" type="error" role="alert" style="margin-bottom: 14px;">{{ error }}</NAlert>
   <p v-if="status" role="status" class="import-status-banner">{{ status }}</p>
 
-  <!-- Desktop 2-Column Upload View -->
-  <div v-if="!preview" class="import-landing-grid">
-    <section class="panel import-panel upload-panel">
-      <div class="upload-panel-head">
-        <h2>导入稳定性数据</h2>
-        <span class="upload-hint">支持稳定性汇总 Excel（.xlsx）及方案 Word（.docx）</span>
+  <!-- Unified 6-Scenario Desktop Import Center -->
+  <div v-if="!preview" class="intake-hub">
+    <section class="intake-scenario-bar" aria-label="选择导入文件场景">
+      <div class="intake-bar-head">
+        <h2>选择导入文件类型</h2>
+        <span>同一套「上传归档 → 核对确认 → 触发下游动作」骨架，覆盖全实验室常用文件</span>
       </div>
-
-      <div class="file-picker">
-        <div class="file-picker-icon" aria-hidden="true">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
-          </svg>
-        </div>
-        <div class="file-picker-body">
-          <label>选择来源文件 Excel 或 Word
-            <input type="file" accept=".xlsx,.docx" :disabled="busy" @change="choose">
-          </label>
-          <small v-if="file">已选：{{ file.name }}</small>
-        </div>
-      </div>
-
-      <div class="upload-form-grid">
-        <div class="upload-project">
-          <label>目标项目
-            <NSelect :value="project || null" filterable clearable placeholder="输入项目编号或名称快速搜索 (如 501 / IP281)..."
-              :options="projects.map(p => ({ value: p.project, label: p.project + (p.name ? ' · ' + p.name : '') }))"
-              @update:value="project = $event || ''" />
-          </label>
-        </div>
-        <label class="upload-role-field">文件用途
-          <select v-model="role" :disabled="busy" @change="changeRole">
-            <option value="">请选择文件用途</option>
-            <option value="stability_source">稳定性结果</option>
-            <option value="release_coa">放行结果／CoA</option>
-            <option value="protocol">稳定性方案 Word</option>
-          </select>
-        </label>
-      </div>
-
-      <div class="upload-disclosures">
-        <details v-if="role && role !== 'protocol'" class="disclosure-card">
-          <summary>补充原件未注明的身份</summary>
-          <div class="identity-fields" @input="uploadKey = ''" @change="uploadKey = ''">
-            <label>批号 <input v-model="defaults.batch" :disabled="busy"></label>
-            <label>规格 <input v-model="defaults.presentation" :disabled="busy"></label>
-            <label>方案编号 <input v-model="defaults.study_id" :disabled="busy"></label>
-            <label>条件 <input v-model="defaults.condition" :disabled="busy"></label>
-            <label>材料类别 <select v-model="defaults.sample_type" :disabled="busy"><option value="">沿用原件</option><option value="DS">原液</option><option value="DP">制剂</option><option value="placebo">安慰剂</option></select></label>
-            <label>考察类型 <select v-model="defaults.study" :disabled="busy"><option value="">沿用原件</option><option value="long_term">长期</option><option value="accelerated">加速</option><option value="stress">强力破坏</option></select></label>
+      <div class="scenario-grid">
+        <button
+          v-for="item in STABILITY_INTAKE_SCENARIOS"
+          :key="item.id"
+          type="button"
+          class="scenario-card"
+          :class="{ 'is-active': intakeMode === item.id }"
+          @click="chooseIntakeMode(item.id)"
+        >
+          <div class="sc-top">
+            <strong>{{ item.title }}</strong>
+            <span class="sc-format">{{ item.formats }}</span>
           </div>
-        </details>
-
-        <details :open="!projects.length" class="disclosure-card">
-          <summary>新建项目</summary>
-          <form class="inline-create-form" @submit.prevent="createProject">
-            <label>项目编号 <input name="project" :value="suggestions.length === 1 ? suggestions[0] : ''" required></label>
-            <label>项目名称 <input name="name" required></label>
-            <NButton attr-type="submit" :loading="busy">创建项目</NButton>
-          </form>
-        </details>
+          <p class="sc-desc">{{ item.subtitle }}</p>
+          <div class="sc-foot">
+            <span class="sc-badge">{{ item.badge }}</span>
+            <span class="sc-next">{{ item.nextStepHint }}</span>
+          </div>
+        </button>
       </div>
-
-      <p role="status" class="upload-status-line">{{ uploadStatus || (busy ? "正在读取文件，请稍候…" : !file ? "选择来源文件。" : !role ? "请选择文件用途。" : role !== "protocol" && !project ? "请选择目标项目，或根据原件查找项目。" : "文件已准备好，可以开始解析。") }}</p>
-
-      <div v-if="role" class="entry-actions upload-cta-bar">
-        <NButton v-if="role === 'protocol'" type="primary" :loading="busy" :disabled="busy || !file" @click="parseProtocol">解析方案</NButton>
-        <template v-else-if="role">
-          <NButton type="primary" :loading="busy" :disabled="busy || !file || !project" @click="upload">解析并核对</NButton>
-          <NButton secondary :disabled="busy || !file" @click="inspectResult">根据原件查找项目</NButton>
-        </template>
+      <div class="planned-intake-strip">
+        <span class="planned-intake-label">未来扩展槽位：</span>
+        <span v-for="d in plannedDomains" :key="d.id" class="planned-intake-chip">
+          {{ d.label }}数据导入 <em>规划预留</em>
+        </span>
       </div>
     </section>
 
-    <div class="import-side-col">
-      <section class="panel side-card">
-        <div class="side-card-head">
-          <h3>历史导入记录</h3>
-          <span v-if="project" class="side-project-tag">{{ project }}</span>
+    <div class="import-landing-grid">
+      <!-- Primary Left Panel: switches cleanly by selected scenario -->
+      <section v-if="['stability_source', 'release_coa', 'protocol'].includes(intakeMode)" class="panel import-panel upload-panel">
+        <div class="upload-panel-head">
+          <div>
+            <h2>{{ activeScenarioMeta.title }}</h2>
+            <p class="upload-sub">{{ activeScenarioMeta.subtitle }}</p>
+          </div>
+          <span class="upload-hint">支持拖拽或点击选择 {{ activeScenarioMeta.formats }} 文件</span>
         </div>
-        <ul v-if="summaries.length" class="list compact-list">
-          <li v-for="item in summaries" :key="item.preview_id">
-            <NButton text type="primary" :disabled="busy" @click="run(() => open(item.preview_id))">{{ item.filename }}</NButton>
-            <NTag size="small" :type="item.draft > 0 ? 'warning' : 'success'">{{ item.draft }} 条尚未提交</NTag>
-          </li>
-        </ul>
-        <p v-else class="side-empty">{{ project ? '该项目暂无历史导入记录。' : '选择目标项目后可查看历史导入与未提交记录。' }}</p>
-        <ul v-if="role === 'protocol' && planDrafts.length" class="list compact-list">
-          <li v-for="draft in planDrafts" :key="draft.id">
-            <NButton text type="primary" :disabled="busy" @click="run(async () => { protocol = await api<Protocol>('/plan-drafts/' + draft.id); })">{{ draft.filename }}</NButton>
-          </li>
-        </ul>
+
+        <div
+          class="file-picker"
+          :class="{ 'is-dragging': draggingFile }"
+          @dragover.prevent="draggingFile = true"
+          @dragleave.prevent="draggingFile = false"
+          @drop.prevent="onDropFile"
+        >
+          <div class="file-picker-icon" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+          </div>
+          <div class="file-picker-body">
+            <label>选择来源文件 Excel 或 Word
+              <input type="file" accept=".xlsx,.docx" :disabled="busy" @change="choose">
+            </label>
+            <small v-if="file">已选文件：{{ file.name }}</small>
+            <span v-else class="drop-tip">可直接将文件拖拽至此处释放</span>
+          </div>
+        </div>
+
+        <NAlert v-if="detectedMismatchProject" type="warning" title="防串项目提醒">
+          检测到原件疑似属于项目 <strong>{{ detectedMismatchProject }}</strong>，与当前选定的目标项目 <strong>{{ project }}</strong> 不同。
+          <div style="margin-top: 8px;">
+            <NButton size="small" type="warning" @click="project = detectedMismatchProject">一键切换目标项目为 {{ detectedMismatchProject }}</NButton>
+          </div>
+        </NAlert>
+
+        <div class="upload-form-grid">
+          <div class="upload-project">
+            <label>目标项目
+              <NSelect :value="project || null" filterable clearable placeholder="输入项目编号或名称快速搜索 (如 501 / IP281)..."
+                :options="projects.map(p => ({ value: p.project, label: p.project + (p.name ? ' · ' + p.name : '') }))"
+                @update:value="project = $event || ''" />
+            </label>
+          </div>
+          <label class="upload-role-field">文件用途
+            <select v-model="role" :disabled="busy" @change="changeRole">
+              <option value="">请选择文件用途</option>
+              <option value="stability_source">稳定性结果</option>
+              <option value="release_coa">放行结果／CoA</option>
+              <option value="protocol">稳定性方案 Word</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="upload-disclosures">
+          <details v-if="role && role !== 'protocol'" class="disclosure-card">
+            <summary>补充原件未注明的身份（可选）</summary>
+            <div class="identity-fields" @input="uploadKey = ''" @change="uploadKey = ''">
+              <label>批号 <input v-model="defaults.batch" :disabled="busy"></label>
+              <label>规格 <input v-model="defaults.presentation" :disabled="busy"></label>
+              <label>方案编号 <input v-model="defaults.study_id" :disabled="busy"></label>
+              <label>条件 <input v-model="defaults.condition" :disabled="busy"></label>
+              <label>材料类别 <select v-model="defaults.sample_type" :disabled="busy"><option value="">沿用原件</option><option value="DS">原液</option><option value="DP">制剂</option><option value="placebo">安慰剂</option></select></label>
+              <label>考察类型 <select v-model="defaults.study" :disabled="busy"><option value="">沿用原件</option><option value="long_term">长期</option><option value="accelerated">加速</option><option value="stress">强力破坏</option></select></label>
+            </div>
+          </details>
+
+          <details :open="!projects.length" class="disclosure-card">
+            <summary>新建项目</summary>
+            <form class="inline-create-form" @submit.prevent="createProject">
+              <label>项目编号 <input name="project" :value="suggestions.length === 1 ? suggestions[0] : ''" required></label>
+              <label>项目名称 <input name="name" required></label>
+              <NButton attr-type="submit" :loading="busy">创建项目</NButton>
+            </form>
+          </details>
+        </div>
+
+        <p role="status" class="upload-status-line">{{ uploadStatus || (busy ? "正在读取文件，请稍候…" : !file ? "选择来源文件。" : !role ? "请选择文件用途。" : role !== "protocol" && !project ? "请选择目标项目，或根据原件查找项目。" : "文件已准备好，可以开始解析。") }}</p>
+
+        <div v-if="role" class="entry-actions upload-cta-bar">
+          <NButton v-if="role === 'protocol'" type="primary" :loading="busy" :disabled="busy || !file" @click="parseProtocol">解析方案</NButton>
+          <template v-else-if="role">
+            <NButton type="primary" :loading="busy" :disabled="busy || !file || !project" @click="upload">解析并核对</NButton>
+            <NButton secondary :disabled="busy || !file" @click="inspectResult">根据原件查找项目</NButton>
+          </template>
+        </div>
       </section>
 
-      <details class="panel side-card">
-        <summary>回传从工作台下载的研究表 Excel</summary>
-        <div style="margin-top: 12px;">
-          <StudyWorkbook :disabled="busy" @historical-source="fromWorkbook" />
+      <!-- Scenario 4: Study Workbook Round-Trip -->
+      <section v-else-if="intakeMode === 'workbook_return'" class="panel import-panel upload-panel">
+        <div class="upload-panel-head">
+          <div>
+            <h2>研究表模板回传（离线填写回写）</h2>
+            <p class="upload-sub">上传从工作台下载并填写完成的研究表 Excel，系统将自动定位目标研究表并逐格比对差异。</p>
+          </div>
         </div>
-      </details>
-
-      <section class="panel side-card">
-        <h3>快捷入口</h3>
-        <div class="upload-links">
-          <RouterLink :to="{ path: '/specifications', query: { project: project || undefined } }">质量标准 Word：导入、查看或用于建表</RouterLink>
-          <RouterLink to="/scans">识别扫描 PDF</RouterLink>
-          <RouterLink :to="{ path: '/projects' }">查看全部项目数据</RouterLink>
-          <RouterLink :to="{ path: '/new' }">新建研究表</RouterLink>
-          <RouterLink :to="{ path: '/deliveries' }">查看报告生成与交付</RouterLink>
-        </div>
+        <StudyWorkbook :disabled="busy" @historical-source="fromWorkbook" />
       </section>
+
+      <!-- Scenario 5: Quality Specification Word -->
+      <section v-else-if="intakeMode === 'specification'" class="panel import-panel upload-panel">
+        <div class="upload-panel-head">
+          <div>
+            <h2>上传质量标准 Word 原件</h2>
+            <p class="upload-sub">归档 Word 标准原件并自动解析标准条款表；归档完成后可立即登记项目检项字典、录入放行 COA 或建表。</p>
+          </div>
+        </div>
+
+        <div
+          class="file-picker"
+          :class="{ 'is-dragging': draggingFile }"
+          @dragover.prevent="draggingFile = true"
+          @dragleave.prevent="draggingFile = false"
+          @drop.prevent="onDropFile"
+        >
+          <div class="file-picker-icon" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3l7 3v6c0 4.5-3 7.8-7 9-4-1.2-7-4.5-7-9V6l7-3z" /><path d="M9 12l2 2 4-4" />
+            </svg>
+          </div>
+          <div class="file-picker-body">
+            <label>选择质量标准 Word（.docx）
+              <input type="file" accept=".docx" :disabled="busy" @change="onSpecInputChange">
+            </label>
+            <span class="drop-tip">支持将标准 Word 拖入此处，系统自动归档并提取条款</span>
+          </div>
+        </div>
+
+        <ActionNextStepBanner
+          v-if="uploadedSpec"
+          :title="'质量标准归档完成 · ' + uploadedSpec.filename"
+          :summary="`已识别 ${uploadedSpec.rows.length} 条标准条款。接下来请核对并加入项目检项字典，再用于放行 COA 或建表。`"
+          :steps="specNextSteps"
+        />
+      </section>
+
+      <!-- Scenario 6: Scan PDF OCR -->
+      <section v-else-if="intakeMode === 'scan_pdf'" class="panel import-panel upload-panel">
+        <div class="upload-panel-head">
+          <div>
+            <h2>上传扫描件 PDF（OCR 识别与条款登记）</h2>
+            <p class="upload-sub">归档扫描版质量标准或附件 PDF，进入原件对照工作区执行识别并登记标准条款。</p>
+          </div>
+        </div>
+
+        <div
+          class="file-picker"
+          :class="{ 'is-dragging': draggingFile }"
+          @dragover.prevent="draggingFile = true"
+          @dragleave.prevent="draggingFile = false"
+          @drop.prevent="onDropFile"
+        >
+          <div class="file-picker-icon" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 7V4h3" /><path d="M17 4h3v3" /><path d="M20 17v3h-3" /><path d="M7 20H4v-3" /><line x1="4" y1="12" x2="20" y2="12" />
+            </svg>
+          </div>
+          <div class="file-picker-body">
+            <label>选择扫描件 PDF（.pdf）
+              <input type="file" accept=".pdf,application/pdf" :disabled="busy" @change="onScanInputChange">
+            </label>
+            <span class="drop-tip">支持将 PDF 原件拖入此处，归档后一键启动 OCR 识别</span>
+          </div>
+        </div>
+
+        <ActionNextStepBanner
+          v-if="uploadedScan"
+          :title="'扫描件已归档 · ' + uploadedScan.filename"
+          summary="原件已安全保存。请进入扫描工作区启动 OCR 识别并对照 PDF 登记标准条款。"
+          :steps="scanNextSteps"
+        />
+      </section>
+
+      <!-- Context-Aware Right Column -->
+      <div class="import-side-col">
+        <section v-if="intakeMode === 'specification'" class="panel side-card">
+          <div class="side-card-head">
+            <h3>已归档质量标准（{{ specList.length }}）</h3>
+            <RouterLink class="side-more-link" :to="{ path: '/specifications', query: { project: project || undefined } }">打开标准库 →</RouterLink>
+          </div>
+          <ul v-if="specList.length" class="list compact-list">
+            <li v-for="item in specList.slice(0, 10)" :key="item.id">
+              <RouterLink :to="{ path: '/specifications', query: { specification: item.id, project: project || undefined } }">{{ item.filename }}</RouterLink>
+              <RouterLink class="side-row-cta" :to="{ path: '/specifications', query: { specification: item.id, project: project || undefined, focus: 'assays' } }">去登记</RouterLink>
+            </li>
+          </ul>
+          <p v-else class="side-empty">暂未上传质量标准原件。</p>
+        </section>
+
+        <section v-else-if="intakeMode === 'scan_pdf'" class="panel side-card">
+          <div class="side-card-head">
+            <h3>已归档扫描件（{{ scanList.length }}）</h3>
+            <RouterLink class="side-more-link" to="/scans">扫描工作区 →</RouterLink>
+          </div>
+          <ul v-if="scanList.length" class="list compact-list">
+            <li v-for="item in scanList.slice(0, 10)" :key="item.id">
+              <RouterLink :to="{ path: '/scans', query: { scan: item.id } }">{{ item.filename }}</RouterLink>
+              <NTag size="small" :type="item.status === 'completed' ? 'success' : item.status === 'failed' ? 'error' : 'info'">
+                {{ scanStatusLabels[item.status] || item.status }}
+              </NTag>
+            </li>
+          </ul>
+          <p v-else class="side-empty">暂未上传扫描 PDF 文件。</p>
+        </section>
+
+        <section v-else-if="intakeMode === 'protocol'" class="panel side-card">
+          <div class="side-card-head">
+            <h3>已上传方案草稿（{{ planDrafts.length }}）</h3>
+          </div>
+          <ul v-if="planDrafts.length" class="list compact-list">
+            <li v-for="draft in planDrafts.slice(0, 12)" :key="draft.id">
+              <NButton text type="primary" :disabled="busy" @click="run(async () => { protocol = await api<Protocol>('/plan-drafts/' + draft.id); })">{{ draft.filename }}</NButton>
+              <RouterLink class="side-row-cta" :to="{ path: '/new', query: { project: project || undefined, draft: draft.id } }">去建表</RouterLink>
+            </li>
+          </ul>
+          <p v-else class="side-empty">暂无已上传的稳定性方案 Word。上传后将在此列出并可随时续建研究表。</p>
+        </section>
+
+        <section v-else class="panel side-card">
+          <div class="side-card-head">
+            <h3>历史导入与未提交记录</h3>
+            <span v-if="project" class="side-project-tag">{{ project }}</span>
+          </div>
+          <ul v-if="summaries.length" class="list compact-list">
+            <li v-for="item in summaries" :key="item.preview_id">
+              <NButton text type="primary" :disabled="busy" @click="run(() => open(item.preview_id))">{{ item.filename }}</NButton>
+              <NTag size="small" :type="item.draft > 0 ? 'warning' : 'success'">{{ item.draft }} 条尚未提交</NTag>
+            </li>
+          </ul>
+          <p v-else class="side-empty">{{ project ? '该项目暂无历史导入记录。' : '在左侧或顶栏选择目标项目后，可查看历史导入与未提交草稿。' }}</p>
+        </section>
+
+        <section class="panel side-card">
+          <h3>下游流程直达</h3>
+          <div class="upload-links">
+            <RouterLink :to="{ path: '/specifications', query: { project: project || undefined } }">质量标准 Word：导入、查看或用于建表</RouterLink>
+            <RouterLink :to="{ path: '/new', query: { project: project || undefined } }">创建新研究表</RouterLink>
+            <RouterLink :to="project ? '/projects/' + encodeURIComponent(project) : '/projects'">{{ project ? `查看 ${project} 项目台账` : '查看全部项目台账' }}</RouterLink>
+            <RouterLink :to="{ path: '/deliveries', query: { project: project || undefined } }">报告生成与受控交付</RouterLink>
+          </div>
+        </section>
+      </div>
     </div>
   </div>
 
   <template v-if="protocol && !preview">
+    <ActionNextStepBanner
+      title="稳定性方案解析完成 · 请选择考察矩阵建表"
+      :summary="`共识别到 ${protocol.matrices.length} 个考察矩阵，批号：${protocol.batches.map(b => b.batch || b.raw + '（待补全）').join('、') || '未识别'}。点击下方矩阵卡片即可直接带入检项与时间点建表。`"
+      :steps="[
+        ...(protocol.matrices.length ? [{
+          label: `1. 按表 ${protocol.matrices[0].table} 新建研究表`,
+          primary: true,
+          to: { path: '/new', query: { project: project || undefined, draft: protocol.draft_id, table: protocol.matrices[0].table } },
+        }] : []),
+        { label: '对照原件手工建表', to: { path: '/new', query: { project: project || undefined, draft: protocol.draft_id } } },
+        { label: '下载原方案文件', href: '/api/v1/plan-drafts/' + protocol.draft_id + '/file' },
+      ]"
+    />
     <section class="panel">
-      <h2>方案识别预览</h2>
-      <a :href="'/api/v1/plan-drafts/' + protocol.draft_id + '/file'">下载方案原件</a>
+      <div class="protocol-head-row">
+        <h2>方案识别预览</h2>
+        <div class="protocol-head-links">
+          <a :href="'/api/v1/plan-drafts/' + protocol.draft_id + '/file'">下载方案原件</a>
+          <RouterLink :to="{ path: '/new', query: { project: project || undefined, draft: protocol.draft_id } }">按原方案手动建表</RouterLink>
+        </div>
+      </div>
       <p v-if="!protocol.matrices.length">未识别到考察矩阵。方案原件已保留，可对照原件填写计划。</p>
-      <RouterLink :to="{ path: '/new', query: { project: project || undefined, draft: protocol.draft_id } }">按原方案手动建表</RouterLink>
-      <p>批号 {{ protocol.batches.map(batch => batch.batch || batch.raw + '（待补全）').join('、') || '未识别' }}</p>
+      <p>批号：{{ protocol.batches.map(batch => batch.batch || batch.raw + '（待补全）').join('、') || '未识别' }}</p>
       <details v-if="protocol.release_references.length">
         <summary>查看引用放行的原文说明</summary>
         <p v-for="item in protocol.release_references" :key="item.paragraph" class="source-text">{{ item.text }}</p>
       </details>
     </section>
     <section v-for="matrix in protocol.matrices" :key="matrix.table" class="panel">
-      <h2>原件表 {{ matrix.table }} · {{ matrix.caption || '考察矩阵' }}</h2>
-      <RouterLink :to="{ path: '/new', query: { project: project || undefined, draft: protocol.draft_id, table: matrix.table } }">按此矩阵新建研究表</RouterLink>
-      <NAlert v-if="matrix.warnings.length" type="warning"><ul><li v-for="warning in matrix.warnings" :key="warning">{{ warning }}</li></ul></NAlert>
+      <div class="protocol-head-row">
+        <h2>原件表 {{ matrix.table }} · {{ matrix.caption || '考察矩阵' }}</h2>
+        <RouterLink class="matrix-cta-btn" :to="{ path: '/new', query: { project: project || undefined, draft: protocol.draft_id, table: matrix.table } }">
+          按此矩阵新建研究表 →
+        </RouterLink>
+      </div>
+      <NAlert v-if="matrix.warnings.length" type="warning" style="margin: 10px 0;"><ul><li v-for="warning in matrix.warnings" :key="warning">{{ warning }}</li></ul></NAlert>
       <ul><li v-for="condition in matrix.conditions" :key="condition.location" class="source-text">{{ condition.location }} {{ condition.text }}{{ condition.tracked_changes ? '（含修订）' : '' }}</li></ul>
       <div class="matrix"><table>
         <thead><tr><th>原件行／检项</th><th v-for="point in matrix.points" :key="point.column">{{ point.amount }}{{ point.unit }}<br>列 {{ point.column }}</th></tr></thead>
@@ -1108,6 +1459,185 @@ function syncWorksheets() {
   font-size: 13.5px;
   font-weight: 500;
 }
+
+/* Unified 6-Scenario Intake Hub */
+.intake-hub {
+  display: grid;
+  gap: 20px;
+}
+.intake-scenario-bar {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px 24px 16px;
+  box-shadow: var(--shadow-card);
+}
+.intake-bar-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.intake-bar-head h2 { margin: 0; font-size: 17px; }
+.intake-bar-head span { font-size: 13px; color: var(--text-muted); }
+
+.scenario-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.scenario-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+  text-align: left;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--border);
+  background: var(--bg-subtle);
+  cursor: pointer;
+  font: inherit;
+  transition: all 0.15s ease;
+}
+.scenario-card:hover {
+  background: var(--bg-surface);
+  border-color: var(--brand-border);
+  box-shadow: var(--shadow-card);
+}
+.scenario-card.is-active {
+  background: var(--brand-soft);
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px var(--brand-ring);
+}
+.sc-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.sc-top strong {
+  font-size: 15px;
+  color: var(--text-primary);
+}
+.scenario-card.is-active .sc-top strong { color: var(--brand); }
+.sc-format {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  padding: 1px 7px;
+  border-radius: 4px;
+}
+.sc-desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.sc-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border);
+}
+.sc-badge {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--brand);
+  white-space: nowrap;
+}
+.sc-next {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.planned-intake-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+  font-size: 12.5px;
+}
+.planned-intake-label { color: var(--text-muted); font-weight: 600; }
+.planned-intake-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+}
+.planned-intake-chip em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.upload-sub {
+  margin: 4px 0 0;
+  font-size: 13.5px;
+  color: var(--text-secondary);
+}
+.file-picker.is-dragging {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  box-shadow: 0 0 0 3px var(--brand-ring);
+}
+.drop-tip {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.side-more-link {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand);
+}
+.side-row-cta {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--brand);
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--brand-border);
+  background: var(--brand-soft);
+  white-space: nowrap;
+}
+.side-row-cta:hover { text-decoration: none; background: var(--brand); color: #ffffff; }
+
+.protocol-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+.protocol-head-row h2 { margin: 0; }
+.protocol-head-links { display: flex; gap: 14px; font-size: 13.5px; font-weight: 500; }
+.matrix-cta-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--brand);
+  color: #ffffff;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.matrix-cta-btn:hover { text-decoration: none; background: var(--brand-hover); color: #ffffff; }
 
 /* Desktop 2-Column Upload View */
 .import-landing-grid {

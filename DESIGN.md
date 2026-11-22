@@ -39,11 +39,11 @@ typography:
   font_mono: '"Cascadia Code", "JetBrains Mono", Consolas, monospace'
   numeric_variant: tabular-nums
   scale:
-    page_title: "24px / 1.3 / 700 / -0.02em"
-    section_title: "16px / 1.4 / 600"
-    card_title: "15px / 1.4 / 600"
-    body: "14px / 1.55 / 400"
-    caption: "12.5px / 1.45 / 500"
+    page_title: "26px / 1.3 / 700 / -0.02em"
+    section_title: "18px / 1.4 / 600"
+    card_title: "15.5px / 1.4 / 600"
+    body: "14.5px / 1.6 / 400"
+    caption: "13px / 1.45 / 500"
 
 elevation_and_radius:
   radius_sm: 6px    # Inputs, badges, inline buttons
@@ -59,13 +59,17 @@ spacing:
   control_height: 36px
 ```
 
-## 2. Shell & Navigation Standards
+## 2. Shell, Global Context & Multi-Domain Standards
 
-- **Left Sidebar (`240px`, fixed height `100vh`)**: Pure `#ffffff` background with `1px solid #e2e8f0` right border (no heavy dark-green sidebar).
-  - **Brand Header**: Clean `20×20` inline SVG lab-grid/flask mark in `#eff5fc` rounded tile + `稳研工作台` title. Never use raw Unicode `▤`.
-  - **Active Project Card**: Tinted `#eff5fc` card with `1px solid #bfdbfe`, bold project code, and subtle `切换项目` link.
-  - **Grouped Nav**: Clean group labels (`概览与研究` / `数据与标准` / `分析与交付`), `16×16` stroke SVG icons, `3px` left `#1e5aa8` active bar on `#eff5fc` pill.
-- **Page Header**: Full-width clean header strip separated by `1px solid #e2e8f0`, `24px` title, subtitle/metadata inline, zero redundant vertical bloat.
+- **Left Sidebar (`240px`, fixed height `100vh`)**: Pure `#ffffff` background with `1px solid #e2e8f0` right border.
+  - **Brand Header**: Clean `20×20` inline SVG lab-flask mark in `#eff5fc` rounded tile + `稳研工作台` title + subtitle.
+  - **Action-Oriented Pipeline Nav**: Grouped into `日常作业流` (`工作台`, `导入文件`, `质量标准与 COA`, `新建研究表`) and `台账与交付` (`项目数据`, `趋势与比较`, `生成与历史`), plus secondary `扫描 PDF 识别 (OCR)` link. Preserves all Playwright-tested exact link labels.
+- **Sticky Global Context Bar (`GlobalContextBar.vue`)**: Top of right workspace frame (`54px` height):
+  - **Domain Switcher (`domainRegistry.ts`)**: `稳定性研究与放行` (active) + `影响因素试验` / `水系统监测` / `空气系统监测` (planned extensible slots).
+  - **In-Place Project Switcher**: Filterable select grouped by `置顶常用` / `最近访问` / `全部项目`, star-pin toggle, and secondary context breadcrumbs (Batch / Worksheet).
+- **Unified Post-Action Handoff (`ActionNextStepBanner.vue`)**: Every major write/upload/save renders an inline clinical-green receipt card with numbered `1/2/3` next-step links that carry full project/batch/sample/sheet context downstream.
+- **Home Workbench (`HomeWorkbench.vue`)**: 3-zone desktop command center (Top: 4-Stage Workflow Launchpad; Bottom-Left: Live Pending & Resume Queue via `useTodoAggregator.ts`; Bottom-Right: Pinned/Recent Projects + Recent Deliveries). Full 300+ project catalog lives in `ProjectCatalogView.vue` (`/projects`).
+- **Page Header**: Full-width clean header strip separated by `1px solid #e2e8f0`, `26px` title, subtitle/metadata inline.
 
 ## 3. Core Workspace Layout Standards
 

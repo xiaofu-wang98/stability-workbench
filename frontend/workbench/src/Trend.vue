@@ -156,13 +156,21 @@ async function exportImage() {
     <p v-if="!loading && !groups.length">此项目暂无结果。</p>
     <p v-if="omitted !== undefined">未绘制 {{ omitted }} 个结果</p>
     <p v-if="standard">标准线：<span v-if="standard.lower !== null">下限 {{ standard.lower }} {{ standard.unit }}　</span><span v-if="standard.upper !== null">上限 {{ standard.upper }} {{ standard.unit }}</span></p>
-    <NButton v-if="ready" :loading="exporting" @click="exportImage">生成趋势 PNG</NButton>
-    <a v-if="imageUrl" :href="imageUrl"> 下载趋势 PNG</a>
+    <div v-if="ready" class="trend-action-bar">
+      <NButton :loading="exporting" type="primary" size="small" @click="exportImage">生成趋势 PNG</NButton>
+      <a v-if="imageUrl" :href="imageUrl" class="trend-dl-link">下载趋势 PNG</a>
+      <RouterLink class="trend-next-link" :to="{ path: '/deliveries', query: { project: props.project, format: 'quick' } }">前往生成跨批对比 Word →</RouterLink>
+      <RouterLink class="trend-next-link" :to="{ path: '/deliveries', query: { project: props.project, batch: batches.length === 1 ? batches[0] : undefined, format: 'stability' } }">前往生成稳定性考察报告 →</RouterLink>
+    </div>
     <canvas v-show="omitted !== undefined" ref="canvas" aria-label="结果趋势图" role="img" />
   </div>
 </template>
 
 <style scoped>
-.trend { margin-top: 14px; max-width: 1000px; }
+.trend { margin-top: 14px; max-width: 1120px; }
 .batch-choice { display: grid; gap: 5px; margin-top: 12px; }
+.trend-action-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 12px 0; }
+.trend-dl-link { font-weight: 600; color: var(--success-fg); }
+.trend-next-link { font-size: 13.5px; font-weight: 600; color: var(--brand); padding: 4px 10px; border-radius: var(--radius-sm); border: 1px solid var(--brand-border); background: var(--brand-soft); }
+.trend-next-link:hover { text-decoration: none; background: var(--brand); color: #ffffff; }
 </style>

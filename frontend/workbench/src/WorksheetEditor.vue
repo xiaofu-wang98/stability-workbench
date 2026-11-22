@@ -10,7 +10,7 @@ import WorksheetEvents from './WorksheetEvents.vue';
 import WorksheetHeaderSources from './WorksheetHeaderSources.vue';
 
 const props = defineProps<{ sheet: Worksheet }>();
-const emit = defineEmits<{ saved: [Worksheet]; editing: [boolean] }>();
+const emit = defineEmits<{ saved: [Worksheet]; editing: [boolean]; 'results-saved': [number] }>();
 type Snapshot = { rows: string[][]; layout: Worksheet['layout'] };
 type Recovery = { selection: string; snapshot: Snapshot; reason: string };
 type Range = { startRow: number; endRow: number; startColumn: number; endColumn: number };
@@ -277,6 +277,7 @@ async function save() {
     forgetRecovery();
     dirty.value = false;
     status.value = '已保存。';
+    emit('results-saved', changes.length);
     try {
       await mount();
     } catch {
@@ -554,6 +555,17 @@ onBeforeUnmount(() => {
   styles?.remove();
   void release();
 });
+
+async function beginAndOpenRelease() {
+  if (!editing.value) {
+    await begin();
+  }
+  if (editing.value && !error.value) {
+    openRelease();
+  }
+}
+
+defineExpose({ begin, beginAndOpenRelease, openRelease });
 </script>
 
 <template>

@@ -4,7 +4,7 @@ import { NAlert, NButton } from 'naive-ui';
 import { api } from './api';
 
 const props = defineProps<{ sheetId?: string; disabled?: boolean }>();
-const emit = defineEmits<{ saved: []; historicalSource: [file: File] }>();
+const emit = defineEmits<{ saved: []; committed: [number]; historicalSource: [file: File] }>();
 type Change = { coordinate: string; item: string; timepoint: string; current: string; value: string;
   status: 'new' | 'correction' | 'unchanged' | 'blocked' | 'conflict'; voided_since_export?: boolean };
 type Preview = { sheet_id: string; name: string; revision: number; fingerprint: string; source_id: string; changes: Change[] };
@@ -97,6 +97,7 @@ function commit() {
     preview.value = undefined;
     retry = undefined;
     emit('saved');
+    emit('committed', result.result_version_ids.length);
     if (result.remaining_coordinates.length && attemptedFile.value) {
       preview.value = await inspect(attemptedFile.value);
     }

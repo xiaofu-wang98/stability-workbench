@@ -41,7 +41,7 @@ function save() {
 </script>
 
 <template>
-  <details v-if="sheet.editable && !sheet.sample_id" class="panel">
+  <details v-if="sheet.editable && !sheet.sample_id" class="panel" open>
     <summary>关联已有样品</summary>
     <NAlert v-if="error" type="error">{{ error }}</NAlert>
     <NButton :disabled="disabled || busy" @click="inspect">查找同批号样品</NButton>

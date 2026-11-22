@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { NAlert, NButton, NInput, NSelect } from 'naive-ui';
+import { useRoute } from 'vue-router';
+import { NAlert, NButton, NInput, NSelect, NTag } from 'naive-ui';
 import { api } from './api';
+import { useWorkbenchContextStore } from './stores/workbenchContext';
+import ActionNextStepBanner from './components/ActionNextStepBanner.vue';
+
+const route = useRoute();
+const ctx = useWorkbenchContextStore();
 
 type Summary = { id: string; filename: string; status: string };
 type Review = { revision: number; lines: Record<number, string> };
@@ -53,7 +59,13 @@ async function run(action: () => Promise<void>) {
   catch (e) { error.value = (e as Error).message; }
   finally { busy.value = false; }
 }
-onMounted(() => run(refresh));
+onMounted(() => run(async () => {
+  await refresh();
+  const requested = String(route.query.scan || '');
+  if (requested) {
+    await open(requested);
+  }
+}));
 onBeforeUnmount(() => { disposed = true; clearTimeout(timer); });
 
 async function open(id: string) {
@@ -154,7 +166,7 @@ function saveSpecification() {
     <label>选择 PDF <input type="file" accept=".pdf,application/pdf" :disabled="busy" @change="upload"></label>
     <ul class="list"><li v-for="item in scans" :key="item.id">
       <NButton text :disabled="busy" @click="select(item.id)">{{ item.filename }}</NButton>
-      <span>{{ state[item.status] }}</span>
+      <NTag size="small" :type="item.status === 'completed' ? 'success' : item.status === 'failed' ? 'error' : 'info'">{{ state[item.status] }}</NTag>
     </li></ul>
   </section>
   <section v-if="scan" class="panel">
@@ -174,6 +186,15 @@ function saveSpecification() {
       <NButton v-if="!registering" :disabled="busy || editing || !Number.isInteger(pageNumber) || pageNumber < 1" @click="registering = true">登记本页标准条款</NButton>
       <p v-if="registering">{{ selected ? '可从识别表格选择标准值，也可对照 PDF 原件手动填写。' : '请打开 PDF 原件，核对页码并逐条录入。' }}</p>
       <p v-if="saved" role="status">标准条款已登记。 <RouterLink to="/specifications">打开质量标准库</RouterLink></p>
+      <ActionNextStepBanner
+        v-if="saved"
+        title="扫描件标准条款登记完成"
+        summary="已生成可溯源至原件页码的标准条款记录。下一步请前往质量标准页确认加入项目检项字典。"
+        :steps="[
+          { label: '1. 前往确认项目检项字典', primary: true, to: { path: '/specifications', query: { specification: saved, project: ctx.activeProject || undefined, focus: 'assays' } } },
+          { label: '2. 用此标准新建研究表', to: { path: '/new', query: { project: ctx.activeProject || undefined, specification: saved } } },
+        ]"
+      />
       <div class="scan-review">
       <iframe :key="sourceUrl" :src="sourceUrl" :title="'PDF 原件第 ' + pageNumber + ' 页'" loading="lazy" />
       <div class="scan-findings">

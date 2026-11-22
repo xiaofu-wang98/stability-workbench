@@ -1,14 +1,67 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router';
-import { NAlert, NButton, NSelect } from 'naive-ui';
-import { api, headerFieldLabels, type HeaderField, type Project, type Worksheet, type HeaderMetadataPreview } from './api';
+import { NAlert, NButton, NSelect, NTag } from 'naive-ui';
+import { api, headerFieldLabels, type HeaderField, type Project, type Worksheet, type WorksheetSummary, type HeaderMetadataPreview } from './api';
+import { WORKSHEET_KINDS } from './domains/domainRegistry';
+import { useWorkbenchContextStore } from './stores/workbenchContext';
+import ActionNextStepBanner from './components/ActionNextStepBanner.vue';
 import SpecificationPicker from './SpecificationPicker.vue';
 import WorksheetHeaderSources from './WorksheetHeaderSources.vue';
 
 const props = defineProps<{ projects: Project[] }>();
 const route = useRoute();
 const router = useRouter();
+const ctx = useWorkbenchContextStore();
+
+type CreationOrigin = 'blank' | 'protocol' | 'standard' | 'copy' | 'results';
+const initialOrigin: CreationOrigin = route.query.slot
+  ? 'results'
+  : route.query.copy
+    ? 'copy'
+    : route.query.draft
+      ? 'protocol'
+      : route.query.specification
+        ? 'standard'
+        : (['protocol', 'standard', 'copy'].includes(String(route.query.start)) ? (String(route.query.start) as CreationOrigin) : 'blank');
+const creationOrigin = ref<CreationOrigin>(initialOrigin);
+const originPlanDrafts = ref<{ id: string; filename: string }[]>([]);
+const originSpecs = ref<{ id: string; filename: string }[]>([]);
+const originSheets = ref<WorksheetSummary[]>([]);
+const chosenOriginId = ref<string | null>(null);
+const loadingOriginOptions = ref(false);
+
+async function selectOrigin(mode: CreationOrigin) {
+  creationOrigin.value = mode;
+  chosenOriginId.value = null;
+  if (mode === 'blank' || mode === 'results') return;
+  loadingOriginOptions.value = true;
+  try {
+    if (mode === 'protocol') {
+      originPlanDrafts.value = await api('/plan-drafts');
+    } else if (mode === 'standard') {
+      originSpecs.value = await api('/specifications');
+    } else if (mode === 'copy' && project.value) {
+      originSheets.value = await api('/projects/' + encodeURIComponent(project.value) + '/worksheets');
+    }
+  } catch {
+    // Non-blocking quick picker read
+  } finally {
+    loadingOriginOptions.value = false;
+  }
+}
+
+function applyOriginSelection() {
+  if (!chosenOriginId.value) return;
+  const qProject = project.value || undefined;
+  if (creationOrigin.value === 'protocol') {
+    void router.push({ path: '/import', query: { project: qProject, mode: 'protocol', planDraft: chosenOriginId.value } });
+  } else if (creationOrigin.value === 'standard') {
+    void router.push({ path: '/new', query: { project: qProject, specification: chosenOriginId.value } });
+  } else if (creationOrigin.value === 'copy' && qProject) {
+    void router.push({ path: '/new', query: { project: qProject, copy: chosenOriginId.value } });
+  }
+}
 type Item = { id: string; label: string; method: string; unit: string; reporting_basis?: string };
 type CustomItem = Item & { result_type: 'numeric' | 'qualitative'; criteria_text: string; specification_links?: { specification_id: string; table: number; row: number }[] };
 type RowCriteria = { criteria_text: string; specification_links: NonNullable<CustomItem['specification_links']> };
@@ -356,6 +409,9 @@ onMounted(async () => {
   }
   await loadSource();
   setupReady.value = true;
+  if (['protocol', 'standard', 'copy'].includes(creationOrigin.value) && !draftId && !copyId && !route.query.specification) {
+    void selectOrigin(creationOrigin.value);
+  }
 });
 
 watch([setupReady, draftForm], async ([ready, form]) => {
@@ -512,6 +568,8 @@ function createProject(event: Event) {
   return perform(async () => {
     await post('/projects', data);
     savedPlan = '';
+    await ctx.loadProjects(true);
+    ctx.setActiveProject(data.project, true);
     await switchProject(data.project);
   });
 }
@@ -620,13 +678,100 @@ async function save(event: Event) {
       ...body, idempotency_key: lastAttempt.key,
     });
     savedPlan = '';
+    ctx.markJustCreatedSheet(result.id);
+    ctx.recordProjectVisit(project.value);
     await router.push('/worksheets/' + encodeURIComponent(result.id));
   });
 }
 </script>
 
 <template>
-  <NAlert v-if="error" type="error" role="alert">{{ error }}</NAlert>
+  <NAlert v-if="error" type="error" role="alert" style="margin-bottom: 14px;">{{ error }}</NAlert>
+
+  <!-- Unified Creation Guide: Worksheet Kind + Creation Origin -->
+  <section v-if="!resumed && !seedSlot" class="panel entry-panel create-guide-panel" aria-label="新建类型与创建起点">
+    <div class="create-guide-head">
+      <div>
+        <h2>选择新建类型与起点</h2>
+        <p class="guide-sub">统一新建骨架支持稳定性研究表，并提前预留影响因素、水系统及空气系统监测表扩展位。</p>
+      </div>
+      <div v-if="draftId || copyId || route.query.specification" class="active-origin-badge">
+        <NTag type="info" size="small">
+          {{ draftId ? '当前起点：从稳定性方案矩阵建表' : copyId ? '当前起点：复制已有研究表结构' : '当前起点：按质量标准建表' }}
+        </NTag>
+      </div>
+    </div>
+
+    <div class="worksheet-kind-grid">
+      <div
+        v-for="wk in WORKSHEET_KINDS"
+        :key="wk.id"
+        class="wk-card"
+        :class="{ 'is-active': wk.status === 'active', 'is-planned': wk.status === 'planned' }"
+      >
+        <div class="wk-top">
+          <strong>{{ wk.title }}</strong>
+          <NTag v-if="wk.status === 'active'" type="info" size="tiny">当前启用</NTag>
+          <NTag v-else size="tiny">规划预留</NTag>
+        </div>
+        <small>{{ wk.subtitle }}</small>
+      </div>
+    </div>
+
+    <div v-if="!draftId && !copyId && !route.query.specification" class="origin-switcher">
+      <span class="origin-label">创建起点：</span>
+      <div class="origin-pills">
+        <button type="button" class="origin-pill" :class="{ active: creationOrigin === 'blank' }" @click="selectOrigin('blank')">从空白模板新建</button>
+        <button type="button" class="origin-pill" :class="{ active: creationOrigin === 'protocol' }" @click="selectOrigin('protocol')">从已上传方案建表</button>
+        <button type="button" class="origin-pill" :class="{ active: creationOrigin === 'standard' }" @click="selectOrigin('standard')">按质量标准建表</button>
+        <button type="button" class="origin-pill" :class="{ active: creationOrigin === 'copy' }" @click="selectOrigin('copy')">复制已有研究表结构</button>
+      </div>
+    </div>
+
+    <div v-if="!draftId && !copyId && !route.query.specification && ['protocol', 'standard', 'copy'].includes(creationOrigin)" class="origin-picker-bar">
+      <template v-if="creationOrigin === 'protocol'">
+        <NSelect
+          v-model:value="chosenOriginId"
+          filterable
+          clearable
+          :loading="loadingOriginOptions"
+          placeholder="选择已上传的稳定性方案 Word..."
+          :options="originPlanDrafts.map(d => ({ value: d.id, label: d.filename }))"
+          style="max-width: 460px;"
+        />
+        <NButton type="primary" size="small" :disabled="!chosenOriginId" @click="applyOriginSelection">打开方案矩阵建表</NButton>
+        <RouterLink class="origin-extra-link" :to="{ path: '/import', query: { project: project || undefined, mode: 'protocol' } }">去上传新方案 Word →</RouterLink>
+      </template>
+      <template v-else-if="creationOrigin === 'standard'">
+        <NSelect
+          v-model:value="chosenOriginId"
+          filterable
+          clearable
+          :loading="loadingOriginOptions"
+          placeholder="选择已归档的质量标准原件..."
+          :options="originSpecs.map(s => ({ value: s.id, label: s.filename }))"
+          style="max-width: 460px;"
+        />
+        <NButton type="primary" size="small" :disabled="!chosenOriginId || !project" @click="applyOriginSelection">按此标准带入检项</NButton>
+        <span v-if="!project" class="muted" style="font-size: 13px;">请先在下方或顶栏选定项目</span>
+        <RouterLink class="origin-extra-link" :to="{ path: '/import', query: { project: project || undefined, mode: 'specification' } }">去上传新标准 →</RouterLink>
+      </template>
+      <template v-else-if="creationOrigin === 'copy'">
+        <NSelect
+          v-model:value="chosenOriginId"
+          filterable
+          clearable
+          :loading="loadingOriginOptions"
+          :disabled="!project"
+          :placeholder="project ? '选择该项目下要复制结构的历史研究表...' : '请先选定项目后再选择来源研究表'"
+          :options="originSheets.map(s => ({ value: s.id, label: [s.name, s.batch, s.condition].filter(Boolean).join(' · ') }))"
+          style="max-width: 460px;"
+        />
+        <NButton type="primary" size="small" :disabled="!chosenOriginId || !project" @click="applyOriginSelection">复制此表结构</NButton>
+      </template>
+    </div>
+  </section>
+
   <section v-if="!configuration" class="panel entry-panel">
     <h2>选择项目</h2>
     <p style="margin: 0 0 8px 0; color: #606266; font-size: 13px;">
@@ -701,6 +846,7 @@ async function save(event: Event) {
     <section class="panel entry-panel">
       <h2>稳定性研究通用表</h2>
       <form ref="draftForm" class="fields ip281-template" novalidate @submit.prevent="save">
+        <div class="wide form-section-banner"><span>①</span> 项目、批号与样品基础信息</div>
         <input v-if="seedSlot" type="hidden" name="seed_slot_id" :value="seedSlot">
         <div class="template-header-value"><b>项目编号</b><NSelect :value="project || null" aria-label="项目" filterable clearable placeholder="输入项目编号或名称搜索..." :disabled="busy || Boolean(resumed || sampleId || copyId || seedSlot)" @update:value="switchProject"
           :options="projects.map(p => ({ value: p.project, label: p.project + (p.name ? ' · ' + p.name : '') }))" /></div>
@@ -723,6 +869,7 @@ async function save(event: Event) {
           <label v-for="field in additionalHeaderFields.slice(1)" :key="field">{{ headerFieldLabels[field] }}
             <input :name="field" v-model="formValues[field]" maxlength="500" placeholder="待确认">
           </label>
+          <div class="wide form-section-banner"><span>②</span> 考察类型、条件与开展地点</div>
           <fieldset class="header-options wide">
             <legend>稳定性类型</legend>
             <label v-for="[value, label] in [['long_term', '长期'], ['accelerated', '加速'], ['stress', '强力破坏']]" :key="value">
@@ -760,6 +907,7 @@ async function save(event: Event) {
           </label>
 
         </div>
+        <div class="wide form-section-banner"><span>③</span> 应检项目、可接受标准与时间点矩阵</div>
         <div class="wide template-table">
           <p class="template-legend"><span>固定表头</span><span>可选或可改</span><span>填写区</span></p>
           <div class="template-options">
@@ -863,6 +1011,7 @@ async function save(event: Event) {
             </tr></tbody>
           </table></div>
         </div>
+        <div class="wide form-section-banner"><span>④</span> 补充研究资料与建表确认</div>
         <details class="wide study-details" :open="detailsOpen">
           <summary>研究资料 · 正式建表前补齐</summary>
           <div class="fields">
@@ -880,7 +1029,18 @@ async function save(event: Event) {
           <NButton attr-type="submit" type="primary" :loading="busy">创建研究表</NButton>
           <NButton :disabled="busy || !setupReady" @click="saveDraft">保存草稿</NButton>
         </div>
-        <p v-if="draftLink" role="status">待补全计划已保存。<a :href="draftLink">重新打开已保存版本</a></p>
+        <p v-if="draftLink" role="status" class="wide">待补全计划已保存。<a :href="draftLink">重新打开已保存版本</a></p>
+        <div v-if="draftLink" class="wide">
+          <ActionNextStepBanner
+            title="研究计划草稿已保存至项目待补全列表"
+            summary="草稿已自动同步至首页「待办与续做队列」和项目台账，随时可一键续做建表。"
+            :steps="[
+              { label: '1. 查看该项目台账', primary: true, to: '/projects/' + encodeURIComponent(project) },
+              { label: '2. 返回工作台待办队列', to: '/' },
+              { label: '3. 继续留在本页补全', onClick: () => { draftLink = ''; } },
+            ]"
+          />
+        </div>
       </form>
     </section>
     <section class="panel entry-panel" >
@@ -898,6 +1058,28 @@ async function save(event: Event) {
 </template>
 
 <style scoped>
+.create-guide-panel { margin-top: 0; margin-bottom: 18px; }
+.create-guide-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
+.create-guide-head h2 { margin: 0 0 4px; font-size: 17px; }
+.guide-sub { margin: 0; font-size: 13.5px; color: var(--text-secondary); }
+.worksheet-kind-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.wk-card { padding: 12px 14px; border-radius: var(--radius-md); border: 1.5px solid var(--border); background: var(--bg-subtle); display: grid; gap: 5px; }
+.wk-card.is-active { background: var(--brand-soft); border-color: var(--brand); }
+.wk-card.is-planned { opacity: 0.72; }
+.wk-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14.5px; color: var(--text-primary); }
+.wk-card.is-active .wk-top strong { color: var(--brand); }
+.wk-card small { font-size: 12.5px; color: var(--text-secondary); line-height: 1.45; }
+.origin-switcher { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 12px; border-top: 1px solid var(--border); }
+.origin-label { font-size: 13.5px; font-weight: 600; color: var(--text-secondary); }
+.origin-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.origin-pill { padding: 6px 14px; border-radius: 999px; border: 1px solid var(--border-strong); background: var(--bg-surface); color: var(--text-secondary); font: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; transition: all 0.15s ease; }
+.origin-pill:hover { border-color: var(--brand); color: var(--brand); }
+.origin-pill.active { background: var(--brand); border-color: var(--brand); color: #ffffff; font-weight: 600; }
+.origin-picker-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 12px; padding: 12px 14px; border-radius: var(--radius-md); background: var(--bg-subtle); border: 1px solid var(--border); }
+.origin-extra-link { font-size: 13.5px; font-weight: 600; color: var(--brand); margin-left: auto; }
+.form-section-banner { display: flex; align-items: center; gap: 8px; padding: 8px 12px; margin-top: 8px; border-radius: var(--radius-sm); background: var(--bg-subtle); border-left: 3px solid var(--brand); font-size: 14.5px; font-weight: 600; color: var(--text-primary); }
+.form-section-banner span { color: var(--brand); font-weight: 700; }
+
 details { margin-top: 16px; }
 summary { cursor: pointer; }
 .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px 16px; align-items: end; margin-top: 12px; }
