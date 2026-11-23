@@ -16301,6 +16301,26 @@
                 "type": "null"
               }
             ]
+          },
+          "category_code": {
+            "type": "string",
+            "title": "Category Code",
+            "default": ""
+          },
+          "category_name_zh": {
+            "type": "string",
+            "title": "Category Name Zh",
+            "default": ""
+          },
+          "subcategory_name_zh": {
+            "type": "string",
+            "title": "Subcategory Name Zh",
+            "default": ""
+          },
+          "category_order": {
+            "type": "integer",
+            "title": "Category Order",
+            "default": 99
           }
         },
         "additionalProperties": false,

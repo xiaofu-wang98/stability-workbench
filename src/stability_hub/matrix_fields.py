@@ -274,10 +274,14 @@ def interpret_matrix_fields(source, section, *, reference_rules=True, explicit_p
     # Alternative identifiers in parentheses are left for explicit identity correction.
     fields['batch'] = batch if re.fullmatch(r'[A-Za-z0-9_-]+', batch) else ''
     study_text = source.get('study', '') or (title + ' ' + section)
-    if re.search(r'[R√✓☑]\s*长期', study_text):
-        fields['study'] = 'long_term'
-    elif re.search(r'[R√✓☑]\s*加速', study_text):
-        fields['study'] = 'accelerated'
+    checked_long = bool(re.search(r'[R√✓☑]\s*长期', study_text))
+    checked_accel = bool(re.search(r'[R√✓☑]\s*加速', study_text))
+    checked_stress = bool(re.search(r'[R√✓☑]\s*(?:强力破坏|应力|影响因素)', study_text))
+    checked_studies = [name for flag, name in ((checked_long, 'long_term'), (checked_accel, 'accelerated'), (checked_stress, 'stress')) if flag]
+    if len(checked_studies) > 1:
+        fields['study'] = ''
+    elif len(checked_studies) == 1:
+        fields['study'] = checked_studies[0]
     elif (re.search(r'强力破坏|应力试验|\bstress\b', study_text, re.I)
           and not re.search(r'长期|加速|long.term|accelerated|[□£]', study_text, re.I)):
         fields['study'] = 'stress'

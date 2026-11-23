@@ -28,8 +28,8 @@ def workbook_rows(snapshot):
     yield ("条件", identity["condition"], "放置方向", identity["orientation"])
     yield ("开始日期", sheet["start_date"], "计划版本", str(sheet["plan_version"]))
     yield ("模板版本", TEMPLATE_VERSION, "数据快照", snapshot["snapshot_id"])
-    yield ("检项", "方法", "方法版本", "单位", *(point["label"] for point in points))
-    yield ("计划日期", "", "", "", *(point["planned_date"] for point in points))
+    yield ("检项", "方法", "方法版本", "单位", *(point["label"] for point in points), "质量大类", "细分小类")
+    yield ("计划日期", "", "", "", *(point["planned_date"] for point in points), "", "")
     rows_sorted = sorted(
         sheet["rows"],
         key=lambda r: (r.get("category_order", 99), r.get("display_order", 999)),
@@ -62,7 +62,10 @@ def workbook_rows(snapshot):
             else:
                 value = ""
             values.append(value)
-        yield (row["label"], row["method"], row["method_version"], row["unit"], *values)
+        yield (
+            row["label"], row["method"], row["method_version"], row["unit"], *values,
+            row.get("category_name_zh", ""), row.get("subcategory_name_zh", ""),
+        )
     if notes:
         yield ("结果来源备注", "方法", "时间点", "来源", "原文")
         yield from notes

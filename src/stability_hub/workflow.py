@@ -275,7 +275,7 @@ class Workflow:
             upload['workflow_version'] >= 5 or explicit_source_decision) else raw
         record = map_corrected(mapping_raw, context, config, changes,
             candidate['acknowledge_warning'] if acknowledge_warning is None else acknowledge_warning, source_facts=True,
-            source_scope=self.source_identity_scope(upload,raw),interpreted_fields=interpreted_fields)
+            source_scope=self.source_identity_scope(upload,raw),interpreted_fields=interpreted_fields, conn=conn)
         if issues:
             issue = issues[0]
             code = 'unsupported_structure' if issue.code == 'structure' else issue.code
@@ -718,6 +718,11 @@ class Workflow:
                     JOIN business_worksheet_plans p ON p.sheet_id=w.id AND p.version=w.plan_version
                     LEFT JOIN worksheet_result_positions r ON r.slot_id=s.slot_id
                     WHERE s.slot_id IN ({placeholders})""", slots)}
+                from .platform_catalog import resolve_category_metadata
+                cfg_items = {
+                    i.id: i for i in ProjectConfig.model_validate_json(project_row(conn, project)["config_json"]).items
+                }
+                cat_cache = {}
                 plans = {}
                 updated = []
                 for cell, (_, adopted) in zip(page, pairs[offset:offset + limit], strict=True):
@@ -730,9 +735,28 @@ class Workflow:
                         standard_row = plans[sheet_id].get(position["row_id"])
                     assessment = worksheet_assessment(
                         StabilityRecord.model_validate_json(adopted["record_json"]), standard_row) if adopted else None
+                    cfg_item = cfg_items.get(cell.slot_key.item)
+                    item_label = cfg_item.label if cfg_item else cell.slot_key.item
+                    raw_cat = (
+                        (standard_row.get("category_code") if standard_row else "")
+                        or (cfg_item.category_code if cfg_item else "")
+                    )
+                    cache_key = (raw_cat, item_label, cell.slot_key.method)
+                    if cache_key not in cat_cache:
+                        cat_cache[cache_key] = resolve_category_metadata(
+                            conn=conn,
+                            raw_category=raw_cat,
+                            item_text=item_label,
+                            method_text=cell.slot_key.method,
+                        )
+                    cat_meta = cat_cache[cache_key]
                     updated.append(cell.model_copy(update={
                         "worksheet_id": position["sheet_id"] if position else None,
                         "standard_assessment": StandardAssessment.model_validate(assessment) if assessment else None,
+                        "category_code": cat_meta["category_code"],
+                        "category_name_zh": cat_meta["category_name_zh"],
+                        "subcategory_name_zh": cat_meta["subcategory_name_zh"],
+                        "category_order": cat_meta["category_order"],
                     }))
                 page = tuple(updated)
             return ResultPage(project=project, base_revision=project_row(conn, project)["revision"],

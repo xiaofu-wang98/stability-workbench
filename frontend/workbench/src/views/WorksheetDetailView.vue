@@ -33,6 +33,32 @@ const savedReceiptCount = ref<number | null>(null);
 const savedReceiptSource = ref<'editor' | 'workbook'>('editor');
 
 const cells = computed(() => new Map(props.sheet.cells.map(c => [c.row_id + ':' + c.point_id, c])));
+const groupedRows = computed(() => {
+  const rows = props.sheet.rows;
+  const hasCategories = rows.some(r => Boolean(r.category_name_zh));
+  if (!hasCategories) {
+    return [{ key: 'all', label: '', rows }];
+  }
+  const sorted = [...rows].sort((a, b) => {
+    const orderDiff = (a.category_order ?? 99) - (b.category_order ?? 99);
+    if (orderDiff !== 0) return orderDiff;
+    return (a.display_order ?? 999) - (b.display_order ?? 999);
+  });
+  const groups: { key: string; label: string; rows: Worksheet['rows'] }[] = [];
+  const byKey = new Map<string, { key: string; label: string; rows: Worksheet['rows'] }>();
+  for (const row of sorted) {
+    const key = row.category_code || row.category_name_zh || 'physicochemical_other';
+    const label = row.category_name_zh || '理化特性与其他';
+    let grp = byKey.get(key);
+    if (!grp) {
+      grp = { key, label, rows: [] };
+      byKey.set(key, grp);
+      groups.push(grp);
+    }
+    grp.rows.push(row);
+  }
+  return groups;
+});
 const has0M = computed(() => props.sheet.points.some(p => p.label === '0M'));
 const pendingReleaseCount = computed(() =>
   Object.keys(props.sheet.pending_release_references || {}).length + (props.sheet.invalidated_release_rows?.length || 0),
@@ -246,12 +272,22 @@ const savedNextSteps = computed<NextStepAction[]>(() => [
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in sheet.rows" :key="row.id">
-            <th scope="row" class="template-option">
-              {{ row.label }}
-              <p class="worksheet-criterion">{{ [row.method, row.reporting_basis ?? sheet.identity.reporting_basis].filter(Boolean).join(' · ') }}</p>
-              <small v-if="row.unit">单位：{{ row.unit }}</small>
-            </th>
+          <template v-for="group in groupedRows" :key="group.key">
+            <tr v-if="group.label" class="category-group-row">
+              <th :colspan="2 + sheet.points.length" scope="colgroup" class="category-group-header">
+                {{ group.label }}
+                <small class="category-group-count">（{{ group.rows.length }} 项）</small>
+              </th>
+            </tr>
+            <tr v-for="row in group.rows" :key="row.id">
+              <th scope="row" class="template-option">
+                <div class="row-title-line">
+                  <span>{{ row.label }}</span>
+                  <span v-if="row.subcategory_name_zh" class="row-subcat-badge">{{ row.subcategory_name_zh }}</span>
+                </div>
+                <p class="worksheet-criterion">{{ [row.method, row.reporting_basis ?? sheet.identity.reporting_basis].filter(Boolean).join(' · ') }}</p>
+                <small v-if="row.unit">单位：{{ row.unit }}</small>
+              </th>
             <td class="template-option">
               <p v-if="row.criteria_text" class="worksheet-criterion">{{ row.criteria_text }}</p>
               <template v-if="!row.criteria_text && !row.standards?.length && row.source_criteria?.length">
@@ -285,7 +321,8 @@ const savedNextSteps = computed<NextStepAction[]>(() => [
                 最新记录 · {{ cells.get(row.id + ':' + point.id)?.display.text }}
               </div>
             </td>
-          </tr>
+            </tr>
+          </template>
         </tbody>
       </table>
     </section>
@@ -356,6 +393,27 @@ const savedNextSteps = computed<NextStepAction[]>(() => [
 .worksheet-matrix .template-option { background: var(--brand-soft); color: var(--text-primary); }
 .worksheet-matrix details { font-size: 12px; margin-top: 6px; }
 .worksheet-criterion { white-space: pre-wrap; margin: 4px 0 0; font-weight: normal; color: var(--text-secondary); font-size: 12.5px; }
+.category-group-header {
+  background: var(--bg-subtle) !important;
+  color: var(--brand);
+  font-weight: 700;
+  font-size: 13px;
+  text-align: left;
+  padding: 7px 12px !important;
+  letter-spacing: 0.02em;
+}
+.category-group-count { font-weight: 500; color: var(--text-muted); margin-left: 4px; }
+.row-title-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.row-subcat-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--bg-surface);
+  border: 1px solid var(--brand-border);
+  color: var(--text-secondary);
+}
 .worksheet-notes { margin-top: 0; }
 .worksheet-notes li { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; overflow-wrap: anywhere; }
 .worksheet-notes p { margin: 0; white-space: pre-wrap; }

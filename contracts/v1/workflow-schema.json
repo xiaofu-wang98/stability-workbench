@@ -2356,6 +2356,26 @@
             }
           ],
           "default": null
+        },
+        "category_code": {
+          "default": "",
+          "title": "Category Code",
+          "type": "string"
+        },
+        "category_name_zh": {
+          "default": "",
+          "title": "Category Name Zh",
+          "type": "string"
+        },
+        "subcategory_name_zh": {
+          "default": "",
+          "title": "Subcategory Name Zh",
+          "type": "string"
+        },
+        "category_order": {
+          "default": 99,
+          "title": "Category Order",
+          "type": "integer"
         }
       },
       "required": [

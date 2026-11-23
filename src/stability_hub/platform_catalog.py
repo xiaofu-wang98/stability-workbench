@@ -434,7 +434,8 @@ def match_platform_assay(
     # First check dynamic SQLite aliases if a connection is available (supports user-added aliases/assays)
     if _has_platform_tables(conn):
         assert conn is not None
-        candidates_to_try = [t for t in (item_norm, normalize_catalog_token(item_text.split("\n")[0] if item_text else "")) if t]
+        raw_parts = [normalize_catalog_token(p) for p in re.split(r"[\r\n·|/]+", item_text or "") if normalize_catalog_token(p)]
+        candidates_to_try = list(dict.fromkeys([t for t in (item_norm, normalize_catalog_token(item_text.split("\n")[0] if item_text else ""), *raw_parts) if t]))
         for token in candidates_to_try:
             rows = conn.execute(
                 """SELECT a.id, a.code, a.category_code, a.subcategory_code, a.display_order,

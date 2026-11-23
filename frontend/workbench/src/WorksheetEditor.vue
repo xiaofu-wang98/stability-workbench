@@ -19,7 +19,7 @@ type Editor = { snapshot(): Snapshot; selection(): Range | undefined; setEditabl
 type Change = { row_id: string; point_id: string; value: string; intent: 'initial' | 'correction'; expected_version_id: string | null };
 
 const grid = ref<HTMLDivElement>();
-const activeInspection = ref<{ item: string; criteria: string; point: string }>();
+const activeInspection = ref<{ item: string; category: string; criteria: string; point: string }>();
 const editing = ref(false);
 const busy = ref(false);
 const dirty = ref(false);
@@ -138,12 +138,15 @@ async function mount(restore = false) {
   const values = [
     [latest.name, ...latest.points.map(() => '')],
     ['检验项目 / Test Item', ...latest.points.map(point => [point.label, point.planned_date, point.signed_status].filter(Boolean).join('\n'))],
-    ...latest.rows.map(row => [
-      [row.source_test_item, row.source_test_item === row.label ? '' : row.label, row.method,
-        row.reporting_basis ?? latest.identity.reporting_basis, row.unit].filter(Boolean).join('\n'),
-      ...latest.points.map(point => existing.get(row.id + ':' + point.id)?.raw ??
-        (point.required_row_ids.includes(row.id) ? '' : '—')),
-    ]),
+    ...latest.rows.map(row => {
+      const catTag = [row.category_name_zh, row.subcategory_name_zh].filter(Boolean).join(' / ');
+      return [
+        [row.source_test_item, row.source_test_item === row.label ? '' : row.label, catTag ? `[${catTag}]` : '',
+          row.method, row.reporting_basis ?? latest.identity.reporting_basis, row.unit].filter(Boolean).join('\n'),
+        ...latest.points.map(point => existing.get(row.id + ':' + point.id)?.raw ??
+          (point.required_row_ids.includes(row.id) ? '' : '—')),
+      ];
+    }),
   ];
   const hooks = {
     canEdit: (r: number, c: number) => latest.points[c - 1]?.required_row_ids.includes(latest.rows[r - 2]?.id)
@@ -174,8 +177,11 @@ async function mount(restore = false) {
       canEdit: (r: number, c: number) => c > 1 && hooks.canEdit(r, c - 1),
       onSelect: (range?: Range) => {
         const index = (range?.startRow ?? 0) - 2;
-        activeInspection.value = index >= 0 && index < latest.rows.length ? {
-          item: rows[index + 2][0], criteria: criteria[index + 2],
+        const targetRow = latest.rows[index];
+        activeInspection.value = index >= 0 && targetRow ? {
+          item: rows[index + 2][0],
+          category: [targetRow.category_name_zh, targetRow.subcategory_name_zh].filter(Boolean).join(' · '),
+          criteria: criteria[index + 2],
           point: latest.points[(range?.startColumn ?? 0) - 2]?.label || '',
         } : undefined;
       },
@@ -617,7 +623,7 @@ defineExpose({ begin, beginAndOpenRelease, openRelease });
   <form v-if="editing && plan" class="extra-form" @submit.prevent="submitExtra($event, 'plan')">
     <label>新增时间点 <input name="points" placeholder="6M, 12M" required></label>
     <NSelect v-model:value="planItems" multiple placeholder="选择应检项目"
-      :options="current.rows.map(row => ({ label: [row.label, row.reporting_basis].filter(Boolean).join(' · '), value: row.plan_key ?? row.item_id }))" />
+      :options="current.rows.map(row => ({ label: [row.category_name_zh, row.label, row.reporting_basis].filter(Boolean).join(' · '), value: row.plan_key ?? row.item_id }))" />
     <label>计划变更依据 <input name="basis" required></label>
     <NButton attr-type="submit" type="primary" :loading="busy" :disabled="expired">保存计划</NButton>
     <NButton :disabled="busy" @click="plan = false">取消</NButton>
@@ -677,8 +683,8 @@ defineExpose({ begin, beginAndOpenRelease, openRelease });
     </div>
   </form>
   <details v-if="editing" class="worksheet-active-cell">
-    <summary>查看所选检项与标准 <template v-if="activeInspection">· {{ activeInspection.point }} {{ activeInspection.item.split('\n')[0] }}</template></summary>
-    <div v-if="activeInspection"><p>{{ activeInspection.item }}</p><p>{{ activeInspection.criteria || '未关联可接受标准' }}</p></div>
+    <summary>查看所选检项与标准 <template v-if="activeInspection">· {{ activeInspection.point }} {{ activeInspection.item.split('\n')[0] }}<template v-if="activeInspection.category">（{{ activeInspection.category }}）</template></template></summary>
+    <div v-if="activeInspection"><p v-if="activeInspection.category" class="active-category">质量分类：{{ activeInspection.category }}</p><p>{{ activeInspection.item }}</p><p>{{ activeInspection.criteria || '未关联可接受标准' }}</p></div>
     <p v-else>在表格中选择检项或结果格。</p>
   </details>
   <div v-if="editing" ref="grid" class="worksheet-editor" aria-label="结果编辑表格"></div>

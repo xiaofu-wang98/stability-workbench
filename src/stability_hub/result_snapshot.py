@@ -40,7 +40,7 @@ def create_snapshot(flow,conn,request):
             probe = raw.model_copy(update={'hazards':(),'revisions':{},'comment':'','formula':'',
                                           'number_format':'General','source_value':{**{k:v for k,v in raw.source_value.items() if k.endswith('_rule_version')}, 'raw_type':'s'}})
             try:
-                record = map_corrected(probe,context,frozen_config(conn,upload),{**changes,'result':'0'},source_facts=True)
+                record = map_corrected(probe,context,frozen_config(conn,upload),{**changes,'result':'0'},source_facts=True,conn=conn)
                 fields = record.key.model_dump()
             except NeedsReview:
                 extracted = interpret_raw(raw, raw.fields) if raw.adapter == 'stability_matrix' else raw.fields

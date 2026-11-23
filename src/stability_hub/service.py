@@ -90,7 +90,7 @@ class Hub:
                 prior_id = None
                 code = None
                 try:
-                    record = map_observation(raw, context, config)
+                    record = map_observation(raw, context, config, conn=conn)
                     sid = record.key.slot_id
                     if record.result.status in {"blank", "placeholder"}:
                         status, detail = "ignored", "No analytical result; existing history preserved"

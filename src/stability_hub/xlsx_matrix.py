@@ -320,14 +320,18 @@ def parse_matrix_sheet(sheet):
                     labels = purity_subresults(text(criterion))
                     if len(labels) > 1:
                         hints.append({'kind':'multiple_subresults', 'text':f'{criterion.coordinate}: 子结果标注包含多个含义（{" / ".join(labels)}），请核对原文并明确检测项目及结果。', 'source':loc(criterion).model_dump()})
-                    if (len(labels) <= 1 and 'subresult' in refs and item_text(text(parent),text(criterion),text(method),text(criterion),text(result))
+                    sub_text = text(sub_cell) if (sub_cell is not None and text(sub_cell).strip()) else text(criterion)
+                    if (len(labels) <= 1 and 'subresult' in refs and item_text(text(parent),text(criterion),text(method),sub_text,text(result))
                             == item_text(text(parent),'',text(method))):
                         from .standards import labels as standard_labels
                         if not standard_labels(text(criterion)):
                             hints.append({'kind':'missing_subresult', 'text':f'{criterion.coordinate}: 多行子结果未提供可区分的名称，请核对并明确检测项目及结果。', 'source':loc(criterion).model_dump()})
                 hint = ''
                 if shared_statement and parent_area and parent_area.max_row > parent_area.min_row:
-                    names = [item_text(text(parent), text(anchor(rr, criterion_col)[0]), text(method), text(anchor(rr, criterion_col)[0]))
+                    def _row_sub_text(rr):
+                        sc = anchor(rr, subresult_col)[0] if subresult_col else None
+                        return text(sc) if (sc is not None and text(sc).strip()) else text(anchor(rr, criterion_col)[0])
+                    names = [item_text(text(parent), text(anchor(rr, criterion_col)[0]), text(method), _row_sub_text(rr))
                              for rr in range(parent_area.min_row, parent_area.max_row+1)]
                     if names.count(names[row-parent_area.min_row]) > 1:
                         hint = f'原表分项{row-parent_area.min_row+1}（未命名）'

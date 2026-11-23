@@ -63,7 +63,7 @@ def prepare_observation(raw: RawObservation, metadata: dict[str, str]) -> RawObs
     )
 
 
-def map_observation(raw: RawObservation, context: ImportContext, config: ProjectConfig, *, source_facts=False, source_scope='') -> StabilityRecord:
+def map_observation(raw: RawObservation, context: ImportContext, config: ProjectConfig, *, source_facts=False, source_scope='', conn=None) -> StabilityRecord:
     if raw.hazards:
         raise NeedsReview("unsupported_structure", "; ".join(raw.hazards))
     unknown = set(context.defaults) - ALLOWED_CONTEXT
@@ -103,6 +103,7 @@ def map_observation(raw: RawObservation, context: ImportContext, config: Project
             obs_parts = [p.strip() for p in re.split(r"\s*·\s*", fields.get("test_item", "")) if p.strip()]
             obs_comp_sig = normalize_component_signature(obs_parts[-1]) if len(obs_parts) > 1 else ""
             obs_hit = match_platform_assay(
+                conn=conn,
                 raw_category=fields.get("category", ""),
                 item_text=fields.get("test_item", ""),
                 method_text=fields.get("method", ""),
@@ -112,6 +113,7 @@ def map_observation(raw: RawObservation, context: ImportContext, config: Project
                 sig_matches = []
                 for item in config.items:
                     item_hit = match_platform_assay(
+                        conn=conn,
                         item_text=item.label,
                         method_text=item.method,
                     )
@@ -192,7 +194,7 @@ def map_observation(raw: RawObservation, context: ImportContext, config: Project
                            standards=associations(raw, fields))
 
 
-def map_corrected(raw, context, config, changes, acknowledge_warning=False, *, source_facts=False, source_scope='',interpreted_fields=None):
+def map_corrected(raw, context, config, changes, acknowledge_warning=False, *, source_facts=False, source_scope='',interpreted_fields=None, conn=None):
     """Explicit human extraction corrections; original evidence remains untouched."""
     from .xlsx_revisions import is_deleted, retained_fields
     remembered = None
@@ -237,4 +239,4 @@ def map_corrected(raw, context, config, changes, acknowledge_warning=False, *, s
     })
     protected = {"batch", "sample_type", "presentation", "purpose"} if context.sample_id else set()
     context = context.model_copy(update={"defaults": {k: v for k, v in context.defaults.items() if k not in changes or k in protected}})
-    return map_observation(corrected, context, config, source_facts=source_facts, source_scope=source_scope)
+    return map_observation(corrected, context, config, source_facts=source_facts, source_scope=source_scope, conn=conn)

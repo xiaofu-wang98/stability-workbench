@@ -65,7 +65,7 @@ def same_excel_number_literal(original, extracted):
             Decimal(str(float(original))) == Decimal(extracted))
 
 
-def verify_workbook(path, snapshot):
+def verify_workbook(path, snapshot, *, conn=None):
     errors = []
     def associated(record, link):
         key = RecordKey.model_validate(link['key'])
@@ -131,7 +131,7 @@ def verify_workbook(path, snapshot):
                     derived = map_corrected(interpreted_raw, ImportContext.model_validate(source["context_json"]),
                                             ProjectConfig.model_validate(source["config_json"]),
                                             source.get("corrections", {}), source.get("acknowledge_warning", False), source_facts=True,
-                                            source_scope=source.get('identity_scope',''))
+                                            source_scope=source.get('identity_scope',''), conn=conn)
                     if not physical.result.interpretation and not raw.source_value:
                         # Old immutable versions predate format provenance. Compare
                         # their full original payload, without inventing new history.
@@ -292,7 +292,8 @@ def verify_workbook(path, snapshot):
             if 'SourceStatus' not in book:
                 errors.append('Missing unresolved worksheet status')
             else:
-                actual = [(r[0],r[1],r[2],json.loads(r[4])) for r in book['SourceStatus'].iter_rows(min_row=2,values_only=True)]
+                actual = [(r[0],r[1],r[2],json.loads(''.join(str(v) for v in r[4:] if v is not None)))
+                          for r in book['SourceStatus'].iter_rows(min_row=2,values_only=True)]
                 wanted = [(s['upload_id'],s['filename'],s['section'],s['regions']) for s in snapshot['pending_source_regions']]
                 if actual != wanted:
                     errors.append('Unresolved worksheet status differs')

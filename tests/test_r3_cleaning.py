@@ -107,3 +107,185 @@ def test_tier_b_substantive_conflicts_always_intercepted():
         "result": "102",
     })
     assert "identity_ambiguity" in {i.code for i in source_issues("c3", raw_dual)}
+
+
+def test_r3_fix1_custom_platform_alias_passthrough_conn(tmp_path):
+    from stability_hub.mapping import map_corrected, map_observation
+    from stability_hub.models import ImportContext, ItemDefinition, ProjectConfig
+    from stability_hub.platform_catalog import add_platform_alias, create_platform_assay
+    from stability_hub.storage import Store
+
+    store = Store(tmp_path / "custom_alias.sqlite")
+    with store.connect() as conn:
+        created = create_platform_assay(
+            conn,
+            category_code="purity_impurity",
+            subcategory_code="adc_conjugation",
+            name_zh="游离巯基含量",
+            name_en="Free Thiol Content",
+            default_unit="mol/mol",
+            methods=[{"name_zh": "Ellman法"}],
+        )
+        add_platform_alias(conn, entity_type="assay", entity_id=created["id"], raw_alias="DTNB游离巯基")
+
+    config = ProjectConfig(
+        project="IP901",
+        name="IP901",
+        items=(
+            ItemDefinition(
+                id="free_thiol",
+                label="游离巯基含量",
+                unit="mol/mol",
+                result_type="numeric",
+                method="Ellman法",
+                category_code="purity_impurity",
+                subcategory_code="adc_conjugation",
+                platform_assay_id=created["id"],
+            ),
+        ),
+    )
+    context = ImportContext(
+        defaults={
+            "sample_type": "DS",
+            "batch": "B1",
+            "presentation": "10 mg/mL",
+            "study": "long_term",
+            "study_id": "STB-901",
+            "condition": "5±3℃",
+        }
+    )
+    obs = RawObservation(
+        fields={"test_item": "DTNB游离巯基", "method": "Ellman法", "time_point": "0M", "result": "0.12", "unit": "mol/mol"},
+        location=Location(format="xlsx", section="Sheet1", row=4, column=3),
+    )
+    with store.read() as conn:
+        rec1 = map_observation(obs, context, config, conn=conn)
+        rec2 = map_corrected(obs, context, config, {}, conn=conn)
+    assert rec1.key.item == "free_thiol"
+    assert rec2.key.item == "free_thiol"
+
+
+def test_r3_fix2_confirmation_and_results_expose_categories():
+    from stability_hub.worksheet_confirmation import workbook_rows
+
+    snapshot = {
+        "snapshot_id": "snap-1",
+        "worksheet": {
+            "name": "长期研究",
+            "project": "IP501",
+            "basis": "方案",
+            "start_date": "2026-01-01",
+            "plan_version": 1,
+            "identity": {"batch": "B1", "study_id": "STB-1", "condition": "5±3℃", "orientation": "正置"},
+            "points": [{"id": "p0", "label": "0M", "planned_date": "2026-01-01", "required_row_ids": ["r1", "r2"]}],
+            "rows": [
+                {
+                    "id": "r2", "label": "纯度（SEC） · 单体", "method": "SEC-HPLC", "method_version": "V1", "unit": "%",
+                    "category_code": "purity_impurity", "category_name_zh": "2.纯度和杂质",
+                    "subcategory_name_zh": "分子大小变异体", "category_order": 2, "display_order": 201,
+                },
+                {
+                    "id": "r1", "label": "肽图", "method": "RP-UPLC", "method_version": "V1", "unit": "",
+                    "category_code": "identification", "category_name_zh": "1.鉴别",
+                    "subcategory_name_zh": "肽图", "category_order": 1, "display_order": 101,
+                },
+            ],
+            "cells": [],
+        },
+        "results": {},
+    }
+    rows = list(workbook_rows(snapshot))
+    assert rows[6] == ("检项", "方法", "方法版本", "单位", "0M", "质量大类", "细分小类")
+    assert rows[8][0] == "肽图"
+    assert rows[8][5:] == ("1.鉴别", "肽图")
+    assert rows[9][0] == "纯度（SEC） · 单体"
+    assert rows[9][5:] == ("2.纯度和杂质", "分子大小变异体")
+
+
+def test_r3_fix3_t3_subresult_col_no_false_missing_subresult():
+    from io import BytesIO
+    from openpyxl import Workbook
+    from stability_hub.xlsx_matrix import parse_matrix_sheet
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "T3_长期"
+    ws.append(["产品批号", "B202601", "产品名称", "IP501 原液", "稳定性类型", "☑长期 □加速", "考察条件", "5℃±3℃"])
+    ws.append(["大类", "检验项目", "子检项/细项", "分析方法", "可接受标准", "考察时间（月）", ""])
+    ws.append(["", "", "", "", "", "0M", "3M"])
+    ws.merge_cells("F2:G2")
+    ws.append(["2.纯度和杂质", "纯度", "单体", "SEC-HPLC法", "≥95.0%", "99.1%", "99.0%"])
+    ws.append(["2.纯度和杂质", "", "高分子量聚体", "SEC-HPLC法", "≤5.0%", "0.9%", "1.0%"])
+    ws.merge_cells("B4:B5")
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    from openpyxl import load_workbook
+    loaded = load_workbook(buf, data_only=False)
+    obs, _ = parse_matrix_sheet(loaded["T3_长期"])
+    assert len(obs) == 4
+    for o in obs:
+        assert not any(h.get("kind") == "missing_subresult" for h in o.system_hints), o.system_hints
+
+
+def test_r3_fix4_dual_checked_study_boxes_leave_study_blank():
+    from stability_hub.matrix_fields import interpret_matrix_fields
+
+    fields = interpret_matrix_fields(
+        {"study": "☑长期  ☑加速  □强力破坏", "sample_type": "原液", "batch": "B01", "condition": "5℃±3℃", "time_point": "0M"},
+        "Sheet1",
+    )
+    assert fields["study"] == ""
+    single = interpret_matrix_fields(
+        {"study": "☑长期  □加速  □强力破坏", "sample_type": "原液", "batch": "B01", "condition": "5℃±3℃", "time_point": "0M"},
+        "Sheet1",
+    )
+    assert single["study"] == "long_term"
+
+
+def test_r3_stress_bug1_trailing_space_section_preserved():
+    from stability_hub.v5_contracts import SheetCommit, TaskBatchScope
+
+    cmd = SheetCommit(
+        base_revision=1,
+        idempotency_key="k1",
+        reason="commit sheet with trailing space",
+        section="注射笔1mg加速 A1 ",
+        fingerprint="fp-1",
+    )
+    assert cmd.section == "注射笔1mg加速 A1 "
+    scope = TaskBatchScope(section="注射笔3mg长期 A1 ", operation="exclude")
+    assert scope.section == "注射笔3mg长期 A1 "
+
+
+def test_r3_stress_bug2_oversized_source_status_chunks_roundtrip(tmp_path):
+    from stability_hub.models import digest
+    from stability_hub.workflow_excel import write_workbook
+    from stability_hub.workflow_excel_verify import verify_workbook
+
+    big_coords = [f"A{i}" for i in range(1, 7000)]  # > 40,000 chars when JSON encoded
+    snapshot = {
+        "project": "IP166",
+        "revision": 1,
+        "orientation": "horizontal",
+        "item_labels": {},
+        "filters": {},
+        "selected_slot_ids": [],
+        "entries": [],
+        "drafts": [],
+        "pending_source_regions": [
+            {
+                "upload_id": "upload_big",
+                "filename": "big.xlsx",
+                "section": "Sheet1",
+                "scope": "unassigned",
+                "regions": [{"id": "r1", "role": "unclassified", "coordinates": big_coords}],
+            }
+        ],
+    }
+    snapshot["snapshot_id"] = digest(snapshot)
+    out = tmp_path / "results.xlsx"
+    write_workbook(out, snapshot)
+    errors = verify_workbook(out, snapshot)
+    assert errors == [], errors
