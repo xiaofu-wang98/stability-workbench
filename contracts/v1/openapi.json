@@ -6250,6 +6250,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SyncWorksheetsRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Command"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -15071,9 +15088,7 @@
           },
           "worksheet_sync": {
             "items": {
-              "additionalProperties": {
-                "type": "string"
-              },
+              "additionalProperties": true,
               "type": "object"
             },
             "type": "array",
@@ -15821,6 +15836,20 @@
         ],
         "title": "StudySave"
       },
+      "SyncWorksheetsRequest": {
+        "properties": {
+          "material_stages": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Material Stages"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SyncWorksheetsRequest"
+      },
       "TaskBatchApply": {
         "properties": {
           "base_revision": {
@@ -15904,7 +15933,8 @@
               "suggested",
               "exclude_selected",
               "classify",
-              "keep_single"
+              "keep_single",
+              "repeat_source"
             ],
             "title": "Operation"
           },

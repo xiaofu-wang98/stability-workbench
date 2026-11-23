@@ -44,6 +44,8 @@ def workbook_rows(snapshot):
                 value = reported_text(result)
                 if result["status"] == "numeric" and result["unit"] == "%":
                     value += "%"
+                elif result["status"] != "numeric":
+                    value = value.strip()
                 notes.extend((row["label"], row["method"], point["label"], origin, note)
                              for origin, note in snapshot.get("result_notes", {}).get(version, ()))
             elif cell and (reference := cell.get("release_reference")):

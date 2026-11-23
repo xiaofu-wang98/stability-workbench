@@ -223,10 +223,10 @@ def map_corrected(raw, context, config, changes, acknowledge_warning=False, *, s
     if raw.subresult_hint:
         interpreted = {**interpreted, 'test_item': interpreted.get('test_item', '') + ' · ' + raw.subresult_hint}
     if source_facts:
-        from .matrix_fields import presentation_lines
+        from .matrix_fields import normalize_presentation, presentation_lines
         lines = presentation_lines(interpreted.get('presentation',''))
         if len(lines)==1:
-            interpreted = {**interpreted,'presentation':lines[0]}
+            interpreted = {**interpreted,'presentation':normalize_presentation(lines[0])}
     if remembered is not None:
         interpreted = {**interpreted, 'test_item': remembered.id, 'method': remembered.method}
     from .standards import select

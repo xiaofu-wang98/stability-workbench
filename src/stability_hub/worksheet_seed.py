@@ -237,10 +237,22 @@ def confirmed_metadata_sources(conn, project, identity, values, fingerprint):
             for field, value in values.items() if value and value == preview[field]}
 
 
-def provision_from_results(conn, worksheets, project, version_ids, actor):
+SAMPLE_TYPE_SUGGESTED_STAGE = {
+    "DS": "原液",
+    "DP": "制剂",
+    "placebo": "安慰剂",
+}
+
+
+def provision_from_results(conn, worksheets, project, version_ids, actor, *, material_stages=None):
     """Generate plans from newly confirmed matrix results within the submission transaction."""
     from .identity_associations import adopted
 
+    stage_map = {
+        str(k).strip(): str(v).strip()
+        for k, v in (material_stages or {}).items()
+        if str(k).strip() and str(v).strip()
+    }
     outcomes = []
     seen = set()
     for version_id in dict.fromkeys(version_ids):
@@ -262,7 +274,7 @@ def provision_from_results(conn, worksheets, project, version_ids, actor):
         seen.add(signature)
         slot_id = version["slot_id"]
         outcome = {"slot_id": slot_id, "batch": identity.batch, "study": identity.study,
-                   "condition": identity.condition}
+                   "condition": identity.condition, "sample_type": identity.sample_type}
         encoded_identity = identity.model_dump_json(exclude={"sample_id"} if not identity.sample_id else set())
         existing = conn.execute("""SELECT id FROM business_worksheets
             WHERE project=? AND identity_json=? AND deleted_at IS NULL""", (project, encoded_identity)).fetchone()
@@ -272,14 +284,26 @@ def provision_from_results(conn, worksheets, project, version_ids, actor):
         try:
             seed = plan_seed(conn, worksheets, project, actor, source="results", batch=identity.batch,
                              slot_id=slot_id, source_id=None, table=None)
+            source_stage = (seed.get("material_stage") or "").strip()
+            confirmed_stage = (
+                stage_map.get(slot_id)
+                or stage_map.get(identity.batch)
+                or stage_map.get(identity.sample_type, "")
+            )
+            material_stage = source_stage or confirmed_stage
             missing = []
             if not seed.get("start_date"):
                 missing.append("开始日期")
-            if not identity.sample_id and not seed.get("material_stage"):
+            if not identity.sample_id and not material_stage:
                 missing.append("样品材料阶段")
             if missing:
-                outcomes.append({**outcome, "status": "needs_input",
-                                 "reason": "请核对并补齐" + "、".join(missing) + "。"})
+                outcomes.append({
+                    **outcome,
+                    "status": "needs_input",
+                    "missing_fields": missing,
+                    "suggested_material_stage": SAMPLE_TYPE_SUGGESTED_STAGE.get(identity.sample_type, ""),
+                    "reason": "请核对并补齐" + "、".join(missing) + "。",
+                })
                 continue
             points = [{"unit": point["label"][-1], "amount": int(point["label"][:-1]),
                        "required_items": point["items"],
@@ -287,13 +311,18 @@ def provision_from_results(conn, worksheets, project, version_ids, actor):
             if len(points) > 120 or len(seed["items"]) > 150:
                 outcomes.append({**outcome, "status": "needs_input", "reason": "研究范围超过单表容量。"})
                 continue
+            basis = (
+                f"从已确认的历史 Excel 结果生成（操作员确认样品材料阶段：{material_stage}）"
+                if confirmed_stage and not source_stage
+                else "从已确认的历史 Excel 结果生成"
+            )
             command = CreateWorksheet(
                 name=" · ".join((identity.batch, identity.study_id, identity.condition)),
                 identity=identity, start_date=date.fromisoformat(seed["start_date"]),
                 seed_slot_id=slot_id, sample_id=identity.sample_id,
                 items=tuple(item["id"] for item in seed["items"]), points=points,
-                material_stage=seed.get("material_stage", ""), packaging=seed.get("packaging", ""),
-                basis="从已确认的历史 Excel 结果生成", idempotency_key="history-provision:" + digest([project, slot_id, version_id]),
+                material_stage=material_stage, packaging=seed.get("packaging", ""),
+                basis=basis, idempotency_key="history-provision:" + digest([project, slot_id, version_id]),
             )
             conn.execute("SAVEPOINT provision_history")
             try:

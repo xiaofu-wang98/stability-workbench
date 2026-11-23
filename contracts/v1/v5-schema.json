@@ -1543,9 +1543,7 @@
         "worksheet_sync": {
           "default": [],
           "items": {
-            "additionalProperties": {
-              "type": "string"
-            },
+            "additionalProperties": true,
             "type": "object"
           },
           "title": "Worksheet Sync",
@@ -1945,7 +1943,8 @@
             "suggested",
             "exclude_selected",
             "classify",
-            "keep_single"
+            "keep_single",
+            "repeat_source"
           ],
           "title": "Operation",
           "type": "string"

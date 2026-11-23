@@ -62,7 +62,18 @@ export type TaskCard = {
   guidance?: { title?: string; question?: string; help?: string; name_options?: GuidanceOption[] } | null;
 };
 
-type Group = { group_id: string; title: string; reason: string; scope: object; decision_count: number };
+type Group = { group_id: string; title: string; reason: string; scope: Record<string, unknown>; decision_count: number };
+type BulkIdentityGroup = {
+  group_id: string;
+  mode: 'sheet' | 'column';
+  column?: string;
+  title: string;
+  fields: string[];
+  field_labels: Record<string, string>;
+  task_count: number;
+  affected_result_count: number;
+  scope: Record<string, unknown>;
+};
 type ManualTask = {
   id: string; detail: string; fields: string[]; affected_results: number;
   member_ids: string[];
@@ -71,6 +82,7 @@ type ManualTask = {
   guidance?: { question: string; help: string } | null;
 };
 type Change = { task_id: string; section: string; operation: string; explanation: string; affected_results: number;
+  coordinates?: string[]; text_preview?: string; text_truncated?: boolean;
   evidence: { section: string; row: number; column: number }[];
   fields: Record<string, { before: unknown; after: unknown }> };
 type Plan = { base_revision: number; fingerprint: string; changes: Change[];
@@ -81,6 +93,8 @@ type Blocker = { id: string; kind: string; section: string; region_summary: stri
     proposal: { eligible?: boolean; operation?: string; source_kind?: string } }[] };
 
 const groups = ref<Group[]>([]);
+const bulkIdentityGroups = ref<BulkIdentityGroup[]>([]);
+const bulkIdentityDrafts = ref<Record<string, Record<string, string>>>({});
 const tasks = ref<ManualTask[]>([]);
 const blockers = ref<Blocker[]>([]);
 const taskCards = ref<TaskCard[]>([]);
@@ -205,7 +219,7 @@ async function run(action: () => Promise<void>) {
 
 async function loadQueue(focus = '') {
   const result = await api<{
-    groups: Group[]; manual: ManualTask[]; blockers: Blocker[]; summary: Summary; total: number;
+    groups: Group[]; bulk_identity_groups?: BulkIdentityGroup[]; manual: ManualTask[]; blockers: Blocker[]; summary: Summary; total: number;
     offset: number; batch_members: Record<string, string[]>; undo_batch_id?: string; base_revision: number;
     task_cards?: TaskCard[]; task_cards_total?: number;
   }>(
@@ -215,6 +229,12 @@ async function loadQueue(focus = '') {
     })
   );
   groups.value = result.groups;
+  bulkIdentityGroups.value = result.bulk_identity_groups ?? [];
+  for (const bg of bulkIdentityGroups.value) {
+    if (!bulkIdentityDrafts.value[bg.group_id]) {
+      bulkIdentityDrafts.value[bg.group_id] = {};
+    }
+  }
   tasks.value = result.manual;
   blockers.value = result.blockers;
   summary.value = result.summary;
@@ -421,11 +441,31 @@ function inspect(group: Group) {
   return run(async () => {
     plan.value = undefined;
     selected.value = group;
-    reason.value = '';
+    reason.value = group.reason || '';
     batchExcluded.value = [];
     key = crypto.randomUUID();
     plan.value = await post('/tasks/preview', group.scope);
   });
+}
+
+function inspectBulkIdentity(bg: BulkIdentityGroup) {
+  const rawFields = bulkIdentityDrafts.value[bg.group_id] || {};
+  const filled = Object.fromEntries(
+    Object.entries(rawFields).map(([k, v]) => [k, (v || '').trim()]).filter(([, v]) => v)
+  );
+  if (!Object.keys(filled).length) {
+    error.value = '请先填写至少一项缺失身份字段再预览批量补齐。';
+    return;
+  }
+  const scope = { ...bg.scope, fields: filled };
+  const asGroup: Group = {
+    group_id: bg.group_id,
+    title: bg.title,
+    reason: `批量补齐${bg.fields.map(f => bg.field_labels[f] || f).join('、')}`,
+    decision_count: bg.task_count,
+    scope,
+  };
+  return inspect(asGroup);
 }
 
 async function toggleBatchException(cid: string) {
@@ -543,11 +583,23 @@ function confirmUndo() {
       <p>{{ plan.notice }}</p>
       <div class="matrix">
         <table>
-          <thead><tr><th>原件位置</th><th>处理说明</th><th>字段变动</th></tr></thead>
+          <thead><tr><th>原件位置 / 全部坐标</th><th>处理说明 / 内容摘要</th><th>字段变动</th></tr></thead>
           <tbody>
             <tr v-for="change in plan.changes" :key="change.task_id">
-              <td>{{ change.evidence.map(e => e.section + '!' + cellAddress(e.row, e.column)).join('；') || change.section }}</td>
-              <td>{{ change.explanation }} · 影响 {{ change.affected_results }} 条</td>
+              <td>
+                <template v-if="change.coordinates?.length">
+                  {{ change.section }}!{{ change.coordinates.join(', ') }}
+                </template>
+                <template v-else>
+                  {{ change.evidence.map(e => e.section + '!' + cellAddress(e.row, e.column)).join('；') || change.section }}
+                </template>
+              </td>
+              <td>
+                <div>{{ change.explanation }} · 影响 {{ change.affected_results }} 条</div>
+                <div v-if="change.text_preview !== undefined" class="region-text-preview">
+                  摘要：{{ change.text_preview || '（空白/纯格式单元格）' }}{{ change.text_truncated ? '…' : '' }}
+                </div>
+              </td>
               <td><div v-for="(field, name) in change.fields" :key="name">{{ name }} · {{ field.before }} → {{ field.after }}</div></td>
             </tr>
           </tbody>
@@ -572,6 +624,40 @@ function confirmUndo() {
           确认应用批量决定
         </NButton>
         <NButton text :disabled="busy" @click="plan = undefined; selected = undefined;">取消</NButton>
+      </div>
+    </div>
+
+    <!-- B-3 Bulk Identity Fill Panel (result_panels / multi-row shared missing identity) -->
+    <div v-if="bulkIdentityGroups.length" class="bulk-identity-panel">
+      <h4>批量补齐缺失身份（按整表或按列一次补齐）</h4>
+      <div v-for="bg in bulkIdentityGroups" :key="bg.group_id" class="bulk-identity-row">
+        <div class="bulk-identity-title">{{ bg.title }}</div>
+        <div class="bulk-identity-inputs">
+          <div v-for="f in bg.fields" :key="f" class="bulk-identity-field">
+            <label>{{ bg.field_labels[f] || fieldNames[f] || f }}</label>
+            <NSelect
+              v-if="identityEnumOptions[f]"
+              :value="bulkIdentityDrafts[bg.group_id]?.[f] || null"
+              :options="identityEnumOptions[f]"
+              clearable
+              size="small"
+              style="min-width: 150px;"
+              :placeholder="'选择' + (bg.field_labels[f] || f)"
+              @update:value="(val: string | null) => { (bulkIdentityDrafts[bg.group_id] ||= {})[f] = val || ''; }"
+            />
+            <NInput
+              v-else
+              :value="bulkIdentityDrafts[bg.group_id]?.[f] || ''"
+              size="small"
+              style="min-width: 140px;"
+              :placeholder="'输入' + (bg.field_labels[f] || f)"
+              @update:value="(val: string) => { (bulkIdentityDrafts[bg.group_id] ||= {})[f] = val; }"
+            />
+          </div>
+          <NButton size="small" type="primary" secondary :disabled="busy" @click="inspectBulkIdentity(bg)">
+            预览并批量补齐
+          </NButton>
+        </div>
       </div>
     </div>
 
@@ -942,4 +1028,20 @@ function confirmUndo() {
 .resolved-group summary { font-size: 13px; font-weight: 600; color: var(--success-fg); }
 .resolved-strip { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: var(--bg-surface); border: 1px solid var(--success-border); border-radius: var(--radius-sm); margin-top: 6px; font-size: 13px; }
 .resolved-text { color: var(--success-fg); font-weight: 500; }
+.region-text-preview { margin-top: 4px; font-size: 12px; color: var(--text-secondary); font-family: var(--font-mono); }
+.bulk-identity-panel {
+  border: 1px solid var(--brand-border);
+  background: var(--brand-soft);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.bulk-identity-panel h4 { margin: 0; font-size: 14px; color: var(--brand); }
+.bulk-identity-row { display: flex; flex-direction: column; gap: 8px; padding-top: 6px; border-top: 1px dashed var(--brand-border); }
+.bulk-identity-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.bulk-identity-inputs { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.bulk-identity-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-secondary); }
 </style>

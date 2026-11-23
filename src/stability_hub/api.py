@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 from zipfile import BadZipFile
 
-from fastapi import Depends, FastAPI, File, Form, Header, Query, Request, UploadFile
+from fastapi import Body, Depends, FastAPI, File, Form, Header, Query, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
@@ -401,7 +401,7 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
                               limit: int | None = Query(None, ge=1, le=100)):
         require(operator, Capability.VIEW)
         from .review_tasks import (blocker_cards, blocker_category, blocker_index, blocker_summary,
-                                   build_action_groups, build_task_cards, current_review)
+                                   build_action_groups, build_bulk_identity_groups, build_task_cards, current_review)
         with store.read() as conn:
             upload = workflow._upload(conn, preview_id)
             preview, sheets, flights, tasks, _ = current_review(workflow, conn, upload, operator, _shared=True)
@@ -436,6 +436,7 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
                      and all('issue_id' in member for member in task.members)))
             ]
             groups = build_action_groups(tasks, sheets, section, preview)
+            bulk_identity_groups = build_bulk_identity_groups(tasks, section, preview)
             members = {task.id: [m["candidate_id"] for m in task.members if "candidate_id" in m]
                        for task in tasks if task.section == section}
             batch_members = {g.group_id: list(dict.fromkeys(cid for tid in g.scope.task_ids for cid in members.get(tid, ())))
@@ -461,7 +462,7 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
 
             # 'offset' stays the task-card page position consumed by the workbench;
             # blockers report their own position explicitly.
-            return {'groups': groups, 'manual': manual, 'batch_members': batch_members,
+            return {'groups': groups, 'bulk_identity_groups': bulk_identity_groups, 'manual': manual, 'batch_members': batch_members,
                     'base_revision': flight.base_revision, 'undo_batch_id': undo[0] if undo and flight.state != 'committed' else None,
                     'summary': summary, 'total': len(selected), 'offset': card_offset,
                     'blockers_offset': blocker_offset, 'task_cards_offset': card_offset,
@@ -1246,8 +1247,15 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
                     "preflight": view.model_dump(mode="json") if view else None,
                     "section_statuses": section_statuses}
 
+    from .v5_contracts import SyncWorksheetsRequest
+
     @app.post('/api/v1/previews/{preview_id}/sync-worksheets')
-    def sync_confirmed_worksheets(preview_id: str, operator: ActorDependency, section: str | None = None):
+    def sync_confirmed_worksheets(
+        preview_id: str,
+        operator: ActorDependency,
+        section: str | None = None,
+        command: SyncWorksheetsRequest | None = Body(default=None),
+    ):
         require(operator, Capability.CONFIRM_FACT)
         from .worksheet_seed import provision_from_results
         with store.connect() as conn:
@@ -1259,7 +1267,12 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
                 (upload["project"], preview_id, section, section))
             ids = [version_id for row in rows for version_id in
                    json.loads(row["detail_json"]).get("result_version_ids", [])]
-            return {"worksheet_sync": provision_from_results(conn, worksheets, upload["project"], ids, operator)}
+            stages = command.material_stages if command else None
+            return {
+                "worksheet_sync": provision_from_results(
+                    conn, worksheets, upload["project"], ids, operator, material_stages=stages
+                )
+            }
 
     @app.get('/api/v1/previews/{preview_id}/worksheets')
     def worksheets_for_import(preview_id: str, operator: ActorDependency, section: str | None = None):

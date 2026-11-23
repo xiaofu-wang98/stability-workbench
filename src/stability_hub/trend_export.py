@@ -104,11 +104,18 @@ def chart_data(snapshot,view='adopted',axis=None,aligned_fields=()):
 
 
 def write_png(path,snapshot,view='adopted',aligned_fields=()):
+    import re
     import matplotlib
     matplotlib.use('Agg')
     from matplotlib import pyplot as plt
     from matplotlib.font_manager import FontProperties
     data = chart_data(snapshot,view,aligned_fields=aligned_fields)
+    if not data['points']:
+        raise WorkflowError(
+            'chart_no_numeric_points',
+            '当前所选范围没有可绘制的精确数值结果（均为定性描述、N/A 或限度符号），无法生成数值趋势图；请改选定量数值检项。',
+            422,
+        )
     font_path = Path('C:/Windows/Fonts/msyh.ttc')
     font = FontProperties(fname=str(font_path)) if font_path.exists() else FontProperties()
     sample,presentation,study,study_id,condition,item,method,version,unit,time_unit,purpose,reporting_basis = data['scope']
@@ -135,7 +142,13 @@ def write_png(path,snapshot,view='adopted',aligned_fields=()):
         def human(value):
             return '原文未注明（独立来源）' if value.startswith('原文未注明@') else value
         ax.set_title(title + '\n' + f'{sample}/{purpose}/{reporting_basis or "共用结果"} | {human(presentation)} | {study_label}/{human(study_id)} | {condition}',fontproperties=font,fontsize=11)
-        ax.set_ylabel(unit or 'source unit not reported',fontproperties=font)
+        if unit:
+            y_label = unit
+        elif re.search(r'(?<![A-Za-z])pH(?![A-Za-z])', data['item_label'] or '', re.I):
+            y_label = 'pH（无量纲）'
+        else:
+            y_label = '无量纲'
+        ax.set_ylabel(y_label,fontproperties=font)
         ax.set_ylim(data['axis']['min'],data['axis']['max'])
         ax.set_xlabel('Days' if time_unit=='D' else 'Months' if time_unit=='M' else 'Batch')
         if time_unit=='release':
@@ -155,12 +168,12 @@ def write_png(path,snapshot,view='adopted',aligned_fields=()):
         caption = '\n'.join(notes) if data['omitted'] else 'Only confirmed exact numeric results; missing time points remain missing.'
         if data['unresolved_worksheet_count']:
             caption += f"\nUnresolved source worksheets: {data['unresolved_worksheet_count']} (excluded from facts; see SourceStatus)."
-        fig.text(.01,.01,caption,
+        fig.text(.01,.028,caption,
                  fontsize=8,fontproperties=font)
         if data['omitted']:
-            fig.subplots_adjust(bottom=min(.4,.12+.025*len(notes)))
+            fig.subplots_adjust(bottom=min(.46,.165+.027*len(notes)))
         else:
-            fig.subplots_adjust(bottom=.15)
+            fig.subplots_adjust(bottom=.185)
         fig.savefig(path,dpi=140,metadata={'Description':encoded(data)})
     finally:
         plt.close(fig)

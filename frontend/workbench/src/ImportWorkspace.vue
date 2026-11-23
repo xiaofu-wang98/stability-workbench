@@ -89,11 +89,36 @@ const sections = ref<string[]>([]);
 const sectionStatuses = ref<SectionStatus[]>([]);
 const preflight = ref<Preflight>();
 const linkedSheets = ref<{ id: string; name: string }[]>([]);
-type WorksheetSync = { slot_id: string; batch: string; condition: string; status: string; reason?: string };
+type WorksheetSync = {
+  slot_id: string;
+  batch: string;
+  condition: string;
+  status: string;
+  reason?: string;
+  sample_type?: string;
+  missing_fields?: string[];
+  suggested_material_stage?: string;
+};
 type CommitReceipt = { result_version_ids: string[]; counts: Record<string, number>; historical_count: number;
   worksheet_sync?: WorksheetSync[] };
 const commitReceipt = ref<CommitReceipt>();
 const worksheetSync = ref<WorksheetSync[]>([]);
+const syncStageDrafts = ref<Record<string, string>>({});
+const SAMPLE_TYPE_DEFAULT_STAGE: Record<string, string> = { DS: '原液', DP: '制剂', placebo: '安慰剂' };
+const needsStageSyncItems = computed(() =>
+  worksheetSync.value.filter(
+    item => item.status === 'needs_input' && (item.missing_fields?.includes('样品材料阶段') || item.reason?.includes('样品材料阶段'))
+  )
+);
+watch(worksheetSync, (items) => {
+  const next: Record<string, string> = {};
+  for (const item of items) {
+    if (item.status !== 'needs_input') continue;
+    const suggested = item.suggested_material_stage || (item.sample_type ? SAMPLE_TYPE_DEFAULT_STAGE[item.sample_type] : '') || '';
+    next[item.slot_id] = syncStageDrafts.value[item.slot_id] || suggested;
+  }
+  syncStageDrafts.value = next;
+}, { immediate: true });
 const suggestions = ref<string[]>([]);
 const error = ref('');
 const status = ref('');
@@ -850,18 +875,31 @@ async function commit() {
     try { message.success(status.value); } catch {}
   });
 }
-function syncWorksheets() {
+function syncWorksheets(materialStages?: Record<string, string>) {
   return run(async () => {
     if (!preview.value) return;
     const source = preview.value.preview_id;
-    const section = preflight.value?.section;
-    const result = await api<{ worksheet_sync: WorksheetSync[] }>(
-      path.value + '/sync-worksheets' + (section ? '?section=' + encodeURIComponent(section) : ''), { method: 'POST' });
-    await open(source, section);
+    const currentSection = preflight.value?.section;
+    const url = path.value + '/sync-worksheets' + (currentSection ? '?section=' + encodeURIComponent(currentSection) : '');
+    const cleaned = materialStages
+      ? Object.fromEntries(Object.entries(materialStages).map(([k, v]) => [k, v.trim()]).filter(([, v]) => v))
+      : undefined;
+    const result = cleaned && Object.keys(cleaned).length
+      ? await post<{ worksheet_sync: WorksheetSync[] }>(url, { material_stages: cleaned })
+      : await api<{ worksheet_sync: WorksheetSync[] }>(url, { method: 'POST' });
+    await open(source, currentSection);
     worksheetSync.value = result.worksheet_sync;
     status.value = `已生成 ${worksheetSync.value.filter(item => item.status === 'created').length} 张研究表。`;
     try { message.success(status.value); } catch {}
   });
+}
+function confirmSyncMaterialStages() {
+  const stages: Record<string, string> = {};
+  for (const item of needsStageSyncItems.value) {
+    const val = (syncStageDrafts.value[item.slot_id] || '').trim();
+    if (val) stages[item.slot_id] = val;
+  }
+  return syncWorksheets(stages);
 }
 </script>
 
@@ -1273,7 +1311,7 @@ function syncWorksheets() {
           <NButton v-if="nextIncompleteSection" type="primary" :disabled="busy" @click="checkDirtyAndConfirm(() => run(() => selectSection(nextIncompleteSection)))">
             1. 继续处理下一张表（{{ nextIncompleteSection }}）
           </NButton>
-          <NButton v-if="!sourceOnly" secondary type="info" :loading="busy" @click="syncWorksheets">
+          <NButton v-if="!sourceOnly" secondary type="info" :loading="busy" @click="syncWorksheets()">
             2. 同步/生成研究表
           </NButton>
           <RouterLink :to="{ path: '/projects/' + encodeURIComponent(preview.project), query: { focus: 'results' } }" class="next-link-btn">
@@ -1282,12 +1320,35 @@ function syncWorksheets() {
         </div>
       </NAlert>
 
-      <ul v-if="worksheetSync.some(item => item.status === 'needs_input')" class="needs-input-list">
-        <li v-for="item in worksheetSync.filter(entry => entry.status === 'needs_input')" :key="item.slot_id">
-          {{ item.batch }} · {{ item.condition }} · {{ item.reason }}
-          <RouterLink :to="{ path: '/new', query: { project: preview.project || project, batch: item.batch, slot: item.slot_id } }">补齐并建表</RouterLink>
-        </li>
-      </ul>
+      <div v-if="worksheetSync.some(item => item.status === 'needs_input')" class="needs-input-box">
+        <div v-if="needsStageSyncItems.length" class="batch-stage-sync-card">
+          <div class="batch-stage-head">
+            <strong>批量确认样品材料阶段（已按 DS→原液 / DP→制剂 / placebo→安慰剂 预填，确认后一键生成研究表）</strong>
+            <NButton type="primary" size="small" :loading="busy" :disabled="busy" @click="confirmSyncMaterialStages">
+              确认以上材料阶段并批量同步研究表
+            </NButton>
+          </div>
+          <ul class="needs-input-list">
+            <li v-for="item in worksheetSync.filter(entry => entry.status === 'needs_input')" :key="item.slot_id">
+              <span>{{ item.batch }} · {{ item.condition }} · {{ item.reason }}</span>
+              <input
+                v-if="item.missing_fields?.includes('样品材料阶段') || item.reason?.includes('样品材料阶段')"
+                v-model="syncStageDrafts[item.slot_id]"
+                type="text"
+                placeholder="如：原液 / 制剂 / 安慰剂"
+                class="stage-sync-input"
+              />
+              <RouterLink :to="{ path: '/new', query: { project: preview.project || project, batch: item.batch, slot: item.slot_id } }">逐项补齐并建表</RouterLink>
+            </li>
+          </ul>
+        </div>
+        <ul v-else class="needs-input-list">
+          <li v-for="item in worksheetSync.filter(entry => entry.status === 'needs_input')" :key="item.slot_id">
+            {{ item.batch }} · {{ item.condition }} · {{ item.reason }}
+            <RouterLink :to="{ path: '/new', query: { project: preview.project || project, batch: item.batch, slot: item.slot_id } }">补齐并建表</RouterLink>
+          </li>
+        </ul>
+      </div>
 
       <p v-if="preflight && (preflight.state === 'ready' || preflight.state === 'committed') && preflightCounts.length" class="preflight-counts-line">
         {{ preflight.state === 'ready' ? '待提交范围' : '已提交范围' }}：{{ preflightCounts.join(' · ') }}
@@ -1857,6 +1918,31 @@ function syncWorksheets() {
 }
 .next-link-btn:hover { background: var(--brand-soft); border-color: var(--brand-border); color: var(--brand); text-decoration: none; }
 
+.needs-input-box { width: 100%; }
+.batch-stage-sync-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  padding: 12px 14px;
+  display: grid;
+  gap: 8px;
+}
+.batch-stage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+.stage-sync-input {
+  margin: 0 8px;
+  padding: 2px 8px;
+  width: 120px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 13px;
+}
 .needs-input-list { margin: 0; padding-left: 20px; font-size: 13.5px; color: var(--text-secondary); }
 .preflight-counts-line { margin: 0; font-size: 13px; color: var(--text-secondary); font-weight: 500; }
 

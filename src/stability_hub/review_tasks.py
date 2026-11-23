@@ -204,7 +204,7 @@ def project_tasks(preview, flights, sheets):
                             "eligible": True,
                             "operation": "classify",
                             "role": "auxiliary",
-                            "reason": "确认该表尾非结果区域为绘图辅助说明 · 不入库",
+                            "reason": "确认该表外非结果区域为辅助用途（auxiliary）· 不入库",
                         }
                         if kind == "region" and region.get("role") == "unclassified"
                         else {}
@@ -241,6 +241,21 @@ def project_tasks(preview, flights, sheets):
                         else fields
                     )
                     tid = digest([preview.preview_id, kind, c.id, c.issue_code])
+                    same_value_prev = (
+                        flight.previous_versions.get(c.id)
+                        if code == "history" and c.status == "same_value"
+                        else None
+                    )
+                    history_proposal = (
+                        {
+                            "eligible": True,
+                            "operation": "repeat_source",
+                            "previous_version_id": same_value_prev,
+                            "reason": "与库内已采用值严格一致，可批量登记为同值重复来源佐证",
+                        }
+                        if same_value_prev
+                        else {}
+                    )
                     task = ReviewTask(
                         id=tid,
                         code=code,
@@ -252,12 +267,18 @@ def project_tasks(preview, flights, sheets):
                         if code == "identity"
                         else "草稿决定须必要权限批准，正式值保持不变。"
                         if code == "approval"
+                        else "与库内历史采用值完全一致，可登记为同值重复来源佐证，或单独查看历史版本。"
+                        if same_value_prev
                         else "请核对当前历史版本，选择保留旧值、更正或独立复测。",
                         actions=("approve",)
                         if code == "approval"
+                        else ("repeat_source", "decision")
+                        if same_value_prev
                         else ("decision",)
                         if code == "history"
                         else ("edit", "structure"),
+                        proposal=history_proposal,
+                        batch_key="repeat_source" if same_value_prev else (digest(["identity", fields]) if code == "identity" else None),
                         base_revision=preview.base_revision,
                     )
                 else:
@@ -899,10 +920,34 @@ def build_task_cards(conn, upload, preview, flight, sheets, tasks, *, index=None
         if (task.code == "source_revision" and "keep_active" in task.actions
                 and proposal.get("eligible") and proposal.get("operation") == "keep_active" and not task.exception):
             whole = proposal.get("kind") == "whole"
+            row_wide = affected > 1 and "result" not in task.fields
             quick_choices.append({
-                "label": "确认整格划除（无有效保留值）" if whole else "核对并保留未划线正文",
+                "label": (
+                    f"确认整格划除并应用至整行 {affected} 个时间点"
+                    if whole and row_wide
+                    else "确认整格划除（无有效保留值）"
+                    if whole
+                    else f"按行一键应用至整行 {affected} 个时间点（保留未划线正文）"
+                    if row_wide
+                    else "核对并保留未划线正文"
+                ),
                 "fields": {}, "operation": "keep_active",
-                "default_reason": "核对原格已全部划除，确认无有效保留值" if whole else "核对未划线正文无误，采纳修订后数值",
+                "default_reason": (
+                    f"核对原格已全部划除，按行应用至整行 {affected} 个时间点"
+                    if whole and row_wide
+                    else "核对原格已全部划除，确认无有效保留值"
+                    if whole
+                    else f"核对未划线正文无误，按行一键应用至整行 {affected} 个时间点"
+                    if row_wide
+                    else "核对未划线正文无误，采纳修订后数值"
+                ),
+            })
+        if (task.code == "history" and "repeat_source" in task.actions
+                and proposal.get("eligible") and proposal.get("operation") == "repeat_source"):
+            quick_choices.append({
+                "label": "确认为同值重复来源（沿用已采用值）",
+                "fields": {}, "operation": "repeat_source",
+                "default_reason": "核对与库内历史已采用值严格一致，登记为同值重复来源佐证",
             })
         if (task.code == "source_comment" and "keep_body" in task.actions
                 and proposal.get("operation") == "keep_body"):
@@ -991,13 +1036,18 @@ def build_action_groups(tasks, physical_sheets, section, preview):
     sheet_tasks = [t for t in tasks if t.section == section and t.proposal.get("eligible") and not t.exception]
     groups = []
 
-    # 1. Standard revisions
-    std_tasks = [t for t in sheet_tasks if (t.code in ("source_revision", "standard") or set(t.fields) <= {"criterion", "subresult"}) and "result" not in t.fields and t.code != "region"]
+    # 1. Standard / item / method revisions (row-wide non-result strikethroughs)
+    std_tasks = [
+        t for t in sheet_tasks
+        if (t.code in ("source_revision", "standard")
+            or set(t.fields) <= {"criterion", "subresult", "test_item", "method", "method_version"})
+        and "result" not in t.fields and t.code != "region"
+    ]
     if std_tasks:
         groups.append(ActionGroup(
             group_id=f"ag_std_{section}",
-            title=f"标准删改 {len(std_tasks)} 处",
-            reason="批量采用本表质量标准修改建议",
+            title=f"标准/检项删改 {len(std_tasks)} 处",
+            reason="按行批量采用本表质量标准、检项或方法划线修订（整行时间点同步应用）",
             scope=TaskBatchScope(section=section, task_ids=tuple(t.id for t in std_tasks), operation='suggested'),
             decision_count=len(std_tasks),
             affected_result_count=len({m["candidate_id"] for t in std_tasks for m in t.members if "candidate_id" in m}),
@@ -1030,13 +1080,13 @@ def build_action_groups(tasks, physical_sheets, section, preview):
             base_revision=preview.base_revision,
         ))
 
-    # 4. Auxiliary / unclassified tail regions
+    # 4. Auxiliary / unclassified out-of-table regions (B-1)
     reg_tasks = [t for t in sheet_tasks if t.code == "region" and t.proposal.get("operation") == "classify"]
     if reg_tasks:
         groups.append(ActionGroup(
             group_id=f"ag_reg_{section}",
-            title=f"辅助区域 {len(reg_tasks)} 处",
-            reason="确认表尾绘图/计算辅助区域不入库",
+            title=f"非结果表外区域 {len(reg_tasks)} 处（一键归为 auxiliary）",
+            reason="核对预览中全部坐标与前 30 字摘要后，一键将本表非结果表外区域归类为 auxiliary（不入库）",
             scope=TaskBatchScope(section=section, task_ids=tuple(t.id for t in reg_tasks), operation='classify', role=reg_tasks[0].proposal.get('role', 'auxiliary')),
             decision_count=len(reg_tasks),
             affected_result_count=0,
@@ -1068,6 +1118,102 @@ def build_action_groups(tasks, physical_sheets, section, preview):
             affected_result_count=len({m["candidate_id"] for t in cmt_tasks for m in t.members if "candidate_id" in m}),
             base_revision=preview.base_revision,
         ))
+
+    # 7. Strictly same-value historical repeat sources (B-2; never includes different-value conflicts)
+    repeat_tasks = [t for t in sheet_tasks if t.code == "history" and t.proposal.get("operation") == "repeat_source"]
+    if repeat_tasks:
+        groups.append(ActionGroup(
+            group_id=f"ag_repeat_{section}",
+            title=f"同值重复来源 {len(repeat_tasks)} 条",
+            reason="仅针对与库内已采用值严格一致的重复来源，一键登记重复来源佐证（不同值冲突仍需逐条人工决策）",
+            scope=TaskBatchScope(section=section, task_ids=tuple(t.id for t in repeat_tasks), operation='repeat_source'),
+            decision_count=len(repeat_tasks),
+            affected_result_count=len({m["candidate_id"] for t in repeat_tasks for m in t.members if "candidate_id" in m}),
+            base_revision=preview.base_revision,
+        ))
+
+    return groups
+
+
+def build_bulk_identity_groups(tasks, section, preview):
+    """Group multi-row/column missing-identity tasks on a sheet for B-3 batch fill."""
+    from openpyxl.utils import get_column_letter
+    from .v5_contracts import TaskBatchScope
+
+    sheet_allowed = {"sample_type", "study", "condition", "presentation", "purpose", "batch", "study_id"}
+    col_allowed = sheet_allowed | {"time_point"}
+    candidates = {c.id: c for c in preview.candidates}
+    active = [
+        t for t in tasks
+        if t.section == section
+        and t.code == "identity"
+        and t.blockers
+        and t.fields
+        and t.batch_key
+        and set(t.fields) <= col_allowed
+    ]
+    groups = []
+
+    by_fields = defaultdict(list)
+    for t in active:
+        if set(t.fields) <= sheet_allowed:
+            by_fields[(t.batch_key, t.fields)].append(t)
+    for (_, fields), bucket in by_fields.items():
+        if len(bucket) < 2:
+            continue
+        cids = sorted({m["candidate_id"] for t in bucket for m in t.members if "candidate_id" in m})
+        labels = [FIELD_LABELS.get(f, f) for f in fields]
+        groups.append({
+            "group_id": f"ag_id_sheet_{digest([section, fields])[:10]}",
+            "mode": "sheet",
+            "title": f"整表批量补齐{'、'.join(labels)}（{len(bucket)} 项 / {len(cids)} 条结果）",
+            "fields": list(fields),
+            "field_labels": {f: FIELD_LABELS.get(f, f) for f in fields},
+            "task_count": len(bucket),
+            "affected_result_count": len(cids),
+            "scope": TaskBatchScope(
+                section=section,
+                task_ids=tuple(t.id for t in bucket),
+                operation="manual",
+            ).model_dump(mode="json"),
+        })
+
+    # Per-column grouping for columns sharing missing identity/time_point (e.g. result_panels)
+    by_col = defaultdict(list)
+    for t in active:
+        cols = {
+            candidates[m["candidate_id"]].location.column
+            for m in t.members
+            if m.get("candidate_id") in candidates
+        }
+        if len(cols) == 1:
+            col = next(iter(cols))
+            by_col[(col, t.batch_key, t.fields)].append(t)
+    sheet_covered = {tuple(g["scope"]["task_ids"]) for g in groups}
+    for (col, _, fields), bucket in sorted(by_col.items()):
+        if len(bucket) < 2:
+            continue
+        tids = tuple(t.id for t in bucket)
+        if tids in sheet_covered:
+            continue
+        cids = sorted({m["candidate_id"] for t in bucket for m in t.members if "candidate_id" in m})
+        labels = [FIELD_LABELS.get(f, f) for f in fields]
+        col_letter = get_column_letter(col)
+        groups.append({
+            "group_id": f"ag_id_col_{col_letter}_{digest([section, col, fields])[:8]}",
+            "mode": "column",
+            "column": col_letter,
+            "title": f"按列批量补齐第 {col_letter} 列{'、'.join(labels)}（{len(bucket)} 项 / {len(cids)} 条结果）",
+            "fields": list(fields),
+            "field_labels": {f: FIELD_LABELS.get(f, f) for f in fields},
+            "task_count": len(bucket),
+            "affected_result_count": len(cids),
+            "scope": TaskBatchScope(
+                section=section,
+                task_ids=tids,
+                operation="manual",
+            ).model_dump(mode="json"),
+        })
 
     return groups
 

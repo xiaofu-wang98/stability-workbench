@@ -1,5 +1,5 @@
 """V5 additive worksheet contract. Commands are drafts until sheet commit."""
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import Field, StringConstraints
 
@@ -238,7 +238,7 @@ class TaskBatchScope(Model):
     task_ids: tuple[Text, ...] = Field(default=(),max_length=20000)
     candidate_ids: tuple[Text, ...] = Field(default=(),max_length=20000)
     include_sections: tuple[SectionName, ...] = ()
-    operation: Literal['keep_active','manual','keep_body','exclude','suggested','exclude_selected','classify','keep_single']
+    operation: Literal['keep_active','manual','keep_body','exclude','suggested','exclude_selected','classify','keep_single','repeat_source']
     fields: dict[str,str] = Field(default_factory=dict)
     exclude_candidate_ids: tuple[Text, ...] = Field(default=(),max_length=20000)
     region_ids: tuple[Text, ...] = Field(default=(),max_length=20000)
@@ -285,7 +285,11 @@ class SheetCommitResult(Model):
     historical_count: int
     result_version_ids: tuple[str, ...]
     state: Literal['committed'] = 'committed'
-    worksheet_sync: tuple[dict[str, str], ...] = ()
+    worksheet_sync: tuple[dict[str, Any], ...] = ()
+
+
+class SyncWorksheetsRequest(Model):
+    material_stages: dict[str, str] = Field(default_factory=dict)
 
 
 class ManualResult(Model):

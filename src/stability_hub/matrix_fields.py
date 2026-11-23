@@ -35,17 +35,46 @@ def method_lines(text):
     return lines
 
 
-def presentation_lines(text):
-    """Prove unit/container translation equivalence without merging strengths."""
-    lines = [v.strip() for v in str(text).splitlines() if v.strip()]
-    def token(value):
-        value = re.sub(r'\s+', '', value).casefold()
-        value = re.sub(r'(?<=/)(?:bottles?|vials?)\b', '瓶', value)
-        value = re.sub(r'(?<=/)bags?\b', '袋', value)
-        value = value.replace('毫升','ml').replace('毫克','mg')
+def normalize_presentation(text):
+    """Canonicalize presentation spacing and fullwidth punctuation without altering dose or container."""
+    value = str(text or '').strip()
+    if not value or '\n' in value:
         return value
-    if len(lines)>1 and len({token(v) for v in lines})==1:
-        return lines[:1]
+    value = value.replace('（', '(').replace('）', ')').replace('／', '/').replace('　', ' ')
+    value = re.sub(r'[ \t]+', ' ', value)
+    # Remove spaces between numeric dose/volume and unit, and around '/'
+    value = re.sub(r'(?<=\d)\s+(?=(?:m[gl]|μg|ug|ng|kg|IU|U|L)\b)', '', value, flags=re.I)
+    value = re.sub(r'\s*/\s*', '/', value)
+    value = re.sub(r'\(\s*', '(', value)
+    value = re.sub(r'\s*\)', ')', value)
+    return value.strip()
+
+
+def presentation_lines(text):
+    """Prove strict dose/volume + container translation equivalence without merging distinct strengths or containers."""
+    lines = [v.strip() for v in str(text).splitlines() if v.strip()]
+    if len(lines) <= 1:
+        return lines
+
+    def has_cn(value):
+        return any('\u4e00' <= ch <= '\u9fff' for ch in value)
+
+    def canonical_token(value):
+        value = value.replace('（', '(').replace('）', ')').replace('／', '/')
+        value = re.sub(r'\s+', '', value).casefold()
+        value = value.replace('毫升', 'ml').replace('毫克', 'mg').replace('微克', 'μg').replace('微升', 'μl')
+        # Strict CN<->EN container equivalence (never conflate 支 vs vial!)
+        value = re.sub(r'(?<=/)(?:bottles?|vials?)\b', '瓶', value)
+        value = re.sub(r'(?<=/)(?:pre[\s-]*filled\s*syringes?|syringes?|pens?|cartridges?)\b', '支', value)
+        value = re.sub(r'(?<=/)bags?\b', '袋', value)
+        value = re.sub(r'(?<=/)box(?:es)?\b', '盒', value)
+        return value
+
+    tokens = [canonical_token(v) for v in lines]
+    if len(set(tokens)) == 1:
+        # Prefer Chinese line if bilingual CN+EN pair
+        cn_first = next((v for v in lines if has_cn(v)), lines[0])
+        return [cn_first]
     return lines
 
 
@@ -116,10 +145,42 @@ def appearance_component(parent, criterion):
     return '固体外观' if solid else '复溶液外观'
 
 
+def _strip_redundant_method_parens(name, method):
+    """Strip parenthetical method text ONLY when 100% synonymous with extracted method; preserve modifiers like (cpB酶切)."""
+    if not name:
+        return name
+    cleaned = name.strip()
+    if method:
+        from .platform_catalog import normalize_method_signature
+
+        target_sig = normalize_method_signature(method)
+        target_core = compact(method).removesuffix('法').strip().casefold()
+
+        def _replace(match):
+            inner = match.group(1).strip()
+            if not inner:
+                return match.group(0)
+            # Guardrail: never strip pre-treatment/condition modifiers or multi-part clauses like (cpB酶切) or (cpB酶切，icIEF法)
+            if re.search(r'[，,、;；/+]|酶切|消化|前处理|预处理|去除|标记|变性|非变性|cpb|pngase|trypsin|digest', inner, re.I):
+                return match.group(0)
+            inner_core = compact(inner).removesuffix('法').strip().casefold()
+            inner_sig = normalize_method_signature(inner)
+            if (target_core and inner_core == target_core) or (target_sig and inner_sig == target_sig):
+                return ''
+            return match.group(0)
+
+        cleaned = re.sub(r'\s*[（(]([^()（）]+)[）)]', _replace, cleaned).strip()
+    # Strip redundant trailing English duplicate 'Purity' only when Chinese '纯度' is already present
+    if cleaned.startswith('纯度'):
+        cleaned = re.sub(r'\s*Purity\s*$', '', cleaned, flags=re.I).strip()
+    return cleaned or name.strip()
+
+
 def item_text(parent, criterion, method='', subresult='', result=''):
     """Labels distinguish explicit subresults without importing their acceptance limits."""
     parent = re.sub(r'^\s*\d+[.、．]\s*', '', parent).strip()
     first = parent.splitlines()[0].strip() if parent else ''
+    first = _strip_redundant_method_parens(first, method)
     sub = ''
     labels = [
         (r'\bHMW\b|高分子量', 'HMW'),
@@ -146,10 +207,8 @@ def item_text(parent, criterion, method='', subresult='', result=''):
     # A compound A/B result must stay compound until explicitly resolved by a human.
     if re.search(r'Group\s*A', criterion, re.I) and re.search(r'Group\s*B', criterion, re.I):
         sub = 'Group A / Group B（组合结果）'
-    elif re.search(r'(?:≥|>=)\s*10\s*[μµu]m', criterion):
-        sub = '≥10μm'
-    elif re.search(r'(?:≥|>=)\s*25\s*[μµu]m', criterion):
-        sub = '≥25μm'
+    elif (particle := re.search(r'(?:≥|>=)\s*(2|5|10|25)\s*[μµu]m', criterion)):
+        sub = f'≥{particle.group(1)}μm'
     elif re.search(r'HGEG|H1-W25|H1-K28|H1-R46|(?<![A-Z])-HG', criterion):
         sub = re.split(r'[:：]', criterion.splitlines()[0])[0].strip()
     if not sub and '图谱一致' in criterion:
@@ -158,12 +217,11 @@ def item_text(parent, criterion, method='', subresult='', result=''):
         sub = '主峰纯度'
     if not sub and subresult:
         sub = appearance_component(first, criterion)
-    if not sub:
-        if '中国申报' in criterion or 'for China' in criterion:
-            sub = '中国申报'
-        elif '美国申报' in criterion or '欧洲申报' in criterion:
-            sub = '美国/欧洲申报'
-    if not sub and subresult and len(purity_labels) <= 1:
+    filing_src = f"{criterion}\n{parent}"
+    has_cn_filing = bool('中国申报' in filing_src or re.search(r'\bfor\s+China\b', filing_src, re.I))
+    has_us_eu_filing = bool('美国申报' in filing_src or '欧洲申报' in filing_src or re.search(r'\bfor\s+(?:United\s+States|US|Europe|EU)\b', filing_src, re.I))
+    filing = '中国申报' if has_cn_filing and not has_us_eu_filing else '美国/欧洲申报' if has_us_eu_filing and not has_cn_filing else ''
+    if not sub and not filing and subresult and len(purity_labels) <= 1:
         first_subresult = next((line.strip() for line in subresult.splitlines() if line.strip()), '')
         cleaned_sub = re.sub(r'^[（(]\s*([^）)]+)\s*[）)]', r'\1', first_subresult)
         label = re.split(r'[:：%％（(≤≥<>]', cleaned_sub, maxsplit=1)[0].strip()
@@ -189,21 +247,24 @@ def item_text(parent, criterion, method='', subresult='', result=''):
     basis_label = {'CHP': 'ChP', 'EP': 'EP', 'USP': 'USP'}.get(next(iter(basis))) if len(basis) == 1 else ''
     if basis_label and sub.upper() in {'CHP', 'EP', 'USP'}:
         sub = ''
-    parts = [first, compact(method), sub, basis_label]
+    parts = [first, compact(method), sub, filing, basis_label]
     return ' · '.join(dict.fromkeys(p for p in parts if p))
 
 
 def method_text(text, embedded=False):
     text = compact(text)
-    patterns = [(r'NR\s*CE|nrCE|非还原', 'NR CE-SDS'), (r'(?<!N)R\s*CE|(?<!n)rCE|还原', 'R CE-SDS'),
-                (r'SEC(?:-HPLC)?', 'SEC-HPLC'), (r'RP-HPLC', 'RP-HPLC'),
-                (r'RP-UPLC', 'RP-UPLC'), (r'icIEF', 'icIEF'), (r'ELISA', 'ELISA'),
-                (r'Cell based|cAMP', 'Cell based cAMP'), (r'\bUV\b', 'UV')]
+    patterns = [
+        (r'(?<![A-Za-z])NR\s*CE(?![A-Za-z])|(?<![A-Za-z])nrCE(?![A-Za-z])|非还原', 'NR CE-SDS'),
+        (r'(?<![A-Za-z])R\s*CE(?![A-Za-z])|(?<![A-Za-z])rCE(?![A-Za-z])|(?<!非)还原', 'R CE-SDS'),
+        (r'SEC(?:-HPLC)?', 'SEC-HPLC'), (r'RP-HPLC', 'RP-HPLC'),
+        (r'RP-UPLC', 'RP-UPLC'), (r'icIEF', 'icIEF'), (r'ELISA', 'ELISA'),
+        (r'Cell based|cAMP', 'Cell based cAMP'), (r'\bUV\b', 'UV'),
+    ]
     for pattern, value in patterns:
         if re.search(pattern, text, re.I):
             return value
     if embedded:
-        explicit = re.findall(r'[（(]([^()（）]{1,35}法)\s*[）)]', text)
+        explicit = re.findall(r'[（(]\s*([^()（）]{1,35}法)(?:\s*[（(][^()（）]{1,30}[）)])?\s*[）)]', text)
         if len(set(explicit)) == 1:
             return explicit[0].strip().removesuffix('法')
     if not embedded and len(text) <= 60:
@@ -315,5 +376,5 @@ def interpret_matrix_fields(source, section, *, reference_rules=True, explicit_p
     criterion = source.get('criterion', '')
     unit = re.search(r'mg/ml|mg/mL|EU/mg|cfu/10\s*ml|mOsmol/kg', criterion, re.I)
     fields['unit'] = unit.group() if unit else '%' if '%' in criterion or '％' in criterion else ''
-    fields['presentation'] = str(source.get('presentation','')).strip()
+    fields['presentation'] = normalize_presentation(source.get('presentation', ''))
     return fields
