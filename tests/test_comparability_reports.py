@@ -39,7 +39,8 @@ def test_axis_profiles_and_manual_clipping():
     assert axis_range([.3,.6],'纯度 SEC-HPLC HMW','%')['max']==5
     assert axis_range([.3,8],'HMW','%')['max']>=8
     assert axis_range([99.3,99.6],'单体 Monomer','%')['min']==90
-    assert axis_range([7,7.1],'pH','')['max']==14
+    ph_scale = axis_range([7, 7.1], 'pH', '')
+    assert ph_scale['family'] == 'ph' and 5.5 <= ph_scale['min'] <= 6.0 and 8.0 <= ph_scale['max'] <= 8.5
     assert axis_range([99,105],'相对活性','%')['max']>105
     detail=axis_range([.3,.6],'HMW','%','detail')
     assert detail['max']-detail['min']<1

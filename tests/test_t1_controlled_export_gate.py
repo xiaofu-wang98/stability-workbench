@@ -68,7 +68,7 @@ def test_controlled_labels_for_new_and_existing_historical_plans(tmp_path, confi
         with closing(load_workbook(BytesIO(content))) as book:
             grid = book.active
             assert grid["A6"].value.startswith(original)
-            assert grid["D2"].value == "UNIT-1" and grid["J3"].value == "☑ 常熟工厂"
+            assert grid["D2"].value == "UNIT-1" and grid["J3"].value == "□相城工厂X  ☑常熟工厂C  □园区工厂S"
             assert [grid[cell].value for cell in ("C6", "D6")] == ["98", "97"]
 
 
@@ -165,7 +165,7 @@ def test_real_t1_controlled_gate(real_t1):
                         labels_checked[project] += 1
                     if project == "IP281":
                         assert grid["D2"].value == original["DP长期"]["D2"].value == "A-8111N"
-                        assert grid["J3"].value == "☑ 常熟工厂"
+                        assert grid["J3"].value == "□相城工厂X  ☑常熟工厂C  □园区工厂S"
                         assert grid["I43"].value == original["DP长期"]["I49"].value.strip()
                         assert all("AE-C-IP281-2026006" not in str(grid.cell(43, col).value)
                                    for col in range(1, grid.max_column + 1) if col != 9)

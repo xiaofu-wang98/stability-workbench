@@ -26,12 +26,21 @@ def axis_range(values, label, unit, mode='overview', lower=None, upper=None):
         elif unit.strip() in {'%', '％'} and re.search(r'\bhmw\b|\blmw\b|聚合|高分子|低分子|杂质|impurit|aggregate', name):
             family = 'impurity_percent'
             a, b = min(0., lo), max(5., hi*1.1)
-        elif unit.strip() in {'%', '％'} and re.search(r'monomer|单体|纯度|purity|主峰', name):
+        elif (unit.strip() in {'%', '％'} or (not unit.strip() and 50. <= lo and hi <= 100.)) and re.search(r'monomer|单体|纯度|purity|主峰', name):
             family = 'purity_percent'
             a, b = min(90., lo-max(span*.1, 1)), max(100., hi)
         elif re.search(r'(^|[^a-z])ph([^a-z]|$)|酸碱', name):
             family = 'ph'
-            a, b = min(0., lo), max(14., hi)
+            pad = min(1.5, max(1.0, span * 0.25))
+            a, b = lo - pad, hi + pad
+            if lo >= 0:
+                a = max(0., a)
+            if hi <= 14:
+                b = min(14., b)
+            a = round(math.floor(a * 2 + 1e-9) / 2, 4)
+            b = round(math.ceil(b * 2 - 1e-9) / 2, 4)
+            return {'mode':mode, 'min':a, 'max':b, 'family':family,
+                    'note':'显示尺度，不代表质量标准或可比性接受限度。'}
         elif unit.strip() in {'%', '％'}:
             family = 'relative_percent'
             a, b = min(0., lo), max(100., hi*1.1)
@@ -43,7 +52,7 @@ def axis_range(values, label, unit, mode='overview', lower=None, upper=None):
             if lo >= 0 and a < 0:
                 a = 0.
         step = 10**math.floor(math.log10(max(b-a, 1e-300)))/5
-        a, b = math.floor(a/step)*step, math.ceil(b/step)*step
+        a, b = round(math.floor(a/step + 1e-12)*step, 10), round(math.ceil(b/step - 1e-12)*step, 10)
     else:
         raise WorkflowError('axis_mode', '未知坐标显示模式。')
     return {'mode':mode, 'min':a, 'max':b, 'family':family,

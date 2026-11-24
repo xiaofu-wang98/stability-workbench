@@ -195,11 +195,19 @@ def test_r3_fix2_confirmation_and_results_expose_categories():
         "results": {},
     }
     rows = list(workbook_rows(snapshot))
-    assert rows[6] == ("检项", "方法", "方法版本", "单位", "0M", "质量大类", "细分小类")
-    assert rows[8][0] == "肽图"
-    assert rows[8][5:] == ("1.鉴别", "肽图")
-    assert rows[9][0] == "纯度（SEC） · 单体"
-    assert rows[9][5:] == ("2.纯度和杂质", "分子大小变异体")
+    assert rows[6] == (
+        "大类\nCategory",
+        "检验项目（方法）\nTest Item (Method)",
+        "子检项/单位\nSub-item & Unit",
+        "可接受标准\nAcceptance Criteria",
+        "0M",
+    )
+    assert rows[8][0] == "1.鉴别"
+    assert "肽图" in rows[8][1]
+    assert rows[8][2] == "肽图"
+    assert rows[9][0] == "2.纯度和杂质"
+    assert "纯度（SEC） · 单体" in rows[9][1]
+    assert rows[9][2] == "分子大小变异体 / %"
 
 
 def test_r3_fix3_t3_subresult_col_no_false_missing_subresult():

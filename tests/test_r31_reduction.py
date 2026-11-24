@@ -194,7 +194,8 @@ def test_a5_confirmation_export_strips_qualitative_whitespace_display_only():
     rows = list(workbook_rows(snapshot))
     # Source raw_text untouched
     assert snapshot["results"]["v1"]["result"]["raw_text"] == raw_before
-    data_row = next(r for r in rows if r and r[0] == "外观")
+    data_row = next(r for r in rows if r and len(r) > 4 and "外观" in str(r[1]))
+    assert data_row[0] == "一般检查"
     assert data_row[4] == "澄清无色液体"
 
 

@@ -728,81 +728,103 @@ def _build_summary_xlsx() -> bytes:
 
 
 def _build_confirmation_xlsx() -> bytes:
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "阶段性稳定性确认表"
-    tps = ["0M", "3M", "6M", "12M", "18M", "24M"]
-    last_col = 4 + len(tps)
-    last_letter = get_column_letter(last_col)
+    """Build TPL-07 using the exact same renderer as real confirmation exports (100% identical layout)."""
+    from .worksheet_confirmation import TEMPLATE_VERSION, render_confirmation_bytes
 
-    ws.merge_cells(f"A1:{last_letter}1")
-    ws["A1"] = "IPXXX 稳定性试验数据确认表 / Stability Study Data Confirmation Form"
-    _style_cell(ws["A1"], font=TITLE_FONT, fill=SUBHEADER_FILL, align="center")
-    ws.row_dimensions[1].height = 28
-
-    meta = [
-        ("汇总表编号", "STB(C)-IPXXX-2026001", "版本号", "00", "项目编号", "IPXXX", "产品名称", "IPXXX 成品（DP）"),
-        ("产品批号", "IPXXXDPC20260101", "规格", "10 mg/mL", "开始日期", "2026-06-01", "开展地点", "□相城X ☑常熟C □园区S"),
-        ("方案编号", "STB(C)-QC-IPXXX-P-2-002", "稳定性类型", "☑长期试验 □加速试验", "考察条件", "5℃±3℃ · 倒置 · 避光", "阶段节点", "24M 阶段性确认"),
+    cat_order_map = {
+        "1.鉴别": (1, "identification"),
+        "2.纯度和杂质": (2, "purity_impurity"),
+        "3.效价": (3, "potency"),
+        "4.含量": (4, "content"),
+        "5.安全性": (5, "safety"),
+        "6.理化与其它": (6, "physicochemical_other"),
+    }
+    sample_rows = _sample_six_category_rows()
+    tps = [
+        ("pt_0m", "0M", "2026-06-01"),
+        ("pt_3m", "3M", "2026-09-01"),
+        ("pt_6m", "6M", "2026-12-01"),
+        ("pt_12m", "12M", "2027-06-01"),
+        ("pt_18m", "18M", "2027-12-01"),
+        ("pt_24m", "24M", "2028-06-01"),
     ]
-    for r_idx, row in enumerate(meta, 2):
-        for idx_pair in range(4):
-            lc = idx_pair * 2 + 1
-            _style_cell(ws.cell(r_idx, lc, row[idx_pair * 2]), font=BOLD_FONT, fill=META_LABEL_FILL, align="center")
-            _style_cell(ws.cell(r_idx, lc + 1, row[idx_pair * 2 + 1]))
-        ws.row_dimensions[r_idx].height = 22
-
-    headers = ["大类\nCategory", "检验项目（方法）\nTest Item (Method)", "子检项/细项\nSub-item", "可接受标准\nAcceptance Criteria"]
-    for c_idx, h in enumerate(headers, 1):
-        ws.merge_cells(start_row=6, start_column=c_idx, end_row=7, end_column=c_idx)
-        _style_cell(ws.cell(6, c_idx, h), font=HEADER_FONT, fill=HEADER_FILL, align="center")
-        _style_cell(ws.cell(7, c_idx), font=HEADER_FONT, fill=HEADER_FILL, align="center")
-    ws.merge_cells(start_row=6, start_column=5, end_row=6, end_column=last_col)
-    _style_cell(ws.cell(6, 5, "考察时间（月） / Study Timepoints (Month)"), font=HEADER_FONT, fill=HEADER_FILL, align="center")
-    for idx_tp, tp in enumerate(tps):
-        _style_cell(ws.cell(6, 5 + idx_tp), font=HEADER_FONT, fill=HEADER_FILL, align="center")
-        _style_cell(ws.cell(7, 5 + idx_tp, tp), font=HEADER_FONT, fill=HEADER_FILL, align="center")
-    ws.row_dimensions[6].height = 24
-    ws.row_dimensions[7].height = 22
-
-    rows = _sample_six_category_rows()
-    for offset, item in enumerate(rows, 8):
-        item_method = f"{item['item'].splitlines()[0]}（{item['method'].splitlines()[0]}）"
-        vals = [item["category"], item_method, item["subitem"], item["criterion"]]
-        for c_idx, v in enumerate(vals, 1):
-            _style_cell(ws.cell(offset, c_idx, v), fill=CAT_FILL if c_idx == 1 else None, align="center" if c_idx == 1 else "left")
-        for idx_tp in range(len(tps)):
-            val = item["sample_0m"] if idx_tp == 0 else (item["sample_3m"] if idx_tp == 1 else "")
-            _style_cell(ws.cell(offset, 5 + idx_tp, val), align="center")
-        ws.row_dimensions[offset].height = 24
-
-    base = 8 + len(rows)
-    ws.merge_cells(f"A{base}:B{base}")
-    _style_cell(ws.cell(base, 1, "备注 / Remark"), font=BOLD_FONT, fill=META_LABEL_FILL, align="center")
-    ws.merge_cells(f"C{base}:{last_letter}{base}")
-    _style_cell(ws.cell(base, 3, "稳定性取样及检测过程中未发生影响数据可靠性的异常/偏差（如有请列明 AR/AE 编号）。"))
-    ws.row_dimensions[base].height = 28
-
-    ws.merge_cells(f"A{base+1}:{last_letter}{base+1}")
-    _style_cell(ws.cell(base + 1, 1, "稳定性总结 / Stability Summary：各检项实测结果均符合质量标准要求，关键质量属性未见明显超标趋势。"))
-    ws.row_dimensions[base + 1].height = 36
-
-    ws.merge_cells(f"A{base+2}:C{base+2}")
-    _style_cell(ws.cell(base + 2, 1, "起草人 / 日期 (Author / Date)："), font=BOLD_FONT, fill=META_LABEL_FILL)
-    ws.merge_cells(f"D{base+2}:F{base+2}")
-    _style_cell(ws.cell(base + 2, 4, "QC 审核人 / 日期 (QC Reviewer / Date)："), font=BOLD_FONT, fill=META_LABEL_FILL)
-    ws.merge_cells(f"G{base+2}:{last_letter}{base+2}")
-    _style_cell(ws.cell(base + 2, 7, "QC 批准人 / 日期 (QC Approver / Date)："), font=BOLD_FONT, fill=META_LABEL_FILL)
-    ws.row_dimensions[base + 2].height = 28
-
-    widths = [15, 28, 20, 30] + [13] * len(tps)
-    for idx, w in enumerate(widths, 1):
-        ws.column_dimensions[get_column_letter(idx)].width = w
-    ws.freeze_panes = "E8"
-
-    buf = BytesIO()
-    wb.save(buf)
-    return buf.getvalue()
+    rows = []
+    cells = []
+    results = {}
+    all_row_ids = []
+    for idx, item in enumerate(sample_rows, 1):
+        rid = f"tpl_r{idx}"
+        all_row_ids.append(rid)
+        cat_order, cat_code = cat_order_map.get(item["category"], (99, "other"))
+        rows.append(
+            {
+                "id": rid,
+                "label": item["item"].splitlines()[0],
+                "method": item["method"].splitlines()[0],
+                "method_version": "",
+                "unit": item["unit"],
+                "reporting_basis": item["basis"],
+                "criteria_text": item["criterion"].splitlines()[0],
+                "category_code": cat_code,
+                "category_name_zh": item["category"],
+                "subcategory_name_zh": item["subitem"],
+                "category_order": cat_order,
+                "display_order": idx,
+            }
+        )
+        for pt_id, sample_key in (("pt_0m", "sample_0m"), ("pt_3m", "sample_3m")):
+            raw_val = item[sample_key]
+            if not raw_val:
+                continue
+            vid = f"tpl_v_{idx}_{pt_id}"
+            cells.append({"row_id": rid, "point_id": pt_id, "adopted": {"result_version_id": vid}})
+            results[vid] = {
+                "result": {
+                    "status": "text",
+                    "raw_text": f"{raw_val}%" if item["unit"] == "%" and raw_val not in {"N/A", "ND"} else raw_val,
+                    "unit": item["unit"],
+                }
+            }
+    points = [
+        {"id": pt_id, "label": label, "planned_date": planned_date, "required_row_ids": list(all_row_ids)}
+        for pt_id, label, planned_date in tps
+    ]
+    snapshot = {
+        "snapshot_id": "TEMPLATE-BLANK-TPL07",
+        "project_name": "IPXXX 成品（DP）",
+        "template_version": TEMPLATE_VERSION,
+        "worksheet": {
+            "project": "IPXXX",
+            "name": "IPXXX 24M 阶段性确认",
+            "product_name": "IPXXX 成品（DP）",
+            "summary_number": "STB(C)-IPXXX-2026001",
+            "document_version": "00",
+            "plan_version": 1,
+            "start_date": "2026-06-01",
+            "location": "常熟工厂C",
+            "protocol_number": "STB(C)-QC-IPXXX-P-2-002",
+            "specification_text": "10 mg/mL",
+            "equipment": "A-8111N",
+            "storage_location": "常熟稳定性箱 5℃-01",
+            "basis": "24M 阶段性确认模板示例",
+            "identity": {
+                "batch": "IPXXXDPC20260101",
+                "sample_type": "DP",
+                "presentation": "10 mg/mL",
+                "study": "long_term",
+                "study_id": "STB(C)-QC-IPXXX-P-2-002",
+                "condition": "5℃±3℃ · 避光",
+                "orientation": "倒置",
+                "reporting_basis": "",
+            },
+            "points": points,
+            "rows": rows,
+            "cells": cells,
+            "events": [],
+        },
+        "results": results,
+    }
+    return render_confirmation_bytes(snapshot)
 
 
 _BUILDERS = {

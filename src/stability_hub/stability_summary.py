@@ -18,12 +18,55 @@ TITLE = "稳定性汇总表"
 TEMPLATE_VERSION = "stability-study-table-1"
 
 
+def _sort_rows_by_category(rows):
+    if any(r.get("category_code") or r.get("category_name_zh") for r in rows):
+        return sorted(rows, key=lambda r: (r.get("category_order", 99), r.get("display_order", 999)))
+    return list(rows)
+
+
+def format_location_checkboxes(location: str) -> str:
+    """Format standard 3-plant checkboxes using Unicode ☑/□ (never Wingdings2 R)."""
+    raw = re.sub(r"[☑□✓✔√]+", "", (location or "")).strip()
+    lower = raw.lower()
+    upper = raw.upper()
+    plants = (
+        ("相城工厂X", ("相城", "xiangcheng"), "X"),
+        ("常熟工厂C", ("常熟", "changshu"), "C"),
+        ("园区工厂S", ("园区", "智享", "yuanqu", "sip"), "S"),
+    )
+    matched_any = False
+    rendered = []
+    for display, keywords, code in plants:
+        is_hit = bool(raw) and (any(k in lower for k in keywords) or upper == code)
+        if is_hit:
+            matched_any = True
+        rendered.append(("☑" if is_hit else "□") + display)
+    if raw and not matched_any:
+        rendered.append("☑其他：" + raw)
+    return "  ".join(rendered)
+
+
+def format_study_type_checkboxes(study: str, *, multiline: bool = False) -> str:
+    """Format standard stability type checkboxes using Unicode ☑/□."""
+    val = (study or "").strip()
+    items = [
+        ("☑" if val == "accelerated" else "□") + "加速试验 Accelerated study",
+        ("☑" if val == "long_term" else "□") + "长期试验 Long-term study",
+        (
+            "☑其他 Other：强力破坏 Stress study"
+            if val == "stress"
+            else (f"☑其他 Other：{val}" if val and val not in {"accelerated", "long_term"} else "□其他 Other")
+        ),
+    ]
+    return ("\n" if multiline else "  ").join(items)
+
+
 def freeze_worksheet_table(sheet, project_name, *, filled, invalidated_positions=None, retain_source_items=False):
     identity = sheet["identity"]
     units = {point["unit"] for point in sheet["points"]}
     cells = {(cell["row_id"], cell["point_id"]): cell for cell in sheet["cells"]}
     body, metadata = [], []
-    for row in sheet["rows"]:
+    for row in _sort_rows_by_category(sheet["rows"]):
         basis = row.get("reporting_basis", identity["reporting_basis"])
         criteria = list(dict.fromkeys(filter(None, [row.get("criteria_text"),
                        *(standard["criterion"] for standard in row.get("standards", []))])))
@@ -31,8 +74,14 @@ def freeze_worksheet_table(sheet, project_name, *, filled, invalidated_positions
             criteria = row.get("source_criteria", [])
         originals = row.get("source_test_item", []) if retain_source_items else []
         normalized = "" if any(row["label"] in original for original in originals) else row["label"]
+        category_name = row.get("category_name_zh", "")
+        cat_tag = (
+            f"【{category_name}】"
+            if category_name and not any(category_name in original for original in originals)
+            else ""
+        )
         label_parts = filter(None, (*originals, normalized, visible(row["method"]),
-                                    visible(row["method_version"]), basis, row["unit"]))
+                                    visible(row["method_version"]), basis, row["unit"], cat_tag))
         label = "\n".join(dict.fromkeys(label_parts) if originals else label_parts)
         values, positions = [], []
         for point in sheet["points"]:
@@ -50,6 +99,7 @@ def freeze_worksheet_table(sheet, project_name, *, filled, invalidated_positions
         body.append([label, "\n".join(criteria), *values])
         metadata.append({"row_id": row["id"], "item_id": row["item_id"], "method": row["method"],
                          "method_version": row["method_version"], "reporting_basis": basis, "unit": row["unit"],
+                         "category_code": row.get("category_code", ""), "category_name_zh": category_name,
                          "standards": row.get("standards", []), "positions": positions})
     return {
         "header": [
@@ -105,14 +155,19 @@ def freeze_summary(flow, conn, snapshot, actor):
     }
     points = sorted(points | plan_points.keys(), key=lambda label: (label[-1], int(label[:-1])))
     rows = {}
-    for row in plan.get("rows", []):
+    for row in _sort_rows_by_category(plan.get("rows", [])):
         identity = (row["item_id"], row["method"], row["method_version"],
                     row.get("reporting_basis", plan["identity"].get("reporting_basis", "")))
         if any(point_filters.get(field) not in (None, value)
                for field, value in zip(("item", "method", "method_version"), identity[:3], strict=True)):
             continue
-        rows[identity] = {"label": row["label"], "id": row["id"], "standards": [],
-                          "values": {}, "unit": row["unit"]}
+        rows[identity] = {
+            "label": row["label"], "id": row["id"], "standards": [],
+            "values": {}, "unit": row["unit"],
+            "category_name_zh": row.get("category_name_zh", ""),
+            "category_order": row.get("category_order", 99),
+            "display_order": row.get("display_order", 999),
+        }
         if criterion := row.get("criteria_text"):
             rows[identity]["standards"].append(criterion)
         rows[identity]["standards"].extend(s["criterion"] for s in row.get("standards", []))
@@ -121,6 +176,7 @@ def freeze_summary(flow, conn, snapshot, actor):
         row = rows.setdefault((k.item, k.method, k.method_version, k.reporting_basis), {
             "label": snapshot["item_labels"].get(k.item, k.item), "id": "", "standards": [],
             "values": {}, "unit": record.result.unit,
+            "category_name_zh": "", "category_order": 99, "display_order": 999,
         })
         if k.time_label in row["values"]:
             raise WorkflowError("summary_collision", "同一汇总格存在多条结果，请缩小范围。")
@@ -131,7 +187,11 @@ def freeze_summary(flow, conn, snapshot, actor):
                for r in [StabilityRecord.model_validate_json(entry["display"]["record_json"])]}
     today = date.today().isoformat()
     body = []
-    for (item, method, version, basis), row in rows.items():
+    ordered_items = sorted(
+        rows.items(),
+        key=lambda kv: (kv[1].get("category_order", 99), kv[1].get("display_order", 999)),
+    ) if any(r.get("category_name_zh") for r in rows.values()) else rows.items()
+    for (item, method, version, basis), row in ordered_items:
         values = []
         for label in points:
             point = plan_points.get(label)
@@ -148,7 +208,8 @@ def freeze_summary(flow, conn, snapshot, actor):
                 value = ""
             values.append(value)
         if row["values"] or (row["id"] and plan_points):
-            label = "\n".join(filter(None, (row["label"], visible(method), visible(version), basis, row["unit"])))
+            cat_tag = f"【{row['category_name_zh']}】" if row.get("category_name_zh") else ""
+            label = "\n".join(filter(None, (row["label"], visible(method), visible(version), basis, row["unit"], cat_tag)))
             body.append([label, "\n".join(dict.fromkeys(row["standards"])), *values])
     config = json.loads(project_row(conn, key.project)["config_json"])
     return {
@@ -192,8 +253,13 @@ def _write_block(sheet, summary, offset=0):
             cell.font = Font(name="Microsoft YaHei", size=10, bold=fixed, color="102D49")
             cell.alignment = Alignment(vertical="center", wrap_text=True)
             cell.border = Border(left=edge, right=edge, top=edge, bottom=edge)
-        wrap = max(sum(max(1, (len(line) + 14) // 15) for line in value.split("\n")) for value in row)
-        sheet.row_dimensions[offset + index].height = min(220, max(27, wrap * 15))
+        if controlled and index == 3:
+            cond_lines = sum(max(1, (len(line) + 74) // 75) for line in (row[2] or "").split("\n"))
+            loc_lines = sum(max(1, (len(line) + 18) // 19) for line in (row[9] if len(row) > 9 else "").split("\n"))
+            sheet.row_dimensions[offset + index].height = min(140, max(62, max(cond_lines, loc_lines) * 19))
+        else:
+            wrap = max(sum(max(1, (len(line) + 14) // 15) for line in value.split("\n")) for value in row)
+            sheet.row_dimensions[offset + index].height = min(220, max(27, wrap * 15))
     for index, row in enumerate(summary["header"], 1):
         if len(row) < width:
             sheet.merge_cells(start_row=offset + index, start_column=len(row), end_row=offset + index, end_column=width)
@@ -212,6 +278,7 @@ def _write_block(sheet, summary, offset=0):
 def controlled_block(sheet):
     summary = freeze_worksheet_table(sheet, sheet.get("product_name", ""), filled=True, retain_source_items=True)
     summary["header"][0][7] = sheet.get("specification_text", summary["header"][0][7])
+    summary["header"][1][2] = "稳定性试验箱/温控设备名称和编号"
     summary["header"][1][5] = sheet.get("protocol_number", "")
     summary.pop("contract")
     identity = StudyIdentity.model_validate(sheet["identity"])
@@ -224,16 +291,12 @@ def controlled_block(sheet):
     ), strict=True):
         for index, label in enumerate(labels):
             row[index * 2] += "\n" + label
-    summary["header"][1][-1] = "\n".join(
-        ("☑" if value == identity.study else "□") + label
-        for value, label in (("accelerated", "加速试验 Accelerated study"),
-                             ("long_term", "长期试验 Long-term study"),
-                             ("stress", "强力破坏 Stress study")))
+    summary["header"][1][-1] = format_study_type_checkboxes(identity.study, multiline=True)
     location = sheet.get("location", "")
     condition_label, _, location_label, *_ = summary["header"][2]
     summary["header"][2] = [condition_label, "", controlled_conditions(condition, identity.orientation),
                             "", "", "", "", location_label, "",
-                            ("☑ " if location else "□ ") + (location or "未填写 / Unspecified")]
+                            format_location_checkboxes(location)]
     if storage := sheet.get("storage_location"):
         summary["header"][2].extend(("存放位置\nStorage Location", storage))
     summary["condition"] = condition
@@ -258,23 +321,93 @@ def controlled_block(sheet):
     return summary
 
 
-def controlled_conditions(condition, orientation):
-    """Expose recorded selections without assigning undocumented conditions."""
-    parts = [part.strip() for part in condition.split("·") if part.strip()]
+def _normalize_condition_token(token: str) -> str:
+    text = token.strip()
+    if not text:
+        return ""
+    # Normalize "5±3℃" / "5°C±3°C" -> "5℃±3℃"
+    m = re.fullmatch(r"(-?\d+(?:\.\d+)?)\s*(?:℃|°C|°c|C)?\s*±\s*(\d+(?:\.\d+)?)\s*(?:℃|°C|°c|C)", text)
+    if m:
+        return f"{m.group(1)}℃±{m.group(2)}℃"
+    m = re.fullmatch(r"(-?\d+(?:\.\d+)?)\s*(?:℃|°C|°c)\s*±\s*(\d+(?:\.\d+)?)\s*(?:℃|°C|°c)?", text)
+    if m:
+        return f"{m.group(1)}℃±{m.group(2)}℃"
+    # Normalize "60±5%RH" / "60%RH±5%" -> "60%RH±5%RH"
+    m = re.fullmatch(r"(\d+(?:\.\d+)?)\s*%?(?:RH)?\s*±\s*(\d+(?:\.\d+)?)\s*%(?:RH)?", text, re.I)
+    if m and "rh" in text.lower():
+        return f"{m.group(1)}%RH±{m.group(2)}%RH"
+    return text.replace("°C", "℃").replace("°c", "℃")
+
+
+def _normalize_placement(text: str) -> str:
+    low = text.strip().lower()
+    if low in {"正置", "正立", "upright", "正置 upright"}:
+        return "正置"
+    if low in {"倒置", "倒立", "inverted", "倒置 inverted"}:
+        return "倒置"
+    if low in {"平放", "水平", "horizontal", "平放 horizontal"}:
+        return "平放"
+    return ""
+
+
+def controlled_conditions(condition, orientation=""):
+    """Format standard 3-line QC-运营 condition checkboxes (Unicode ☑/□) without guessing."""
+    raw_parts = [p.strip() for p in re.split(r"[·;；,，\n]+", condition or "") if p.strip()]
     temperatures = ("-80℃±10℃", "-40℃±10℃", "-40℃±5℃", "5℃±3℃", "25℃±2℃")
-    placements = {"正置": "正置 Upright", "倒置": "倒置 Inverted", "平放": "平放 Horizontal"}
-    if not orientation:
-        recorded = placements.keys() & set(parts)
-        orientation = next(iter(recorded)) if len(recorded) == 1 else ""
-    humidity = [part for part in parts if re.fullmatch(r"\d+(?:\.\d+)?%RH(?:±\d+(?:\.\d+)?%(?:RH)?)?", part, re.I)]
-    extra = [part for part in parts if part not in temperatures and part not in humidity and part != orientation]
-    checked = lambda selected: "☑" if selected else "□"
-    temperature_line = "  ".join(checked(value in parts) + value for value in temperatures)
-    humidity_line = "  ".join(checked(value in humidity) + value for value in dict.fromkeys(["60%RH±5%RH", *humidity]))
-    placement_line = "  ".join(checked(value == orientation) + text for value, text in placements.items())
-    other_line = checked(bool(extra)) + "其他 Others" + (" · " + " · ".join(extra) if extra else "")
-    return "\n".join(("温度 Temperature · " + temperature_line, "相对湿度 Relative humidity · " + humidity_line,
-                      "放置方式 Placement method · " + placement_line, other_line))
+    placements = (("正置", "正置 Upright"), ("倒置", "倒置 Inverted"), ("平放", "平放 Horizontal"))
+
+    matched_temps: set[str] = set()
+    other_temps: list[str] = []
+    matched_rh60 = False
+    other_rhs: list[str] = []
+    other_env: list[str] = []
+    matched_places: set[str] = set()
+    other_places: list[str] = []
+
+    norm_ori = _normalize_placement(orientation or "")
+    if norm_ori:
+        matched_places.add(norm_ori)
+    elif (orientation or "").strip():
+        other_places.append(orientation.strip())
+
+    for raw in raw_parts:
+        token = _normalize_condition_token(raw)
+        if not token:
+            continue
+        place = _normalize_placement(token)
+        if place:
+            if not matched_places and not other_places:
+                matched_places.add(place)
+            continue
+        if token in temperatures:
+            matched_temps.add(token)
+        elif re.search(r"℃|^-?\d+(?:\.\d+)?C$", token):
+            if token not in other_temps:
+                other_temps.append(token)
+        elif token.lower() == "60%rh±5%rh":
+            matched_rh60 = True
+        elif re.search(r"%?\s*rh", token, re.I):
+            if token not in other_rhs:
+                other_rhs.append(token)
+        else:
+            if token not in other_env:
+                other_env.append(token)
+
+    def chk(selected: bool) -> str:
+        return "☑" if selected else "□"
+
+    temp_other = ("☑其他 Others：" + "、".join(other_temps)) if other_temps else "□其他 Others"
+    temp_line = "温度 Temperature：" + "  ".join([*(chk(t in matched_temps) + t for t in temperatures), temp_other])
+
+    rh_extras = list(dict.fromkeys([*other_rhs, *other_env]))
+    rh_other = ("☑其他 Others：" + "、".join(rh_extras)) if rh_extras else "□其他 Others"
+    rh_line = f"相对湿度 Relative humidity：{chk(matched_rh60)}60%RH±5%RH  {rh_other}"
+
+    place_other = ("☑其他 Others：" + "、".join(other_places)) if other_places else "□其他 Others"
+    place_line = "放置方式 Placement method：" + "  ".join(
+        [*(chk(key in matched_places) + label for key, label in placements), place_other]
+    )
+    return "\n".join((temp_line, rh_line, place_line))
 
 
 def write_controlled_workbook(path, groups):

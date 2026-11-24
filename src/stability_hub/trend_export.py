@@ -103,6 +103,14 @@ def chart_data(snapshot,view='adopted',axis=None,aligned_fields=()):
             'standard_limits':limits}
 
 
+_OMITTED_REASON_ZH = {
+    'no adopted result': '无正式采用结果',
+    'pending': '待复核确认',
+    'not an exact numeric result': '非精确数值结果',
+    'missing received time point': '缺失该时间点',
+}
+
+
 def write_png(path,snapshot,view='adopted',aligned_fields=()):
     import re
     import matplotlib
@@ -118,63 +126,114 @@ def write_png(path,snapshot,view='adopted',aligned_fields=()):
         )
     font_path = Path('C:/Windows/Fonts/msyh.ttc')
     font = FontProperties(fname=str(font_path)) if font_path.exists() else FontProperties()
+    title_font = FontProperties(fname=str(font_path), size=10.5) if font_path.exists() else FontProperties(size=10.5)
+    legend_font = FontProperties(fname=str(font_path), size=8.5) if font_path.exists() else FontProperties(size=8.5)
+    note_font = FontProperties(fname=str(font_path), size=8) if font_path.exists() else FontProperties(size=8)
     sample,presentation,study,study_id,condition,item,method,version,unit,time_unit,purpose,reporting_basis = data['scope']
     fig,ax = plt.subplots(figsize=(11,6))
     try:
         grouped = {series['batch']:series['values'] for series in data['series']}
+        legend_labels: list[str] = []
         for batch,points in grouped.items():
-            ax.plot([p['x'] for p in points],
-                    [float(p['value']) if p['value'] is not None else float('nan') for p in points],marker='o',
-                    linestyle='--' if '· 变更前 ·' in batch else '-',label=batch)
+            ax.plot(
+                [p['x'] for p in points],
+                [float(p['value']) if p['value'] is not None else float('nan') for p in points],
+                marker='o',
+                linewidth=1.9,
+                markersize=5.5,
+                linestyle='--' if '· 变更前 ·' in batch else '-',
+                label=batch,
+            )
+            legend_labels.append(batch)
             if data['axis']['mode']=='detail' and len(data['points']) <= 50:
                 for point in points:
                     if point['value'] is not None:
-                        ax.annotate(point['value'],(point['x'],float(point['value'])),xytext=(5,7),textcoords='offset points',fontsize=8)
+                        ax.annotate(
+                            point['value'],
+                            (point['x'],float(point['value'])),
+                            xytext=(4,6),
+                            textcoords='offset points',
+                            fontsize=8,
+                            fontproperties=note_font,
+                        )
         method_label = method + ('/'+version if version != 'not_reported' else '')
         if data["standard_limits"]:
             for bound, label in (("lower", "标准下限"), ("upper", "标准上限")):
                 value = data["standard_limits"][bound]
                 if value is not None:
-                    ax.axhline(value, color="#a74b30", linestyle="--", label=label)
+                    lim_label = f"{label} ({value:g})"
+                    ax.axhline(value, color="#b4432c", linestyle="--", linewidth=1.4, label=lim_label)
+                    legend_labels.append(lim_label)
         status_label = '正式采用值' if view == 'adopted' else '展示值（仅绘制已确认精确数值）'
         study_label = {'long_term':'长期','accelerated':'加速','stress':'应力','release':'放行'}.get(study,study)
-        title = f"{data['project']} | {data['item_label']} | {method_label} | {status_label} | 数据版本 {data['revision']}"
+        purpose_label = {'routine':'常规考察','reference':'参考品','unknown':'常规/未注明'}.get(purpose,purpose)
+        mode_label = {'overview': '总览刻度', 'detail': '细节刻度', 'manual': '手动范围'}.get(data['axis']['mode'], data['axis']['mode'])
+        title = f"{data['project']} | {data['item_label']} | {method_label} | {status_label}（{mode_label}）| 数据版本 {data['revision']}"
         def human(value):
             return '原文未注明（独立来源）' if value.startswith('原文未注明@') else value
-        ax.set_title(title + '\n' + f'{sample}/{purpose}/{reporting_basis or "共用结果"} | {human(presentation)} | {study_label}/{human(study_id)} | {condition}',fontproperties=font,fontsize=11)
+        subtitle = f'{sample}/{purpose_label}/{reporting_basis or "共用结果"} | {human(presentation)} | {study_label}/{human(study_id)} | {condition}'
+        if len(subtitle) > 120:
+            subtitle = subtitle[:117] + '…'
+        eff_title_font = FontProperties(fname=str(font_path), size=9.5 if len(subtitle) > 88 else 10.5) if font_path.exists() else FontProperties(size=9.5 if len(subtitle) > 88 else 10.5)
+        ax.set_title(title + '\n' + subtitle, fontproperties=eff_title_font, pad=10)
         if unit:
             y_label = unit
         elif re.search(r'(?<![A-Za-z])pH(?![A-Za-z])', data['item_label'] or '', re.I):
             y_label = 'pH（无量纲）'
         else:
             y_label = '无量纲'
-        ax.set_ylabel(y_label,fontproperties=font)
-        ax.set_ylim(data['axis']['min'],data['axis']['max'])
-        ax.set_xlabel('Days' if time_unit=='D' else 'Months' if time_unit=='M' else 'Batch')
+        ax.set_ylabel(y_label, fontproperties=font)
+        ax.set_ylim(data['axis']['min'], data['axis']['max'])
+        x_label = '考察时间（天）' if time_unit=='D' else '考察时间（月）' if time_unit=='M' else '批次'
+        ax.set_xlabel(x_label, fontproperties=font, labelpad=6)
         if time_unit=='release':
-            ax.set_xticks(range(len(data['batches'])),data['batches'])
+            ax.set_xticks(range(len(data['batches'])))
+            ax.set_xticklabels(data['batches'], fontproperties=note_font, rotation=15 if len(data['batches']) > 4 else 0)
         else:
             times = sorted({p['x'] for p in data['points']+data['omitted']})
             ax.set_xticks(times)
             if len(times)==1:
                 ax.set_xlim(times[0]-.5,times[0]+.5)
-        ax.grid(alpha=.2)
-        if grouped:
-            ax.legend(prop=font)
-        notes = ['Excluded from numeric plot (never treated as zero):'] + [
-            f"{p['batch']} {p['time']}: {p['raw']} [{p['reason']}]" for p in data['omitted'][:8]]
-        if len(data['omitted'])>8:
-            notes.append(f"... {len(data['omitted'])} total; full details in manifest")
-        caption = '\n'.join(notes) if data['omitted'] else 'Only confirmed exact numeric results; missing time points remain missing.'
-        if data['unresolved_worksheet_count']:
-            caption += f"\nUnresolved source worksheets: {data['unresolved_worksheet_count']} (excluded from facts; see SourceStatus)."
-        fig.text(.01,.028,caption,
-                 fontsize=8,fontproperties=font)
-        if data['omitted']:
-            fig.subplots_adjust(bottom=min(.46,.165+.027*len(notes)))
+        ax.grid(alpha=.25, linestyle=':')
+
+        # Place legend cleanly outside the right plot border so it never overlaps curves or limit lines
+        if legend_labels:
+            max_lbl_len = max(len(lbl) for lbl in legend_labels)
+            right_margin = 0.72 if max_lbl_len > 22 else 0.77
+            ax.legend(
+                prop=legend_font,
+                loc='upper left',
+                bbox_to_anchor=(1.015, 1.0),
+                borderaxespad=0.0,
+                frameon=True,
+                framealpha=0.92,
+                edgecolor='#cbd5e1',
+            )
         else:
-            fig.subplots_adjust(bottom=.185)
-        fig.savefig(path,dpi=140,metadata={'Description':encoded(data)})
+            right_margin = 0.96
+
+        if data['omitted']:
+            notes = ['未绘入数值曲线（不按 0 处理）：']
+            for p in data['omitted'][:6]:
+                reason_zh = _OMITTED_REASON_ZH.get(p['reason'], p['reason'])
+                raw_text = str(p['raw']).replace('\n', ' ')
+                line = f"  · {p['batch']} {p['time']}：{raw_text}（{reason_zh}）"
+                if len(line) > 105:
+                    line = line[:102] + '…'
+                notes.append(line)
+            if len(data['omitted']) > 6:
+                notes.append(f"  ……共 {len(data['omitted'])} 条，完整明细见随附清单（manifest JSON）")
+            caption = '\n'.join(notes)
+        else:
+            caption = '说明：仅绘制已确认的精确数值结果；缺失时间点保持断线留白，不按 0 处理。'
+        if data['unresolved_worksheet_count']:
+            caption += f"\n另有 {data['unresolved_worksheet_count']} 张未完成解析的源工作表（未计入正式事实，详见来源状态）。"
+
+        caption_lines = len(caption.splitlines())
+        bottom_margin = min(0.44, max(0.18, 0.115 + 0.029 * caption_lines))
+        fig.subplots_adjust(left=0.09, right=right_margin, top=0.86, bottom=bottom_margin)
+        fig.text(0.02, 0.018, caption, fontproperties=note_font, va='bottom', ha='left', color='#334155')
+        fig.savefig(path, dpi=140, metadata={'Description':encoded(data)})
     finally:
         plt.close(fig)
     from PIL import Image
