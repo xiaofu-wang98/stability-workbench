@@ -283,7 +283,8 @@ def create_report(flow,command,actor):
     folder = flow.store.home / 'workflow-exports' / export_id
     folder.mkdir(parents=True)
     write_workbook(folder/'results.xlsx',snapshot)
-    errors = verify_workbook(folder/'results.xlsx',snapshot)
+    with flow.store.read() as conn:
+        errors = verify_workbook(folder/'results.xlsx',snapshot,conn=conn)
     if errors:
         raise WorkflowError('report_verification','Excel反读失败：'+'; '.join(errors),409)
     charts = []

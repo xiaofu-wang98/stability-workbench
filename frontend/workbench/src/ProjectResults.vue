@@ -1,17 +1,20 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { NAlert, NButton, NInput, NSpin } from 'naive-ui';
 import { api, type StandardAssessment } from './api';
 
+const route = useRoute();
 type Value = { text: string; result_version_id: string; source_ids: string[] };
 type Cell = { slot_id: string; slot_key: { batch: string; item: string; method: string; condition: string;
   study: string; study_id: string; presentation: string; reporting_basis?: string; month: number | null; day: number | null };
-  display: Value | null; adopted: Value | null; worksheet_id?: string | null; standard_assessment?: StandardAssessment | null };
+  display: Value | null; adopted: Value | null; worksheet_id?: string | null; standard_assessment?: StandardAssessment | null;
+  category_code?: string; category_name_zh?: string; subcategory_name_zh?: string; category_order?: number };
 const props = defineProps<{ project: string }>();
 const cells = ref<Cell[]>([]);
 const labels = ref<Record<string, string>>({});
-const input = ref('');
-const batch = ref('');
+const input = ref(String(route.query.batch || ''));
+const batch = ref(String(route.query.batch || ''));
 const sampleFilter = ref('');
 type BatchOverview = { samples: { id: string; material_stage: string; sample_type: string; presentation: string; packaging: string; purpose: string }[];
   studies: { id: string; name: string; sample_id?: string; points: string[]; identity: { study_id: string; condition: string };
@@ -35,6 +38,27 @@ const voidError = ref('');
 const voidHistory = ref<VoidEvent[]>();
 const limit = 50;
 const studies: Record<string, string> = { long_term: '长期', accelerated: '加速', stress: '强力破坏', release: '放行' };
+const groupedCells = computed(() => {
+  const list = cells.value;
+  if (!list.some(c => Boolean(c.category_name_zh))) {
+    return [{ key: 'all', label: '', cells: list }];
+  }
+  const sorted = [...list].sort((a, b) => (a.category_order ?? 99) - (b.category_order ?? 99));
+  const groups: { key: string; label: string; cells: Cell[] }[] = [];
+  const byKey = new Map<string, { key: string; label: string; cells: Cell[] }>();
+  for (const cell of sorted) {
+    const key = cell.category_code || cell.category_name_zh || 'physicochemical_other';
+    const label = cell.category_name_zh || '理化特性与其他';
+    let grp = byKey.get(key);
+    if (!grp) {
+      grp = { key, label, cells: [] };
+      byKey.set(key, grp);
+      groups.push(grp);
+    }
+    grp.cells.push(cell);
+  }
+  return groups;
+});
 const projectPath = () => '/projects/' + encodeURIComponent(props.project);
 watch([() => props.project, batch], async (_, __, cleanup) => {
   const controller = new AbortController();
@@ -146,10 +170,26 @@ function search() {
   batch.value = input.value.trim();
   study.value = selectedStudy.value;
 }
+
+function scrollToResults() {
+  if (route.query.focus === 'results') {
+    nextTick(() => {
+      document.getElementById('project-results-view')?.scrollIntoView({ behavior: 'smooth' });
+    });
+  }
+}
+
+onMounted(() => {
+  scrollToResults();
+});
+
+watch(() => route.query.focus, () => {
+  scrollToResults();
+});
 </script>
 
 <template>
-  <section class="panel">
+  <section id="project-results-view" class="panel">
     <h2>检测结果</h2>
     <form class="result-controls" @submit.prevent="search">
       <NInput v-model:value="input" aria-label="结果批号" placeholder="输入批号筛选" clearable />
@@ -213,26 +253,37 @@ function search() {
       <p role="status">共 {{ total }} 条结果</p>
       <div class="matrix"><table>
         <thead><tr><th>批号／规格</th><th>考察／条件</th><th>检项／方法</th><th>时间点</th><th>当前采用值</th><th>最新记录</th><th>来源</th></tr></thead>
-        <tbody><tr v-for="cell in cells" :key="cell.slot_id">
-          <th scope="row">{{ cell.slot_key.batch }}<br>{{ cell.slot_key.presentation }}</th>
-          <td>{{ studies[cell.slot_key.study] || cell.slot_key.study }} · {{ cell.slot_key.condition }}<br>{{ cell.slot_key.study_id }}<template v-if="cell.slot_key.reporting_basis"> · {{ cell.slot_key.reporting_basis }}</template></td>
-          <td>{{ labels[cell.slot_key.item] || cell.slot_key.item }}<br>{{ cell.slot_key.method }}</td>
-          <td>{{ cell.slot_key.day != null ? cell.slot_key.day + 'D' : cell.slot_key.month != null ? cell.slot_key.month + 'M' : '放行' }}</td>
-          <td><span :class="{ 'outside-limit': cell.standard_assessment?.status === 'outside' }"
-            :title="[cell.standard_assessment?.criterion, cell.standard_assessment?.version].filter(Boolean).join(' · ')">
-            {{ cell.adopted?.text ?? '尚无采用值' }}
-            <small v-if="cell.standard_assessment?.status === 'outside'"> 超出标准</small>
-            <small v-if="cell.standard_assessment?.status === 'undetermined'"> 待判断</small>
-          </span>
-            <NButton v-if="cell.adopted" text :disabled="voidBusy" @click="startVoid(cell.adopted.result_version_id)">留痕作废</NButton>
-          </td>
-          <td>{{ cell.display?.result_version_id !== cell.adopted?.result_version_id ? cell.display?.text : '—' }}</td>
-          <td><a v-for="(id, index) in (cell.adopted || cell.display)?.source_ids" :key="id"
-            :href="'/api/v1/sources/' + encodeURIComponent(id) + '/file'">原件 {{ index + 1 }} </a>
-            <RouterLink v-if="cell.worksheet_id" :to="'/worksheets/' + encodeURIComponent(cell.worksheet_id)">打开研究表</RouterLink>
-            <RouterLink v-else-if="cell.adopted && cell.slot_key.study !== 'release'" :to="{ path: '/new', query: {
-              project, batch: cell.slot_key.batch, slot: cell.slot_id } }">按结果建研究表</RouterLink></td>
-        </tr></tbody>
+        <tbody>
+          <template v-for="group in groupedCells" :key="group.key">
+            <tr v-if="group.label" class="category-group-row">
+              <td colspan="7" class="category-group-cell">{{ group.label }} <small>（{{ group.cells.length }} 条）</small></td>
+            </tr>
+            <tr v-for="cell in group.cells" :key="cell.slot_id">
+              <th scope="row">{{ cell.slot_key.batch }}<br>{{ cell.slot_key.presentation }}</th>
+              <td>{{ studies[cell.slot_key.study] || cell.slot_key.study }} · {{ cell.slot_key.condition }}<br>{{ cell.slot_key.study_id }}<template v-if="cell.slot_key.reporting_basis"> · {{ cell.slot_key.reporting_basis }}</template></td>
+              <td>
+                {{ labels[cell.slot_key.item] || cell.slot_key.item }}
+                <span v-if="cell.subcategory_name_zh" class="cat-sub-badge">{{ cell.subcategory_name_zh }}</span>
+                <br>{{ cell.slot_key.method }}
+              </td>
+              <td>{{ cell.slot_key.day != null ? cell.slot_key.day + 'D' : cell.slot_key.month != null ? cell.slot_key.month + 'M' : '放行' }}</td>
+              <td><span :class="{ 'outside-limit': cell.standard_assessment?.status === 'outside' }"
+                :title="[cell.standard_assessment?.criterion, cell.standard_assessment?.version].filter(Boolean).join(' · ')">
+                {{ cell.adopted?.text ?? '尚无采用值' }}
+                <small v-if="cell.standard_assessment?.status === 'outside'"> 超出标准</small>
+                <small v-if="cell.standard_assessment?.status === 'undetermined'"> 待判断</small>
+              </span>
+                <NButton v-if="cell.adopted" text :disabled="voidBusy" @click="startVoid(cell.adopted.result_version_id)">留痕作废</NButton>
+              </td>
+              <td>{{ cell.display?.result_version_id !== cell.adopted?.result_version_id ? cell.display?.text : '—' }}</td>
+              <td><a v-for="(id, index) in (cell.adopted || cell.display)?.source_ids" :key="id"
+                :href="'/api/v1/sources/' + encodeURIComponent(id) + '/file'">原件 {{ index + 1 }} </a>
+                <RouterLink v-if="cell.worksheet_id" :to="'/worksheets/' + encodeURIComponent(cell.worksheet_id)">打开研究表</RouterLink>
+                <RouterLink v-else-if="cell.adopted && cell.slot_key.study !== 'release'" :to="{ path: '/new', query: {
+                  project, batch: cell.slot_key.batch, slot: cell.slot_id } }">按结果建研究表</RouterLink></td>
+            </tr>
+          </template>
+        </tbody>
       </table></div>
       <div v-if="total > limit" class="result-controls">
         <NButton :disabled="!offset" @click="offset -= limit">上一页</NButton>
@@ -244,7 +295,35 @@ function search() {
 </template>
 
 <style scoped>
-.outside-limit { color: #9d2424; background: #fde8e8; font-weight: 700; }
-.result-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 10px 0; }
-.result-controls .n-input { width: min(100%, 260px); }
+.outside-limit { color: var(--danger-fg); background: var(--danger-bg); font-weight: 700; padding: 1px 5px; border-radius: 4px; }
+.result-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0;
+  padding: 10px 14px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.result-controls .n-input { width: 260px; }
+.category-group-cell {
+  background: var(--bg-subtle);
+  color: var(--brand);
+  font-weight: 700;
+  font-size: 13px;
+  padding: 6px 12px;
+}
+.category-group-cell small { font-weight: 500; color: var(--text-muted); }
+.cat-sub-badge {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
 </style>

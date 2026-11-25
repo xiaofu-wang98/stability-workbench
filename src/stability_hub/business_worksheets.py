@@ -803,7 +803,19 @@ class BusinessWorksheets:
             cells = []
             source_events = {}
             historical_protocol = False
+            from .platform_catalog import resolve_category_metadata
             for row in plan["rows"]:
+                cat_meta = resolve_category_metadata(
+                    conn=conn,
+                    raw_category=row.get("category_code") or row.get("category_name_zh", ""),
+                    item_text=row.get("label", ""),
+                    method_text=row.get("method", ""),
+                )
+                row.setdefault("category_code", cat_meta["category_code"])
+                row["category_name_zh"] = cat_meta["category_name_zh"]
+                row["category_order"] = cat_meta["category_order"]
+                row["subcategory_name_zh"] = cat_meta["subcategory_name_zh"]
+                row["display_order"] = cat_meta["display_order"]
                 original_labels = {}
                 historical_criteria = set(row.get("source_criteria", ()))
                 from_history = row.get("plan_key", "").startswith("history_")

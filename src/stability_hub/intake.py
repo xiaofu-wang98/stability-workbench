@@ -38,30 +38,31 @@ def preview_file(
     })
     candidates = []
     seen: dict[str, list[int]] = {}
-    for observation in parsed.observations:
-        raw = prepare_observation(observation, parsed.metadata)
-        record = old = None
-        code = None
-        try:
-            record = map_observation(raw, context, config)
-            old = existing.get(record.key.slot_id)
-            if record.result.status in {"blank", "placeholder"}:
-                status, detail = "empty", "空白或占位，本次不会清除已确认结果。"
-            elif old is None:
-                status, detail = "new", "新增候选；检测身份和结果尚未确认，未入库。"
-            elif record.result.equivalent(old.result):
-                status, detail = "same_value", "与已有值相同；仍需核对是否为同一次检测。"
-            else:
-                status, detail = "different_value", "与已有值不同；需区分复测、更正或解析错误。"
-            if status != "empty":
-                seen.setdefault(record.key.slot_id, []).append(len(candidates))
-        except NeedsReview as exc:
-            status, code, detail = "needs_review", exc.code, str(exc)
-        candidates.append(Candidate(
-            id=digest({"preview": preview_id, "location": raw.location.model_dump()}),
-            location=raw.location, raw_fields=raw.fields, status=status, record=record,
-            existing_record=old, issue_code=code, detail=detail, comment=raw.comment,
-        ))
+    with store.read() as conn:
+        for observation in parsed.observations:
+            raw = prepare_observation(observation, parsed.metadata)
+            record = old = None
+            code = None
+            try:
+                record = map_observation(raw, context, config, conn=conn)
+                old = existing.get(record.key.slot_id)
+                if record.result.status in {"blank", "placeholder"}:
+                    status, detail = "empty", "空白或占位，本次不会清除已确认结果。"
+                elif old is None:
+                    status, detail = "new", "新增候选；检测身份和结果尚未确认，未入库。"
+                elif record.result.equivalent(old.result):
+                    status, detail = "same_value", "与已有值相同；仍需核对是否为同一次检测。"
+                else:
+                    status, detail = "different_value", "与已有值不同；需区分复测、更正或解析错误。"
+                if status != "empty":
+                    seen.setdefault(record.key.slot_id, []).append(len(candidates))
+            except NeedsReview as exc:
+                status, code, detail = "needs_review", exc.code, str(exc)
+            candidates.append(Candidate(
+                id=digest({"preview": preview_id, "location": raw.location.model_dump()}),
+                location=raw.location, raw_fields=raw.fields, status=status, record=record,
+                existing_record=old, issue_code=code, detail=detail, comment=raw.comment,
+            ))
     # Multiple rows can represent separate tests; never silently pick the last one.
     for indices in seen.values():
         if len(indices) > 1:

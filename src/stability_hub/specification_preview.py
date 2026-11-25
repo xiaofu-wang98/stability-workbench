@@ -6,6 +6,7 @@ from io import BytesIO
 from docx import Document
 from lxml import html
 
+from .platform_catalog import canonical_unit, resolve_category_metadata
 from .protocol_preview import _cell_text
 from .workflow_common import WorkflowError
 
@@ -268,7 +269,146 @@ def component_suggestion(criterion, category="", item_name=""):
     return res
 
 
+def _enrich_spec_rows(rows):
+    """Attach platform 6-category + subcategory + canonical unit metadata to every specification row."""
+    for r in rows:
+        cat_meta = resolve_category_metadata(
+            raw_category=r.get("category", ""),
+            item_text=r.get("item_zh") or r.get("item", ""),
+            method_text=r.get("method_zh") or r.get("method", ""),
+            component_text=r.get("component", ""),
+        )
+        r["category_code"] = cat_meta["category_code"]
+        r["category_name_zh"] = cat_meta["category_name_zh"]
+        r["category_name_en"] = cat_meta["category_name_en"]
+        r["category_order"] = cat_meta["category_order"]
+        r["subcategory_code"] = cat_meta["subcategory_code"]
+        r["subcategory_name_zh"] = cat_meta["subcategory_name_zh"]
+        r["platform_assay_id"] = cat_meta["platform_assay_id"]
+        r["display_order"] = cat_meta["display_order"]
+        r["canonical_unit"] = canonical_unit(r.get("unit", "")) or cat_meta.get("default_unit", "")
+    return rows
+
+
+def inspect_specification_xlsx(data, filename=""):
+    """Read structured Excel specification sheets (e.g. Standard Spec Template or LIMS分项版)."""
+    from openpyxl import load_workbook
+
+    wb = load_workbook(BytesIO(data), data_only=True)
+    rows = []
+    scope_parts = []
+    for table_index, ws in enumerate(wb.worksheets, 1):
+        # Scan first 10 rows for header row containing item + criterion/limit columns
+        header_row = None
+        col_map: dict[str, int] = {}
+        for r_idx in range(1, min(ws.max_row, 12) + 1):
+            vals = [str(ws.cell(r_idx, c).value or "").strip() for c in range(1, ws.max_column + 1)]
+            row_map: dict[str, int] = {}
+            for c_idx, v in enumerate(vals, 1):
+                if not v:
+                    continue
+                if re.search(r"大类|category", v, re.I) and "category" not in row_map:
+                    row_map["category"] = c_idx
+                elif re.search(r"检验项目|检测项目|test\s*item", v, re.I) and "item" not in row_map:
+                    row_map["item"] = c_idx
+                elif re.search(r"子检项|细项|评价指标|sub[\s-]*item|component", v, re.I) and "component" not in row_map:
+                    row_map["component"] = c_idx
+                elif re.search(r"分析方法|检测方法|^方法|method", v, re.I) and not re.search(r"编号|sop", v, re.I) and "method" not in row_map:
+                    row_map["method"] = c_idx
+                elif re.search(r"SOP|方法编号", v, re.I) and "sop" not in row_map:
+                    row_map["sop"] = c_idx
+                elif re.search(r"药典|pharmacopoeia|reporting\s*basis", v, re.I) and "basis" not in row_map:
+                    row_map["basis"] = c_idx
+                elif re.search(r"运算符|operator", v, re.I) and "operator" not in row_map:
+                    row_map["operator"] = c_idx
+                elif re.search(r"质量标准|标准限度|可接受标准|specification|acceptance\s*criteria|limit", v, re.I) and "criterion" not in row_map:
+                    row_map["criterion"] = c_idx
+                elif re.search(r"^单位|unit", v, re.I) and "unit" not in row_map:
+                    row_map["unit"] = c_idx
+            if "item" in row_map and "criterion" in row_map:
+                header_row = r_idx
+                col_map = row_map
+                break
+        if header_row is None:
+            continue
+        scope_parts.append(ws.title)
+        last_cat = ""
+        last_item = ""
+        last_method = ""
+        for r_idx in range(header_row + 1, ws.max_row + 1):
+            def cell_str(key):
+                col = col_map.get(key)
+                if not col:
+                    return ""
+                val = ws.cell(r_idx, col).value
+                return "" if val is None else str(val).strip()
+
+            raw_cat = cell_str("category") or last_cat
+            raw_item = cell_str("item") or last_item
+            raw_method = cell_str("method") or last_method
+            raw_comp = cell_str("component")
+            raw_op = cell_str("operator")
+            raw_crit = cell_str("criterion")
+            raw_unit = cell_str("unit")
+            raw_basis = cell_str("basis")
+            raw_sop = cell_str("sop")
+            if cell_str("category"):
+                last_cat = raw_cat
+            if cell_str("item"):
+                last_item = raw_item
+            if cell_str("method"):
+                last_method = raw_method
+            if not raw_crit and not raw_comp:
+                continue
+            criterion_full = f"{raw_op}{raw_crit}".strip()
+            if raw_unit and raw_unit not in criterion_full:
+                criterion_full = f"{criterion_full} {raw_unit}".strip()
+            if raw_comp and raw_comp not in criterion_full:
+                criterion_text = f"{raw_comp}：{criterion_full}" if criterion_full else raw_comp
+            else:
+                criterion_text = criterion_full
+            suggestion = component_suggestion(criterion_text, category=raw_cat, item_name=raw_item)
+            item_zh, item_en = split_bilingual(raw_item or raw_cat)
+            method_zh, method_en = split_bilingual(raw_method)
+            comp_zh, comp_en = split_bilingual(raw_comp) if raw_comp else (suggestion.get("component", ""), suggestion.get("component_en", ""))
+            rows.append({
+                "table": table_index,
+                "row": r_idx,
+                "column": col_map["criterion"],
+                "category": raw_cat,
+                "item": raw_item,
+                "item_zh": item_zh,
+                "item_en": item_en,
+                "method": raw_method,
+                "method_zh": method_zh,
+                "method_en": method_en,
+                "sop": raw_sop,
+                "criterion": criterion_text,
+                "component": comp_zh or item_zh,
+                "component_en": comp_en or item_en,
+                "unit": raw_unit or suggestion.get("unit", ""),
+                "result_type": suggestion.get("result_type", "numeric"),
+                "reporting_basis": raw_basis or suggestion.get("reporting_basis", ""),
+            })
+        if rows:
+            break  # Prefer first structured specification sheet
+    _enrich_spec_rows(rows)
+    numbers = standard_numbers(filename)
+    number = numbers[0] if len(numbers) == 1 else ""
+    base = split_number(number)
+    scope = " / ".join(scope_parts)
+    return {
+        "scope": scope,
+        "material_scope": specification_material_scope(filename, {"scope": scope}),
+        "rows": rows,
+        "document_number": base,
+        "document_version": number[len(base):].lstrip("-"),
+    }
+
+
 def inspect_specification(data, filename=""):
+    if filename.lower().endswith(".xlsx"):
+        return inspect_specification_xlsx(data, filename=filename)
     document = Document(BytesIO(data))
     paragraphs = [p.text.strip() for p in document.paragraphs if p.text.strip()]
     scope = next((paragraphs[index + 1] for index, text in enumerate(paragraphs[:-1])
@@ -283,7 +423,7 @@ def inspect_specification(data, filename=""):
         criterion = next((i for i, value in enumerate(header)
                           if re.search(r"质量标准|specification|acceptance criteria", value, re.I)), None)
         method = next((i for i, value in enumerate(header)
-                       if re.fullmatch(r"方法(?:\s*method)?|method", value, re.I)), None)
+                       if re.fullmatch(r"(?:分析|检测)?方法(?:\s*[/／]?\s*method)?|method", value, re.I)), None)
         sop = next((i for i, value in enumerate(header) if re.search(r"方法编号|SOP No", value, re.I)), None)
         if criterion is None or method is None or method >= criterion:
             continue
@@ -372,6 +512,7 @@ def inspect_specification(data, filename=""):
         if not r.get("component_en"):
             r["component_en"] = r.get("item_en", "")
 
+    _enrich_spec_rows(rows)
     numbers = standard_numbers(filename)
     number = numbers[0] if len(numbers) == 1 else ""
     base = split_number(number)

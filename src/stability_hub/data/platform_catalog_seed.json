@@ -1,0 +1,862 @@
+{
+  "schema_version": 1,
+  "catalog_version": "2026.11-r3",
+  "unit_standard": "SOP(G)-RQA-0-001",
+  "unit_canonical_map": {
+    "%": "%",
+    "％": "%",
+    "mg/ml": "mg/mL",
+    "mg/mL": "mg/mL",
+    "mg/ml ": "mg/mL",
+    "mg / ml": "mg/mL",
+    "mg/via": "mg/vial",
+    "ug/ml": "μg/mL",
+    "μg/ml": "μg/mL",
+    "µg/ml": "μg/mL",
+    "ug/mL": "μg/mL",
+    "μg/mL": "μg/mL",
+    "ng/ml": "ng/mL",
+    "ng/mL": "ng/mL",
+    "ng/mg": "ng/mg",
+    "pg/mg": "pg/mg",
+    "eu/ml": "EU/mL",
+    "EU/ml": "EU/mL",
+    "EU/mL": "EU/mL",
+    "eu/mg": "EU/mg",
+    "EU/mg": "EU/mg",
+    "mosm/kg": "mOsmol/kg",
+    "mOsm/kg": "mOsmol/kg",
+    "mosmol/kg": "mOsmol/kg",
+    "mOsmol/kg": "mOsmol/kg",
+    "cfu/10ml": "cfu/10 mL",
+    "CFU/10ml": "cfu/10 mL",
+    "cfu/10 mL": "cfu/10 mL",
+    "CFU/10 mL": "cfu/10 mL",
+    "cfu/100ml": "cfu/100 mL",
+    "CFU/100ml": "cfu/100 mL",
+    "cfu/ml": "cfu/mL",
+    "CFU/ml": "cfu/mL",
+    "ml": "mL",
+    "mL": "mL",
+    "ppm": "ppm",
+    "ppb": "ppb",
+    "ntu": "NTU",
+    "NTU": "NTU",
+    "粒/支": "粒/支",
+    "粒/瓶": "粒/瓶",
+    "particles/vial": "particles/vial",
+    "particles/syringe": "particles/syringe"
+  },
+  "parent_child_method_pairs": [
+    ["无菌检查", "薄膜过滤"],
+    ["无菌检查", "直接接种"],
+    ["无菌", "薄膜过滤"],
+    ["细菌内毒素", "凝胶"],
+    ["细菌内毒素", "动态显色"],
+    ["细菌内毒素", "动态浊度"],
+    ["细菌内毒素", "光度测定"],
+    ["不溶性微粒", "光阻"],
+    ["不溶性微粒", "显微计数"],
+    ["可见异物", "灯检"],
+    ["可见异物", "目视"],
+    ["渗透压摩尔浓度", "冰点下降"],
+    ["ph值测定", "电位"],
+    ["微生物限度", "薄膜过滤"],
+    ["水分", "卡尔费休"],
+    ["装量", "可抽提体积"],
+    ["装量", "重量"],
+    ["外观", "目视"],
+    ["颜色", "目视比色"],
+    ["颜色", "目视"],
+    ["澄清度", "目视"],
+    ["澄清度", "浊度"]
+  ],
+  "categories": [
+    {
+      "code": "identification",
+      "display_order": 1,
+      "name_zh": "1.鉴别",
+      "name_en": "Identification",
+      "description": "一级结构、等电点、免疫学与分子量鉴别检项",
+      "aliases": ["鉴别", "1.鉴别", "1、鉴别", "Identity", "Identification", "1.Identity", "1.Identification"]
+    },
+    {
+      "code": "purity_impurity",
+      "display_order": 2,
+      "name_zh": "2.纯度和杂质",
+      "name_en": "Purity and Impurities",
+      "description": "分子大小变异体、电荷变异体、N糖谱、ADC偶联及工艺相关杂质",
+      "aliases": ["纯度和杂质", "2.纯度和杂质", "2、纯度和杂质", "纯度与杂质", "纯度", "Purity and Impurities", "Purity and Impurity", "2.Purity and Impurities", "2.Purity and Impurity"]
+    },
+    {
+      "code": "potency",
+      "display_order": 3,
+      "name_zh": "3.效价",
+      "name_en": "Potency",
+      "description": "结合活性与细胞生物学活性测定",
+      "aliases": ["效价", "3.效价", "3、效价", "活性", "生物学活性", "Potency", "3.Potency", "Bioactivity"]
+    },
+    {
+      "code": "content",
+      "display_order": 4,
+      "name_zh": "4.含量",
+      "name_en": "Content",
+      "description": "蛋白质浓度及关键辅料含量",
+      "aliases": ["含量", "4.含量", "4、含量", "蛋白含量", "Content", "4.Content", "Protein Content"]
+    },
+    {
+      "code": "safety",
+      "display_order": 5,
+      "name_zh": "5.安全性",
+      "name_en": "Safety",
+      "description": "无菌、细菌内毒素、微生物限度、微粒/异物与容器密封性",
+      "aliases": ["安全性", "5.安全性", "5、安全性", "微生物与安全性", "Safety", "5.Safety"]
+    },
+    {
+      "code": "physicochemical_other",
+      "display_order": 6,
+      "name_zh": "6.理化与其它",
+      "name_en": "General Tests & Physicochemical",
+      "description": "外观、颜色、澄清度、pH、渗透压、装量、水分及给药装置理化检查",
+      "aliases": ["理化与其它", "6.理化与其它", "其它检定", "其他检定", "6.其它检定", "6.其他检定", "6、其它检定", "一般检查", "理化性质", "理化", "General Tests", "Other Tests", "General Tests & Physicochemical", "6.Other Tests", "6.General Tests", "Physicochemical"]
+    }
+  ],
+  "subcategories": [
+    {"code": "id_peptide", "category_code": "identification", "display_order": 1, "name_zh": "肽图与一级结构", "name_en": "Peptide Mapping & Primary Structure"},
+    {"code": "id_charge", "category_code": "identification", "display_order": 2, "name_zh": "电荷与等电点鉴别", "name_en": "Charge / pI Identification"},
+    {"code": "id_immuno", "category_code": "identification", "display_order": 3, "name_zh": "免疫学鉴别", "name_en": "Immunological Identification"},
+    {"code": "id_mass", "category_code": "identification", "display_order": 4, "name_zh": "分子量鉴别", "name_en": "Molecular Weight Identification"},
+    {"code": "size_variants", "category_code": "purity_impurity", "display_order": 1, "name_zh": "分子大小变异体", "name_en": "Size Variants"},
+    {"code": "charge_variants", "category_code": "purity_impurity", "display_order": 2, "name_zh": "电荷变异体", "name_en": "Charge Variants"},
+    {"code": "glycan_profile", "category_code": "purity_impurity", "display_order": 3, "name_zh": "N糖谱", "name_en": "N-Glycan Profile"},
+    {"code": "adc_conjugation", "category_code": "purity_impurity", "display_order": 4, "name_zh": "偶联与小分子杂质", "name_en": "Conjugation & Small Molecule Impurities"},
+    {"code": "process_impurities", "category_code": "purity_impurity", "display_order": 5, "name_zh": "工艺相关杂质", "name_en": "Process-Related Impurities"},
+    {"code": "potency_binding", "category_code": "potency", "display_order": 1, "name_zh": "结合活性", "name_en": "Binding Activity"},
+    {"code": "potency_bioassay", "category_code": "potency", "display_order": 2, "name_zh": "生物学活性", "name_en": "Biological Activity"},
+    {"code": "content_protein", "category_code": "content", "display_order": 1, "name_zh": "蛋白/主成分含量", "name_en": "Protein Content"},
+    {"code": "content_excipient", "category_code": "content", "display_order": 2, "name_zh": "辅料含量", "name_en": "Excipient Content"},
+    {"code": "safety_microbial", "category_code": "safety", "display_order": 1, "name_zh": "微生物安全", "name_en": "Microbiological Safety"},
+    {"code": "safety_particles", "category_code": "safety", "display_order": 2, "name_zh": "微粒与异物", "name_en": "Particulate Matter"},
+    {"code": "safety_ccit", "category_code": "safety", "display_order": 3, "name_zh": "容器密封性", "name_en": "Container Closure Integrity"},
+    {"code": "phys_appearance", "category_code": "physicochemical_other", "display_order": 1, "name_zh": "外观与澄清度", "name_en": "Appearance, Color & Clarity"},
+    {"code": "phys_constants", "category_code": "physicochemical_other", "display_order": 2, "name_zh": "理化常数", "name_en": "Physicochemical Constants"},
+    {"code": "phys_dosage", "category_code": "physicochemical_other", "display_order": 3, "name_zh": "制剂通则与装置性能", "name_en": "Dosage & Device Performance"}
+  ],
+  "assays": [
+    {
+      "code": "peptide_mapping",
+      "category_code": "identification",
+      "subcategory_code": "id_peptide",
+      "display_order": 10,
+      "name_zh": "肽图",
+      "name_en": "Peptide Mapping",
+      "default_unit": "",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["mAb", "bsAb", "ADC", "fusion"],
+      "aliases": ["肽图", "肽图分析", "肽图检查", "Peptide Mapping", "Peptide map", "肽图 Peptide mapping"],
+      "methods": [
+        {"code": "rp-uplc", "name_zh": "RP-UPLC法", "name_en": "RP-UPLC Method", "method_family": "rp-uplc", "aliases": ["RP-UPLC", "RP-UPLC法", "RP-UPLC Method", "反相超高效液相色谱法"]},
+        {"code": "rp-hplc", "name_zh": "RP-HPLC法", "name_en": "RP-HPLC Method", "method_family": "rp-hplc", "aliases": ["RP-HPLC", "RP-HPLC法", "RP-HPLC Method", "反相高效液相色谱法"]},
+        {"code": "lc-ms", "name_zh": "LC-MS法", "name_en": "LC-MS Method", "method_family": "lc-ms", "aliases": ["LC-MS", "LC-MS法", "液质联用法"]}
+      ],
+      "components": [
+        {"code": "profile_consistency", "name_zh": "图谱一致性", "name_en": "Profile Consistency", "unit": "", "value_kind": "qualitative", "display_order": 1, "aliases": ["图谱一致", "图谱一致性", "与参考品图谱一致", "Profile Consistency", "Conform"]}
+      ]
+    },
+    {
+      "code": "isoelectric_point",
+      "category_code": "identification",
+      "subcategory_code": "id_charge",
+      "display_order": 20,
+      "name_zh": "等电点",
+      "name_en": "Isoelectric Point",
+      "default_unit": "",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["mAb", "bsAb", "ADC", "fusion"],
+      "aliases": ["等电点", "pI", "Isoelectric Point", "等电点(icIEF)", "pI (icIEF)"],
+      "methods": [
+        {"code": "icief", "name_zh": "icIEF法", "name_en": "icIEF Method", "method_family": "icief", "aliases": ["icIEF", "icIEF法", "icIEF Method", "全柱成像毛细管等电聚焦电泳法", "全柱成像毛细管等电聚焦"]},
+        {"code": "cief", "name_zh": "cIEF法", "name_en": "cIEF Method", "method_family": "cief", "aliases": ["cIEF", "cIEF法", "cIEF Method", "毛细管等电聚焦电泳法"]}
+      ],
+      "components": [
+        {"code": "main_peak_pi", "name_zh": "主峰等电点", "name_en": "Main Peak pI", "unit": "", "value_kind": "numeric", "display_order": 1, "aliases": ["主峰pI", "主峰等电点", "Main Peak pI"]},
+        {"code": "main_peak_pi_diff", "name_zh": "主峰pI差值", "name_en": "Main Peak pI Difference", "unit": "", "value_kind": "numeric", "display_order": 2, "aliases": ["主峰pI差值", "主峰等电点差值", "Main Peak pI Difference"]},
+        {"code": "profile_consistency", "name_zh": "图谱一致性", "name_en": "Profile Consistency", "unit": "", "value_kind": "qualitative", "display_order": 3, "aliases": ["图谱一致", "图谱一致性"]}
+      ]
+    },
+    {
+      "code": "binding_identification",
+      "category_code": "identification",
+      "subcategory_code": "id_immuno",
+      "display_order": 30,
+      "name_zh": "免疫学鉴别",
+      "name_en": "Immunological Identification",
+      "default_unit": "",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["mAb", "bsAb", "ADC"],
+      "aliases": ["免疫学鉴别", "结合鉴别", "ELISA鉴别", "Immunological Identification", "Identity (ELISA)"],
+      "methods": [
+        {"code": "elisa", "name_zh": "ELISA法", "name_en": "ELISA Method", "method_family": "elisa", "aliases": ["ELISA", "ELISA法", "ELISA Method", "酶联免疫吸附法"]}
+      ],
+      "components": [
+        {"code": "curve_consistency", "name_zh": "量效曲线一致性", "name_en": "Dose-Response Curve Consistency", "unit": "", "value_kind": "qualitative", "display_order": 1, "aliases": ["量效曲线", "量效曲线一致性", "曲线相似", "符合规定"]}
+      ]
+    },
+    {
+      "code": "intact_mass",
+      "category_code": "identification",
+      "subcategory_code": "id_mass",
+      "display_order": 40,
+      "name_zh": "分子量",
+      "name_en": "Molecular Weight",
+      "default_unit": "Da",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["mAb", "bsAb", "ADC", "peptide"],
+      "aliases": ["分子量", "完整分子量", "Molecular Weight", "Intact Mass"],
+      "methods": [
+        {"code": "lc-ms", "name_zh": "LC-MS法", "name_en": "LC-MS Method", "method_family": "lc-ms", "aliases": ["LC-MS", "LC-MS法", "LC-MS Method"]}
+      ],
+      "components": [
+        {"code": "molecular_weight", "name_zh": "分子量", "name_en": "Molecular Weight", "unit": "Da", "value_kind": "numeric", "display_order": 1, "aliases": ["分子量", "Molecular Weight"]}
+      ]
+    },
+    {
+      "code": "sec_purity",
+      "category_code": "purity_impurity",
+      "subcategory_code": "size_variants",
+      "display_order": 100,
+      "name_zh": "纯度（分子排阻色谱）",
+      "name_en": "Purity (SEC-HPLC)",
+      "default_unit": "%",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["mAb", "bsAb", "ADC", "fusion"],
+      "aliases": ["纯度(SEC-HPLC)", "纯度（SEC-HPLC）", "分子排阻色谱", "分子排阻高效液相色谱", "体积排阻色谱", "SEC纯度", "SEC-HPLC", "Purity (SEC-HPLC)", "Size Exclusion Chromatography"],
+      "methods": [
+        {"code": "sec-hplc", "name_zh": "SEC-HPLC法", "name_en": "SEC-HPLC Method", "method_family": "sec-hplc", "aliases": ["SEC", "SEC-HPLC", "SEC-HPLC法", "SEC-HPLC Method", "分子排阻色谱法", "分子排阻高效液相色谱法", "体积排阻色谱法", "体积排阻高效液相色谱法", "分子排阻色谱法(SEC-HPLC Method)"]},
+        {"code": "sec-uplc", "name_zh": "SEC-UPLC法", "name_en": "SEC-UPLC Method", "method_family": "sec-hplc", "aliases": ["SEC-UPLC", "SEC-UPLC法", "SEC-UPLC Method"]}
+      ],
+      "components": [
+        {"code": "monomer", "name_zh": "单体", "name_en": "Monomer", "unit": "%", "value_kind": "numeric", "display_order": 1, "aliases": ["单体", "Monomer", "主峰", "Main Peak", "单体(%)"]},
+        {"code": "hmw", "name_zh": "高分子量组分", "name_en": "HMW", "unit": "%", "value_kind": "numeric", "display_order": 2, "aliases": ["聚合体", "高分子量组分", "高分子量聚合物", "HMW", "HMWS", "Aggregate", "Aggregates", "聚体"]},
+        {"code": "lmw", "name_zh": "低分子量组分", "name_en": "LMW", "unit": "%", "value_kind": "numeric", "display_order": 3, "aliases": ["低分子量组分", "片段", "LMW", "LMWS", "Fragment", "Fragments"]}
+      ]
+    },
+    {
+      "code": "nr_ce_sds",
+      "category_code": "purity_impurity",
+      "subcategory_code": "size_variants",
+      "display_order": 110,
+      "name_zh": "纯度（非还原型CE-SDS）",
+      "name_en": "Purity (NR CE-SDS)",
+      "default_unit": "%",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["mAb", "bsAb", "ADC", "fusion"],
+      "aliases": ["非还原型CE-SDS", "非还原CE-SDS", "非还原型毛细管电泳", "纯度(非还原型CE-SDS)", "NR CE-SDS", "nrCE-SDS", "nrCE", "Non-reduced CE-SDS", "CE-SDS (non-reduced)"],
+      "methods": [
+        {"code": "nr-ce-sds", "name_zh": "非还原型CE-SDS法", "name_en": "NR CE-SDS Method", "method_family": "nr-ce-sds", "aliases": ["NR CE-SDS", "nrCE", "nrCE-SDS", "NR-CE-SDS", "非还原CE-SDS", "非还原CE-SDS法", "非还原型CE-SDS", "非还原型CE-SDS法", "NR CE-SDS Method", "Non-reduced CE-SDS", "Non-reduced CE-SDS Method", "非还原型毛细管凝胶电泳法", "非还原型毛细管电泳法"]}
+      ],
+      "components": [
+        {"code": "main_peak", "name_zh": "主峰", "name_en": "Main Peak", "unit": "%", "value_kind": "numeric", "display_order": 1, "aliases": ["主峰", "Main Peak", "单体", "Monomer", "IgG主峰", "Intact IgG"]},
+        {"code": "hmw", "name_zh": "高分子量组分", "name_en": "HMW", "unit": "%", "value_kind": "numeric", "display_order": 2, "aliases": ["高分子量组分", "HMW", "聚合体"]},
+        {"code": "lmw", "name_zh": "低分子量组分", "name_en": "LMW", "unit": "%", "value_kind": "numeric", "display_order": 3, "aliases": ["低分子量组分", "片段", "LMW", "Fragment", "Fragments", "其他峰", "Others"]}
+      ]
+    },
+    {
+      "code": "r_ce_sds",
+      "category_code": "purity_impurity",
+      "subcategory_code": "size_variants",
+      "display_order": 120,
+      "name_zh": "纯度（还原型CE-SDS）",
+      "name_en": "Purity (R CE-SDS)",
+      "default_unit": "%",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["mAb", "bsAb", "ADC", "fusion"],
+      "aliases": ["还原型CE-SDS", "还原CE-SDS", "还原型毛细管电泳", "纯度(还原型CE-SDS)", "R CE-SDS", "rCE-SDS", "rCE", "Reduced CE-SDS", "CE-SDS (reduced)"],
+      "methods": [
+        {"code": "r-ce-sds", "name_zh": "还原型CE-SDS法", "name_en": "R CE-SDS Method", "method_family": "r-ce-sds", "aliases": ["R CE-SDS", "rCE", "rCE-SDS", "R-CE-SDS", "还原CE-SDS", "还原CE-SDS法", "还原型CE-SDS", "还原型CE-SDS法", "R CE-SDS Method", "Reduced CE-SDS", "Reduced CE-SDS Method", "还原型毛细管凝胶电泳法", "还原型毛细管电泳法"]}
+      ],
+      "components": [
+        {"code": "hc_lc", "name_zh": "重链+轻链", "name_en": "HC+LC", "unit": "%", "value_kind": "numeric", "display_order": 1, "aliases": ["重链+轻链", "HC+LC", "重链%+轻链%", "HC%+LC%", "主峰", "Main Peak"]},
+        {"code": "nghc", "name_zh": "非糖基化重链", "name_en": "NGHC", "unit": "%", "value_kind": "numeric", "display_order": 2, "aliases": ["非糖基化重链", "NGHC"]},
+        {"code": "others", "name_zh": "其他峰", "name_en": "Others", "unit": "%", "value_kind": "numeric", "display_order": 3, "aliases": ["其他峰", "Others", "低分子量组分", "LMW", "碎片"]}
+      ]
+    },
+    {
+      "code": "charge_variants",
+      "category_code": "purity_impurity",
+      "subcategory_code": "charge_variants",
+      "display_order": 130,
+      "name_zh": "电荷变异体",
+      "name_en": "Charge Variants",
+      "default_unit": "%",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["mAb", "bsAb", "ADC", "fusion"],
+      "aliases": ["电荷变异体", "电荷异质性", "Charge Variant", "Charge Variants", "Charge Heterogeneity"],
+      "methods": [
+        {"code": "icief", "name_zh": "icIEF法", "name_en": "icIEF Method", "method_family": "icief", "aliases": ["icIEF", "icIEF法", "icIEF Method", "全柱成像毛细管等电聚焦电泳法"]},
+        {"code": "cex-hplc", "name_zh": "CEX-HPLC法", "name_en": "CEX-HPLC Method", "method_family": "cex-hplc", "aliases": ["CEX", "CEX-HPLC", "CEX-HPLC法", "CEX-HPLC Method", "阳离子交换色谱法", "IEC-HPLC", "IEC-HPLC法"]},
+        {"code": "aex-hplc", "name_zh": "AEX-HPLC法", "name_en": "AEX-HPLC Method", "method_family": "aex-hplc", "aliases": ["AEX", "AEX-HPLC", "AEX-HPLC法", "AEX-HPLC Method", "阴离子交换色谱法"]},
+        {"code": "cze", "name_zh": "CZE法", "name_en": "CZE Method", "method_family": "cze", "aliases": ["CZE", "CZE法", "CZE Method", "毛细管区带电泳法"]}
+      ],
+      "components": [
+        {"code": "main_peak", "name_zh": "主峰", "name_en": "Main Peak", "unit": "%", "value_kind": "numeric", "display_order": 1, "aliases": ["主峰", "Main Peak", "中性峰", "Neutral Peak"]},
+        {"code": "acidic_peaks", "name_zh": "酸性峰", "name_en": "Acidic Peaks", "unit": "%", "value_kind": "numeric", "display_order": 2, "aliases": ["酸性峰", "酸性组分", "酸峰", "Acidic Peak", "Acidic Peaks", "Acidic Variants"]},
+        {"code": "basic_peaks", "name_zh": "碱性峰", "name_en": "Basic Peaks", "unit": "%", "value_kind": "numeric", "display_order": 3, "aliases": ["碱性峰", "碱性组分", "碱峰", "Basic Peak", "Basic Peaks", "Basic Variants"]}
+      ]
+    },
+    {
+      "code": "rp_purity",
+      "category_code": "purity_impurity",
+      "subcategory_code": "size_variants",
+      "display_order": 135,
+      "name_zh": "纯度（反相色谱）",
+      "name_en": "Purity (RP-HPLC)",
+      "default_unit": "%",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["peptide", "fusion", "ADC"],
+      "aliases": ["纯度(RP-HPLC)", "纯度（RP-UPLC）", "反相纯度", "有关物质", "相关蛋白", "RP-HPLC Purity", "Related Proteins"],
+      "methods": [
+        {"code": "rp-hplc", "name_zh": "RP-HPLC法", "name_en": "RP-HPLC Method", "method_family": "rp-hplc", "aliases": ["RP-HPLC", "RP-HPLC法", "RP-HPLC Method"]},
+        {"code": "rp-uplc", "name_zh": "RP-UPLC法", "name_en": "RP-UPLC Method", "method_family": "rp-uplc", "aliases": ["RP-UPLC", "RP-UPLC法", "RP-UPLC Method"]}
+      ],
+      "components": [
+        {"code": "main_peak", "name_zh": "主峰纯度", "name_en": "Main Peak Purity", "unit": "%", "value_kind": "numeric", "display_order": 1, "aliases": ["主峰", "主峰纯度", "纯度", "Main Peak"]},
+        {"code": "total_impurities", "name_zh": "总杂质", "name_en": "Total Impurities", "unit": "%", "value_kind": "numeric", "display_order": 2, "aliases": ["总杂质", "总体小峰", "Total Impurities", "Total minor species"]}
+      ]
+    },
+    {
+      "code": "n_glycan",
+      "category_code": "purity_impurity",
+      "subcategory_code": "glycan_profile",
+      "display_order": 140,
+      "name_zh": "N-糖谱",
+      "name_en": "N-Glycan Profile",
+      "default_unit": "%",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["mAb", "bsAb", "ADC", "fusion"],
+      "aliases": ["N-糖谱", "N糖谱", "糖型分布", "寡糖谱", "N-Glycan", "N-Glycan Profile", "Glycan Profile"],
+      "methods": [
+        {"code": "hilic-uplc", "name_zh": "HILIC-UPLC法", "name_en": "HILIC-UPLC Method", "method_family": "hilic-uplc", "aliases": ["HILIC-UPLC", "HILIC-UPLC法", "2-AB荧光标记法", "2-AB HILIC-UPLC", "UPLC-FLR"]}
+      ],
+      "components": [
+        {"code": "g0f", "name_zh": "G0F", "name_en": "G0F", "unit": "%", "value_kind": "numeric", "display_order": 1, "aliases": ["G0F"]},
+        {"code": "g1f", "name_zh": "G1F", "name_en": "G1F", "unit": "%", "value_kind": "numeric", "display_order": 2, "aliases": ["G1F"]},
+        {"code": "g2f", "name_zh": "G2F", "name_en": "G2F", "unit": "%", "value_kind": "numeric", "display_order": 3, "aliases": ["G2F"]},
+        {"code": "man5", "name_zh": "Man5", "name_en": "Man5", "unit": "%", "value_kind": "numeric", "display_order": 4, "aliases": ["Man5", "M5"]},
+        {"code": "total_afucosylation", "name_zh": "总去岩藻糖", "name_en": "Total Afucosylation", "unit": "%", "value_kind": "numeric", "display_order": 5, "aliases": ["总去岩藻糖", "去岩藻糖", "Total Afucosylation"]},
+        {"code": "total_sialylation", "name_zh": "总唾液酸", "name_en": "Total Sialylation", "unit": "%", "value_kind": "numeric", "display_order": 6, "aliases": ["总唾液酸", "唾液酸", "Total Sialylation"]}
+      ]
+    },
+    {
+      "code": "dar_value",
+      "category_code": "purity_impurity",
+      "subcategory_code": "adc_conjugation",
+      "display_order": 150,
+      "name_zh": "平均偶联率（DAR值）",
+      "name_en": "Drug-to-Antibody Ratio (DAR)",
+      "default_unit": "",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["ADC"],
+      "aliases": ["平均偶联率", "平均偶联率-DAR值", "DAR", "DAR值", "药物抗体偶联比", "Drug-to-Antibody Ratio", "The mean conjugated ratio-DAR"],
+      "methods": [
+        {"code": "rp-hplc", "name_zh": "RP-HPLC法", "name_en": "RP-HPLC Method", "method_family": "rp-hplc", "aliases": ["RP-HPLC", "RP-HPLC法", "RP-HPLC Method"]},
+        {"code": "hic-hplc", "name_zh": "HIC-HPLC法", "name_en": "HIC-HPLC Method", "method_family": "hic-hplc", "aliases": ["HIC-HPLC", "HIC-HPLC法", "HIC-HPLC Method", "疏水色谱法"]},
+        {"code": "uv-vis", "name_zh": "UV-vis法", "name_en": "UV-vis Method", "method_family": "uv", "aliases": ["UV-vis", "UV-vis法", "紫外分光光度法"]}
+      ],
+      "components": [
+        {"code": "dar", "name_zh": "DAR值", "name_en": "DAR", "unit": "", "value_kind": "numeric", "display_order": 1, "aliases": ["DAR", "DAR值", "平均偶联率"]}
+      ]
+    },
+    {
+      "code": "free_drug",
+      "category_code": "purity_impurity",
+      "subcategory_code": "adc_conjugation",
+      "display_order": 160,
+      "name_zh": "游离小分子药物及相关杂质总残留量",
+      "name_en": "Total Residual Free Drug-Linker and Related Impurities",
+      "default_unit": "%",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["ADC"],
+      "aliases": ["游离小分子", "游离小分子药物及相关杂质总残留量", "游离毒素残留", "游离小分子残留", "Free Drug", "Total residual free drug linker and related impurities"],
+      "methods": [
+        {"code": "rp-hplc", "name_zh": "RP-HPLC法", "name_en": "RP-HPLC Method", "method_family": "rp-hplc", "aliases": ["RP-HPLC", "RP-HPLC法", "RP-HPLC Method"]},
+        {"code": "rp-uplc", "name_zh": "RP-UPLC法", "name_en": "RP-UPLC Method", "method_family": "rp-uplc", "aliases": ["RP-UPLC", "RP-UPLC法", "RP-UPLC Method"]}
+      ],
+      "components": [
+        {"code": "free_drug_total", "name_zh": "游离小分子总残留", "name_en": "Total Free Drug", "unit": "%", "value_kind": "numeric", "display_order": 1, "aliases": ["游离小分子总残留", "游离毒素残留", "Total Free Drug"]}
+      ]
+    },
+    {
+      "code": "unconjugated_antibody",
+      "category_code": "purity_impurity",
+      "subcategory_code": "adc_conjugation",
+      "display_order": 170,
+      "name_zh": "未偶联蛋白含量",
+      "name_en": "Unconjugated Antibody",
+      "default_unit": "%",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["ADC"],
+      "aliases": ["未偶联蛋白含量", "未偶联抗体", "空载率", "DAR0", "Unconjugated Antibody"],
+      "methods": [
+        {"code": "hic-hplc", "name_zh": "HIC-HPLC法", "name_en": "HIC-HPLC Method", "method_family": "hic-hplc", "aliases": ["HIC-HPLC", "HIC-HPLC法"]},
+        {"code": "nr-ce-sds", "name_zh": "非还原型CE-SDS法", "name_en": "NR CE-SDS Method", "method_family": "nr-ce-sds", "aliases": ["非还原型CE-SDS法", "NR CE-SDS Method"]}
+      ],
+      "components": [
+        {"code": "unconjugated", "name_zh": "未偶联蛋白", "name_en": "Unconjugated Antibody", "unit": "%", "value_kind": "numeric", "display_order": 1, "aliases": ["未偶联蛋白", "DAR0", "Unconjugated Antibody"]}
+      ]
+    },
+    {
+      "code": "hcp_residual",
+      "category_code": "purity_impurity",
+      "subcategory_code": "process_impurities",
+      "display_order": 180,
+      "name_zh": "宿主细胞蛋白残留量",
+      "name_en": "Residual Host Cell Protein (HCP)",
+      "default_unit": "ppm",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["mAb", "bsAb", "ADC", "fusion"],
+      "aliases": ["宿主细胞蛋白残留", "宿主细胞蛋白残留量", "HCP", "HCP残留", "Residual Host Cell Protein"],
+      "methods": [
+        {"code": "elisa", "name_zh": "ELISA法", "name_en": "ELISA Method", "method_family": "elisa", "aliases": ["ELISA", "ELISA法", "ELISA Method"]}
+      ],
+      "components": [
+        {"code": "hcp", "name_zh": "宿主细胞蛋白残留", "name_en": "HCP", "unit": "ppm", "value_kind": "numeric", "display_order": 1, "aliases": ["HCP", "宿主细胞蛋白残留"]}
+      ]
+    },
+    {
+      "code": "hcd_residual",
+      "category_code": "purity_impurity",
+      "subcategory_code": "process_impurities",
+      "display_order": 190,
+      "name_zh": "外源性DNA残留量",
+      "name_en": "Residual Host Cell DNA (HCD)",
+      "default_unit": "pg/mg",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["mAb", "bsAb", "ADC", "fusion"],
+      "aliases": ["外源性DNA残留", "外源性DNA残留量", "宿主细胞DNA残留", "HCD", "DNA残留", "Residual Host Cell DNA", "Residual Exogenous DNA"],
+      "methods": [
+        {"code": "qpcr", "name_zh": "荧光定量PCR法", "name_en": "qPCR Method", "method_family": "qpcr", "aliases": ["qPCR", "qPCR法", "荧光定量PCR法", "实时荧光定量PCR法"]}
+      ],
+      "components": [
+        {"code": "hcd", "name_zh": "宿主细胞DNA残留", "name_en": "HCD", "unit": "pg/mg", "value_kind": "numeric", "display_order": 1, "aliases": ["HCD", "宿主细胞DNA残留", "外源性DNA残留"]}
+      ]
+    },
+    {
+      "code": "protein_a_residual",
+      "category_code": "purity_impurity",
+      "subcategory_code": "process_impurities",
+      "display_order": 195,
+      "name_zh": "Protein A残留量",
+      "name_en": "Residual Protein A",
+      "default_unit": "ppm",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["mAb", "bsAb", "ADC"],
+      "aliases": ["蛋白A残留", "Protein A残留", "Protein A残留量", "Residual Protein A"],
+      "methods": [
+        {"code": "elisa", "name_zh": "ELISA法", "name_en": "ELISA Method", "method_family": "elisa", "aliases": ["ELISA", "ELISA法", "ELISA Method"]}
+      ],
+      "components": [
+        {"code": "protein_a", "name_zh": "蛋白A残留", "name_en": "Residual Protein A", "unit": "ppm", "value_kind": "numeric", "display_order": 1, "aliases": ["蛋白A残留", "Protein A"]}
+      ]
+    },
+    {
+      "code": "binding_activity",
+      "category_code": "potency",
+      "subcategory_code": "potency_binding",
+      "display_order": 200,
+      "name_zh": "相对结合活性",
+      "name_en": "Relative Binding Activity",
+      "default_unit": "%",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["mAb", "bsAb", "ADC", "fusion"],
+      "aliases": ["结合活性", "相对结合活性", "抗原结合活性", "Binding Activity", "Relative Binding Activity"],
+      "methods": [
+        {"code": "elisa", "name_zh": "ELISA法", "name_en": "ELISA Method", "method_family": "elisa", "aliases": ["ELISA", "ELISA法", "ELISA Method", "酶联免疫吸附法"]},
+        {"code": "spr", "name_zh": "SPR法", "name_en": "SPR Method", "method_family": "spr", "aliases": ["SPR", "SPR法", "表面等离子共振法"]},
+        {"code": "bli", "name_zh": "BLI法", "name_en": "BLI Method", "method_family": "bli", "aliases": ["BLI", "BLI法", "生物膜干涉法"]}
+      ],
+      "components": [
+        {"code": "relative_binding", "name_zh": "相对结合活性", "name_en": "Relative Binding Activity", "unit": "%", "value_kind": "numeric", "display_order": 1, "aliases": ["相对结合活性", "结合活性", "相对效价", "Relative Binding Activity"]},
+        {"code": "curve_consistency", "name_zh": "量效曲线一致性", "name_en": "Dose-Response Curve Consistency", "unit": "", "value_kind": "qualitative", "display_order": 2, "aliases": ["量效曲线", "量效曲线一致性", "曲线相似"]}
+      ]
+    },
+    {
+      "code": "biological_activity",
+      "category_code": "potency",
+      "subcategory_code": "potency_bioassay",
+      "display_order": 210,
+      "name_zh": "生物学活性",
+      "name_en": "Biological Activity",
+      "default_unit": "%",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["mAb", "bsAb", "ADC", "fusion", "peptide"],
+      "aliases": ["生物学活性", "细胞生物学活性", "相对效价", "效价", "Biological Activity", "Potency", "Relative Potency", "Bioactivity"],
+      "methods": [
+        {"code": "cell-cytotoxicity", "name_zh": "细胞杀伤法", "name_en": "Cell-based Cytotoxicity Method", "method_family": "cell-cytotoxicity", "aliases": ["细胞杀伤法", "细胞杀伤", "Cell-based Cytotoxicity", "Cell-based Cytotoxicity Method", "细胞增殖抑制法"]},
+        {"code": "reporter-gene", "name_zh": "报告基因法", "name_en": "Reporter Gene Assay", "method_family": "reporter-gene", "aliases": ["报告基因法", "报告基因", "Reporter Gene", "Reporter Gene Assay", "Reporter Gene Method"]},
+        {"code": "ecl", "name_zh": "电化学发光法", "name_en": "Electrochemiluminescence Method", "method_family": "ecl", "aliases": ["电化学发光法", "ECL", "ECL法", "MSD法"]},
+        {"code": "cell-camp", "name_zh": "Cell-based cAMP法", "name_en": "Cell-based cAMP Method", "method_family": "cell-camp", "aliases": ["Cell based cAMP", "Cell-based cAMP", "cAMP法", "细胞cAMP法"]}
+      ],
+      "components": [
+        {"code": "relative_potency", "name_zh": "相对效价", "name_en": "Relative Potency", "unit": "%", "value_kind": "numeric", "display_order": 1, "aliases": ["相对效价", "相对生物学活性", "相对活性", "生物学活性", "Relative Potency", "Potency"]},
+        {"code": "curve_consistency", "name_zh": "量效曲线一致性", "name_en": "Dose-Response Curve Consistency", "unit": "", "value_kind": "qualitative", "display_order": 2, "aliases": ["量效曲线", "量效曲线一致性", "曲线相似"]}
+      ]
+    },
+    {
+      "code": "protein_concentration",
+      "category_code": "content",
+      "subcategory_code": "content_protein",
+      "display_order": 300,
+      "name_zh": "蛋白质含量",
+      "name_en": "Protein Content",
+      "default_unit": "mg/mL",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["mAb", "bsAb", "ADC", "fusion", "peptide"],
+      "aliases": ["蛋白质含量", "蛋白含量", "蛋白浓度", "蛋白质浓度", "Protein Content", "Protein Concentration", "蛋白含量 Protein Concentration"],
+      "methods": [
+        {"code": "uv", "name_zh": "UV法", "name_en": "UV Method", "method_family": "uv", "aliases": ["UV", "UV法", "UV Method", "UV-vis", "UV-vis法", "紫外分光光度法", "A280", "A280法", "紫外-可见分光光度法", "SoloVPE法"]}
+      ],
+      "components": [
+        {"code": "protein_conc", "name_zh": "蛋白浓度", "name_en": "Protein Concentration", "unit": "mg/mL", "value_kind": "numeric", "display_order": 1, "aliases": ["蛋白浓度", "蛋白质含量", "蛋白含量", "Protein Concentration", "Protein Content"]}
+      ]
+    },
+    {
+      "code": "polysorbate_80",
+      "category_code": "content",
+      "subcategory_code": "content_excipient",
+      "display_order": 310,
+      "name_zh": "聚山梨酯80含量",
+      "name_en": "Polysorbate 80 Content",
+      "default_unit": "mg/mL",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["mAb", "bsAb", "ADC", "fusion"],
+      "aliases": ["聚山梨酯80含量", "吐温80含量", "PS80含量", "PS80", "Polysorbate 80 Content", "Polysorbate 80"],
+      "methods": [
+        {"code": "hplc-cad", "name_zh": "HPLC-CAD法", "name_en": "HPLC-CAD Method", "method_family": "hplc-cad", "aliases": ["HPLC-CAD", "HPLC-CAD法", "CAD法"]},
+        {"code": "hplc-elsd", "name_zh": "HPLC-ELSD法", "name_en": "HPLC-ELSD Method", "method_family": "hplc-elsd", "aliases": ["HPLC-ELSD", "HPLC-ELSD法", "ELSD法"]},
+        {"code": "colorimetric", "name_zh": "比色法", "name_en": "Colorimetric Method", "method_family": "colorimetric", "aliases": ["比色法", "Colorimetric Method"]}
+      ],
+      "components": [
+        {"code": "ps80", "name_zh": "聚山梨酯80含量", "name_en": "Polysorbate 80", "unit": "mg/mL", "value_kind": "numeric", "display_order": 1, "aliases": ["PS80", "聚山梨酯80", "聚山梨酯80含量"]}
+      ]
+    },
+    {
+      "code": "polysorbate_20",
+      "category_code": "content",
+      "subcategory_code": "content_excipient",
+      "display_order": 320,
+      "name_zh": "聚山梨酯20含量",
+      "name_en": "Polysorbate 20 Content",
+      "default_unit": "mg/mL",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["mAb", "bsAb", "ADC", "fusion"],
+      "aliases": ["聚山梨酯20含量", "吐温20含量", "PS20含量", "PS20", "Polysorbate 20 Content", "Polysorbate 20"],
+      "methods": [
+        {"code": "hplc-cad", "name_zh": "HPLC-CAD法", "name_en": "HPLC-CAD Method", "method_family": "hplc-cad", "aliases": ["HPLC-CAD", "HPLC-CAD法"]},
+        {"code": "hplc-elsd", "name_zh": "HPLC-ELSD法", "name_en": "HPLC-ELSD Method", "method_family": "hplc-elsd", "aliases": ["HPLC-ELSD", "HPLC-ELSD法"]}
+      ],
+      "components": [
+        {"code": "ps20", "name_zh": "聚山梨酯20含量", "name_en": "Polysorbate 20", "unit": "mg/mL", "value_kind": "numeric", "display_order": 1, "aliases": ["PS20", "聚山梨酯20", "聚山梨酯20含量"]}
+      ]
+    },
+    {
+      "code": "sterility",
+      "category_code": "safety",
+      "subcategory_code": "safety_microbial",
+      "display_order": 400,
+      "name_zh": "无菌检查",
+      "name_en": "Sterility Test",
+      "default_unit": "",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["mAb", "bsAb", "ADC", "fusion", "peptide"],
+      "aliases": ["无菌", "无菌检查", "无菌检查法", "Sterility", "Sterility Test"],
+      "methods": [
+        {"code": "membrane-filtration", "name_zh": "薄膜过滤法", "name_en": "Membrane Filtration Method", "method_family": "sterility-membrane", "aliases": ["薄膜过滤法", "薄膜过滤", "无菌检查法", "Membrane Filtration", "Membrane Filtration Method"]},
+        {"code": "direct-inoculation", "name_zh": "直接接种法", "name_en": "Direct Inoculation Method", "method_family": "sterility-direct", "aliases": ["直接接种法", "Direct Inoculation Method"]}
+      ],
+      "components": [
+        {"code": "sterility", "name_zh": "无菌", "name_en": "Sterility", "unit": "", "value_kind": "qualitative", "display_order": 1, "aliases": ["无菌", "无菌生长", "符合规定", "Sterility", "No growth"]}
+      ]
+    },
+    {
+      "code": "endotoxin",
+      "category_code": "safety",
+      "subcategory_code": "safety_microbial",
+      "display_order": 410,
+      "name_zh": "细菌内毒素",
+      "name_en": "Bacterial Endotoxins",
+      "default_unit": "EU/mL",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["mAb", "bsAb", "ADC", "fusion", "peptide"],
+      "aliases": ["细菌内毒素", "内毒素", "细菌内毒素检查", "Bacterial Endotoxins", "Endotoxin"],
+      "methods": [
+        {"code": "kinetic-chromogenic", "name_zh": "动态显色法", "name_en": "Kinetic-chromogenic Method", "method_family": "endotoxin-kinetic-chromogenic", "aliases": ["动态显色法", "Kinetic-chromogenic", "Kinetic-chromogenic Method", "显色基质法"]},
+        {"code": "kinetic-turbidimetric", "name_zh": "动态浊度法", "name_en": "Kinetic-turbidimetric Method", "method_family": "endotoxin-kinetic-turbidimetric", "aliases": ["动态浊度法", "Kinetic-turbidimetric", "Kinetic-turbidimetric Method"]},
+        {"code": "gel-clot", "name_zh": "凝胶法", "name_en": "Gel-clot Method", "method_family": "endotoxin-gel-clot", "aliases": ["凝胶法", "Gel-clot", "Gel-clot Method", "细菌内毒素检查法"]}
+      ],
+      "components": [
+        {"code": "endotoxin", "name_zh": "细菌内毒素", "name_en": "Bacterial Endotoxins", "unit": "EU/mL", "value_kind": "numeric", "display_order": 1, "aliases": ["细菌内毒素", "内毒素", "Bacterial Endotoxins"]}
+      ]
+    },
+    {
+      "code": "bioburden",
+      "category_code": "safety",
+      "subcategory_code": "safety_microbial",
+      "display_order": 420,
+      "name_zh": "微生物限度",
+      "name_en": "Bioburden",
+      "default_unit": "cfu/10 mL",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["mAb", "bsAb", "ADC", "fusion"],
+      "aliases": ["微生物限度", "微生物负载", "微生物控制", "Bioburden", "Microbial Enumeration"],
+      "methods": [
+        {"code": "membrane-filtration", "name_zh": "薄膜过滤法", "name_en": "Membrane Filtration Method", "method_family": "bioburden-membrane", "aliases": ["薄膜过滤法", "微生物限度检查法", "Membrane Filtration Method"]}
+      ],
+      "components": [
+        {"code": "tamc", "name_zh": "需氧菌总数", "name_en": "TAMC", "unit": "cfu/10 mL", "value_kind": "numeric", "display_order": 1, "aliases": ["需氧菌总数", "微生物限度", "TAMC", "Bioburden"]},
+        {"code": "tymc", "name_zh": "霉菌和酵母菌总数", "name_en": "TYMC", "unit": "cfu/10 mL", "value_kind": "numeric", "display_order": 2, "aliases": ["霉菌和酵母菌总数", "TYMC"]}
+      ]
+    },
+    {
+      "code": "visible_particles",
+      "category_code": "safety",
+      "subcategory_code": "safety_particles",
+      "display_order": 430,
+      "name_zh": "可见异物",
+      "name_en": "Visible Particles",
+      "default_unit": "",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["mAb", "bsAb", "ADC", "fusion", "peptide"],
+      "aliases": ["可见异物", "Visible Particles", "Visible Particle", "Visible Foreign Matter"],
+      "methods": [
+        {"code": "visible-inspection", "name_zh": "可见异物检查法", "name_en": "Visible Particles Detection Method", "method_family": "visible-particles", "aliases": ["可见异物检查法", "灯检法", "目视法", "Visible Particles Detection Method", "Visual Inspection"]}
+      ],
+      "components": [
+        {"code": "visible_particles", "name_zh": "可见异物", "name_en": "Visible Particles", "unit": "", "value_kind": "qualitative", "display_order": 1, "aliases": ["可见异物", "Visible Particles"]}
+      ]
+    },
+    {
+      "code": "subvisible_particles",
+      "category_code": "safety",
+      "subcategory_code": "safety_particles",
+      "display_order": 440,
+      "name_zh": "不溶性微粒",
+      "name_en": "Sub-visible Particles",
+      "default_unit": "粒/支",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["mAb", "bsAb", "ADC", "fusion", "peptide"],
+      "aliases": ["不溶性微粒", "亚可见微粒", "Particulate Matter", "Sub-visible Particles", "Subvisible Particles", "Insoluble Particles"],
+      "methods": [
+        {"code": "light-obscuration", "name_zh": "光阻法", "name_en": "Light Obscuration Method", "method_family": "light-obscuration", "aliases": ["光阻法", "不溶性微粒检查法", "Light Obscuration", "Light Obscuration Method"]},
+        {"code": "microscopic", "name_zh": "显微计数法", "name_en": "Microscopic Particle Count Method", "method_family": "microscopic-count", "aliases": ["显微计数法", "Microscopic Method"]}
+      ],
+      "components": [
+        {"code": "ge_10um", "name_zh": "≥10μm", "name_en": "≥10 μm", "unit": "粒/支", "value_kind": "numeric", "display_order": 1, "aliases": ["≥10μm", "≥10 μm", ">=10μm", "≥10μm微粒", "≥10 μm的微粒"]},
+        {"code": "ge_25um", "name_zh": "≥25μm", "name_en": "≥25 μm", "unit": "粒/支", "value_kind": "numeric", "display_order": 2, "aliases": ["≥25μm", "≥25 μm", ">=25μm", "≥25μm微粒", "≥25 μm的微粒"]}
+      ]
+    },
+    {
+      "code": "ccit",
+      "category_code": "safety",
+      "subcategory_code": "safety_ccit",
+      "display_order": 450,
+      "name_zh": "容器密封性",
+      "name_en": "Container Closure Integrity (CCIT)",
+      "default_unit": "",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["mAb", "bsAb", "ADC", "fusion", "peptide"],
+      "aliases": ["容器密封性", "包装密封性", "密封性", "CCIT", "Container Closure Integrity", "Container Closure Integrity Test"],
+      "methods": [
+        {"code": "hvld", "name_zh": "高压放电法", "name_en": "HVLD Method", "method_family": "ccit-hvld", "aliases": ["高压放电法", "HVLD", "HVLD法"]},
+        {"code": "vacuum-decay", "name_zh": "真空衰减法", "name_en": "Vacuum Decay Method", "method_family": "ccit-vacuum", "aliases": ["真空衰减法", "Vacuum Decay", "Vacuum Decay Method"]},
+        {"code": "dye-ingress", "name_zh": "色水法", "name_en": "Dye Ingress Method", "method_family": "ccit-dye", "aliases": ["色水法", "微生物挑战法", "Dye Ingress Method"]}
+      ],
+      "components": [
+        {"code": "ccit_result", "name_zh": "容器密封性", "name_en": "CCIT", "unit": "", "value_kind": "qualitative", "display_order": 1, "aliases": ["容器密封性", "密封性", "CCIT"]}
+      ]
+    },
+    {
+      "code": "appearance",
+      "category_code": "physicochemical_other",
+      "subcategory_code": "phys_appearance",
+      "display_order": 500,
+      "name_zh": "外观",
+      "name_en": "Appearance",
+      "default_unit": "",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["mAb", "bsAb", "ADC", "fusion", "peptide"],
+      "aliases": ["外观", "性状", "Appearance", "Description"],
+      "methods": [
+        {"code": "visual", "name_zh": "目视法", "name_en": "Visual Method", "method_family": "visual", "aliases": ["目视", "目视法", "观察", "观察法", "Visual", "Visual Method", "Visual Inspection", "Observation Method"]}
+      ],
+      "components": [
+        {"code": "appearance", "name_zh": "外观", "name_en": "Appearance", "unit": "", "value_kind": "qualitative", "display_order": 1, "aliases": ["外观", "Appearance"]},
+        {"code": "solid_appearance", "name_zh": "固体外观", "name_en": "Lyophilized Cake Appearance", "unit": "", "value_kind": "qualitative", "display_order": 2, "aliases": ["固体外观", "冻干粉外观", "Lyophilized Cake Appearance"]},
+        {"code": "reconstituted_appearance", "name_zh": "复溶液外观", "name_en": "Reconstituted Solution Appearance", "unit": "", "value_kind": "qualitative", "display_order": 3, "aliases": ["复溶液外观", "复溶后外观", "Reconstituted Solution Appearance"]}
+      ]
+    },
+    {
+      "code": "color",
+      "category_code": "physicochemical_other",
+      "subcategory_code": "phys_appearance",
+      "display_order": 510,
+      "name_zh": "颜色",
+      "name_en": "Color",
+      "default_unit": "",
+      "pharmacopoeia_scope": "ChP/EP/USP",
+      "modality_tags": ["mAb", "bsAb", "ADC", "fusion"],
+      "aliases": ["颜色", "溶液颜色", "Color", "Colour"],
+      "methods": [
+        {"code": "visual-colorimetric", "name_zh": "目视比色法", "name_en": "Visual Colorimetric Method", "method_family": "visual", "aliases": ["目视比色法", "目视法", "比色法", "Visual Colorimetric Method", "Visual Method"]}
+      ],
+      "components": [
+        {"code": "color", "name_zh": "颜色", "name_en": "Color", "unit": "", "value_kind": "qualitative", "display_order": 1, "aliases": ["颜色", "Color"]}
+      ]
+    },
+    {
+      "code": "clarity",
+      "category_code": "physicochemical_other",
+      "subcategory_code": "phys_appearance",
+      "display_order": 520,
+      "name_zh": "澄清度",
+      "name_en": "Clarity",
+      "default_unit": "",
+      "pharmacopoeia_scope": "ChP/EP/USP",
+      "modality_tags": ["mAb", "bsAb", "ADC", "fusion"],
+      "aliases": ["澄清度", "浊度", "溶液澄清度", "Clarity", "Clarification", "Turbidity"],
+      "methods": [
+        {"code": "visual-clarity", "name_zh": "目视法", "name_en": "Visual Method", "method_family": "visual", "aliases": ["目视法", "澄清度检查法", "浊度法", "Visual Method", "Nephelometry"]}
+      ],
+      "components": [
+        {"code": "clarity", "name_zh": "澄清度", "name_en": "Clarity", "unit": "", "value_kind": "qualitative", "display_order": 1, "aliases": ["澄清度", "Clarity"]}
+      ]
+    },
+    {
+      "code": "ph_value",
+      "category_code": "physicochemical_other",
+      "subcategory_code": "phys_constants",
+      "display_order": 530,
+      "name_zh": "pH值",
+      "name_en": "pH",
+      "default_unit": "",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["mAb", "bsAb", "ADC", "fusion", "peptide"],
+      "aliases": ["pH", "pH值", "PH", "PH值"],
+      "methods": [
+        {"code": "ph-electrode", "name_zh": "pH值测定法", "name_en": "pH Electrode Method", "method_family": "ph-electrode", "aliases": ["pH值测定法", "电位法", "pH计法", "pH Electrode Method", "Potentiometry"]}
+      ],
+      "components": [
+        {"code": "ph", "name_zh": "pH", "name_en": "pH", "unit": "", "value_kind": "numeric", "display_order": 1, "aliases": ["pH", "pH值"]}
+      ]
+    },
+    {
+      "code": "osmolality",
+      "category_code": "physicochemical_other",
+      "subcategory_code": "phys_constants",
+      "display_order": 540,
+      "name_zh": "渗透压摩尔浓度",
+      "name_en": "Osmolality",
+      "default_unit": "mOsmol/kg",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["mAb", "bsAb", "ADC", "fusion", "peptide"],
+      "aliases": ["渗透压", "渗透压摩尔浓度", "Osmolality"],
+      "methods": [
+        {"code": "freezing-point", "name_zh": "冰点下降法", "name_en": "Freezing Point Depression Method", "method_family": "freezing-point", "aliases": ["冰点下降法", "渗透压摩尔浓度测定法", "Freezing Point Depression Method", "Osmometry"]}
+      ],
+      "components": [
+        {"code": "osmolality", "name_zh": "渗透压摩尔浓度", "name_en": "Osmolality", "unit": "mOsmol/kg", "value_kind": "numeric", "display_order": 1, "aliases": ["渗透压", "渗透压摩尔浓度", "Osmolality"]}
+      ]
+    },
+    {
+      "code": "extractable_volume",
+      "category_code": "physicochemical_other",
+      "subcategory_code": "phys_dosage",
+      "display_order": 550,
+      "name_zh": "装量",
+      "name_en": "Extractable Volume",
+      "default_unit": "mL",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["mAb", "bsAb", "ADC", "fusion", "peptide"],
+      "aliases": ["装量", "可抽提体积", "装量检查", "Filling Volume", "Extractable Volume"],
+      "methods": [
+        {"code": "extractable-volume", "name_zh": "可抽提体积法", "name_en": "Extractable Volume Method", "method_family": "extractable-volume", "aliases": ["可抽提体积", "可抽提体积法", "重量法", "Extractable Volume", "Gravimetric Method"]}
+      ],
+      "components": [
+        {"code": "volume", "name_zh": "装量", "name_en": "Extractable Volume", "unit": "mL", "value_kind": "numeric", "display_order": 1, "aliases": ["装量", "可抽提体积", "Extractable Volume"]}
+      ]
+    },
+    {
+      "code": "content_difference",
+      "category_code": "physicochemical_other",
+      "subcategory_code": "phys_dosage",
+      "display_order": 560,
+      "name_zh": "装量差异",
+      "name_en": "Content Difference",
+      "default_unit": "%",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["mAb", "bsAb", "ADC"],
+      "aliases": ["装量差异", "剂量均匀度", "Content Difference", "Uniformity of Dosage Units"],
+      "methods": [
+        {"code": "weight", "name_zh": "重量法", "name_en": "Weight Method", "method_family": "weight", "aliases": ["重量法", "Weight Method", "Gravimetric Method"]}
+      ],
+      "components": [
+        {"code": "weight_diff", "name_zh": "装量差异", "name_en": "Content Difference", "unit": "%", "value_kind": "numeric", "display_order": 1, "aliases": ["装量差异", "剂量均匀度"]}
+      ]
+    },
+    {
+      "code": "moisture",
+      "category_code": "physicochemical_other",
+      "subcategory_code": "phys_constants",
+      "display_order": 570,
+      "name_zh": "水分",
+      "name_en": "Moisture",
+      "default_unit": "%",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["mAb", "bsAb", "ADC"],
+      "aliases": ["水分", "水分测定", "含水量", "Moisture", "Water Content"],
+      "methods": [
+        {"code": "karl-fischer", "name_zh": "卡尔费休氏法", "name_en": "Karl Fischer Method", "method_family": "karl-fischer", "aliases": ["卡尔费休法", "卡尔费休氏法", "费休氏法", "Karl Fischer", "Karl Fisher", "Karl Fischer Method", "KF"]}
+      ],
+      "components": [
+        {"code": "moisture", "name_zh": "水分", "name_en": "Moisture", "unit": "%", "value_kind": "numeric", "display_order": 1, "aliases": ["水分", "Moisture"]}
+      ]
+    },
+    {
+      "code": "reconstitution_time",
+      "category_code": "physicochemical_other",
+      "subcategory_code": "phys_dosage",
+      "display_order": 580,
+      "name_zh": "复溶时间",
+      "name_en": "Reconstitution Time",
+      "default_unit": "s",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["mAb", "bsAb", "ADC"],
+      "aliases": ["复溶时间", "复溶", "Reconstitution Time"],
+      "methods": [
+        {"code": "observation", "name_zh": "观察法", "name_en": "Observation Method", "method_family": "visual", "aliases": ["观察法", "计时法", "目视法", "Observation Method"]}
+      ],
+      "components": [
+        {"code": "reconstitution_time", "name_zh": "复溶时间", "name_en": "Reconstitution Time", "unit": "s", "value_kind": "numeric", "display_order": 1, "aliases": ["复溶时间", "Reconstitution Time"]}
+      ]
+    },
+    {
+      "code": "device_performance",
+      "category_code": "physicochemical_other",
+      "subcategory_code": "phys_dosage",
+      "display_order": 590,
+      "name_zh": "给药装置性能",
+      "name_en": "Device Performance",
+      "default_unit": "",
+      "pharmacopoeia_scope": "ChP/USP/EP",
+      "modality_tags": ["mAb", "peptide", "fusion"],
+      "aliases": ["剂量准确性", "注射笔性能", "推进力", "启始力", "滑动推力", "Dose Accuracy", "Glide Force", "Break-loose Force", "Device Performance"],
+      "methods": [
+        {"code": "mechanical-test", "name_zh": "机械性能测定法", "name_en": "Mechanical Testing Method", "method_family": "device-mechanical", "aliases": ["机械性能测定法", "万能材料试验机法", "重量法", "力学测试法"]}
+      ],
+      "components": [
+        {"code": "dose_accuracy", "name_zh": "剂量准确性", "name_en": "Dose Accuracy", "unit": "mg", "value_kind": "numeric", "display_order": 1, "aliases": ["剂量准确性", "Dose Accuracy"]},
+        {"code": "glide_force", "name_zh": "推进力", "name_en": "Glide Force", "unit": "N", "value_kind": "numeric", "display_order": 2, "aliases": ["推进力", "滑动推力", "启始力", "Glide Force", "Break-loose Force"]}
+      ]
+    }
+  ]
+}

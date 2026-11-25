@@ -6,7 +6,7 @@ from pydantic import Field, model_validator
 
 from .contracts import Candidate, ResultCell
 from .models import ItemDefinition, Location, Model, ProjectConfig, RecordKey, Text
-from .v5_contracts import ReviewIssue
+from .v5_contracts import ReviewIssue, SectionName
 
 
 class ConfigurationView(Model):
@@ -54,7 +54,7 @@ class ReceiveRequest(Model):
 class SheetConfirmRequest(Model):
     base_revision: int = Field(ge=0)
     idempotency_key: Text
-    section: Text
+    section: SectionName
     reason: Text = '核对工作表有效内容后整表确认'
 
 
@@ -190,6 +190,7 @@ class WorkspacePreview(Model):
     section: str | None
     preflight: dict | None = None
     commit_receipt: dict | None = None
+    section_statuses: tuple[dict, ...] = ()
 
 
 class ExternalReference(Model):
@@ -268,6 +269,10 @@ class WorkflowResultCell(ResultCell):
     upload_sequence: int
     worksheet_id: str | None = None
     standard_assessment: StandardAssessment | None = None
+    category_code: str = ""
+    category_name_zh: str = ""
+    subcategory_name_zh: str = ""
+    category_order: int = 99
 
 
 class ResultPage(Model):

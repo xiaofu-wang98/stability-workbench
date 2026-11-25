@@ -2,6 +2,7 @@
 import { onMounted, ref, watch } from 'vue';
 import { NAlert, NButton, NSelect } from 'naive-ui';
 import { api, type Project } from './api';
+import ActionNextStepBanner from './components/ActionNextStepBanner.vue';
 
 type Row = {
   table: number;
@@ -21,7 +22,8 @@ type Row = {
 };
 
 const props = defineProps<{ specification: { id: string; filename?: string; rows: Row[] }; initialProject?: string }>();
-const emit = defineEmits<{ registered: [] }>();
+const emit = defineEmits<{ registered: []; goCoa: [] }>();
+const registeredSummary = ref('');
 const projects = ref<Project[]>([]);
 const project = ref(props.initialProject || '');
 const error = ref('');
@@ -142,6 +144,7 @@ async function confirm() {
       body: JSON.stringify({ revision: current.base_revision, components, idempotency_key: crypto.randomUUID() }),
     });
     message.value = `项目 ${project.value} 新登记 ${result.added} 条，已有 ${result.existing} 条。`;
+    registeredSummary.value = message.value;
     await readLinks(project.value);
     emit('registered');
   } catch (e) {
@@ -159,7 +162,19 @@ async function confirm() {
     <NAlert v-if="!project" type="warning" role="alert" style="margin-top: 8px;">
       ⚠️ 请先在下方选择适用项目（如 {{ projects.map(p => p.project).join(', ') || 'IP501' }}），以激活确认入库功能。
     </NAlert>
-    <p v-if="message" role="status" style="color: #67c23a; font-weight: bold; margin-top: 8px;">{{ message }}</p>
+    <p v-if="message" role="status" style="color: var(--success-fg); font-weight: 600; margin-top: 8px;">{{ message }}</p>
+    <ActionNextStepBanner
+      v-if="registeredSummary"
+      :title="'检项字典登记完成 · 项目 ' + project"
+      :summary="registeredSummary + ' 现在可以直接录入该项目的批次放行 COA，或按此标准新建稳定性研究表。'"
+      :dismissible="true"
+      @dismiss="registeredSummary = ''"
+      :steps="[
+        { label: '1. 前往录入放行 COA', primary: true, onClick: () => emit('goCoa') },
+        { label: '2. 用此标准新建研究表', to: { path: '/new', query: { project, specification: specification.id } } },
+        { label: '3. 查看项目台账', to: '/projects/' + encodeURIComponent(project) },
+      ]"
+    />
     <form @submit.prevent="confirm" style="margin-top: 8px;">
       <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px; background: #fafafa; padding: 10px 14px; border-radius: 6px; border: 1px solid #ebeef5;">
         <span style="font-weight: bold; white-space: nowrap;">适用项目：</span>

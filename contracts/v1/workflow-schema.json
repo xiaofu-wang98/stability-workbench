@@ -805,6 +805,26 @@
           "minLength": 1,
           "title": "Method Version",
           "type": "string"
+        },
+        "category_code": {
+          "default": "",
+          "title": "Category Code",
+          "type": "string"
+        },
+        "subcategory_code": {
+          "default": "",
+          "title": "Subcategory Code",
+          "type": "string"
+        },
+        "display_order": {
+          "default": 999,
+          "title": "Display Order",
+          "type": "integer"
+        },
+        "platform_assay_id": {
+          "default": "",
+          "title": "Platform Assay Id",
+          "type": "string"
         }
       },
       "required": [
@@ -859,6 +879,26 @@
           "default": "not_reported",
           "minLength": 1,
           "title": "Method Version",
+          "type": "string"
+        },
+        "category_code": {
+          "default": "",
+          "title": "Category Code",
+          "type": "string"
+        },
+        "subcategory_code": {
+          "default": "",
+          "title": "Subcategory Code",
+          "type": "string"
+        },
+        "display_order": {
+          "default": 999,
+          "title": "Display Order",
+          "type": "integer"
+        },
+        "platform_assay_id": {
+          "default": "",
+          "title": "Platform Assay Id",
           "type": "string"
         }
       },
@@ -2316,6 +2356,26 @@
             }
           ],
           "default": null
+        },
+        "category_code": {
+          "default": "",
+          "title": "Category Code",
+          "type": "string"
+        },
+        "category_name_zh": {
+          "default": "",
+          "title": "Category Name Zh",
+          "type": "string"
+        },
+        "subcategory_name_zh": {
+          "default": "",
+          "title": "Subcategory Name Zh",
+          "type": "string"
+        },
+        "category_order": {
+          "default": 99,
+          "title": "Category Order",
+          "type": "integer"
         }
       },
       "required": [

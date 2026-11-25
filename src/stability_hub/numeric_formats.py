@@ -16,6 +16,57 @@ VERSION = "excel-number-2"
 LEGACY_VERSION = "excel-number-1"
 PERCENT = re.compile(r"0(?:\.0+)?%")
 PLAIN = re.compile(r"(?:General|0|0\.0+|0\.0+[Ee][+-]0+)")
+PURE_DECIMAL = re.compile(r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?$")
+INLINE_UNIT_NUMBER = re.compile(
+    r"^(<=|>=|<|>|≤|≥|＜|＞)?\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)\s*"
+    r"([A-Za-zμµ℃\u4e00-\u9fff][^\n()]*?)$"
+)
+_KNOWN_UNIT_PATTERN = re.compile(
+    r"^(?:(?:m|u|μ|µ|n|k|c)?(?:g|l|ml|mL|L|mol|osmol|osm|pa|mpa|s|m|mm|nm|da|kda|iu|eu|u|n|cfu|pfu|vp)"
+    r"(?:\s*/\s*(?:\d+\s*)?(?:m|u|μ|µ|n|k)?(?:g|kg|l|ml|mL|L|mg|瓶|支|剂|容器|vial|dose|container))?"
+    r"|(?:个|粒|颗)\s*/\s*(?:瓶|支|剂|容器|ml|mL|10\s*ml|10\s*mL)|℃|°c)$",
+    re.I,
+)
+
+
+def _looks_like_physical_unit(token: str) -> bool:
+    from .platform_catalog import load_seed_catalog
+
+    cleaned = re.sub(r"\s+", " ", token).replace("µ", "μ").strip()
+    if not cleaned:
+        return False
+    unit_map = load_seed_catalog().get("unit_canonical_map", {})
+    lowered = cleaned.casefold()
+    if cleaned in unit_map or any(k.casefold() == lowered or v.casefold() == lowered for k, v in unit_map.items()):
+        return True
+    return bool(_KNOWN_UNIT_PATTERN.fullmatch(cleaned))
+
+
+def _try_inline_unit_numeric(raw, text, stripped, unit, result_type, basis):
+    match = INLINE_UNIT_NUMBER.fullmatch(stripped)
+    if not match or not unit or not unit.strip():
+        return None
+    comp = match.group(1) or ""
+    num = match.group(2)
+    inline_unit = match.group(3).strip()
+    if not inline_unit or inline_unit in {"%", "％"}:
+        return None
+    from .platform_catalog import units_equivalent
+
+    if units_equivalent(inline_unit, unit):
+        result = normalize_for_source(raw, f"{comp}{num}", unit, result_type)
+        return result.model_copy(
+            update={
+                "raw_text": text,
+                "interpretation": {**basis, "rule": "inline_unit", "inline_unit": inline_unit},
+            }
+        )
+    if _looks_like_physical_unit(inline_unit):
+        raise NeedsReview(
+            "unit_conflict",
+            f"结果内联单位 {inline_unit!r} 与标准单位 {unit!r} 不一致，需人工核对或换算。",
+        )
+    return None
 
 
 def source_value(cell):
@@ -54,9 +105,9 @@ def legacy_interpret_result(raw, text, unit, result_type):
         return result.model_copy(
             update={"raw_text": text, "interpretation": {**basis, "rule": "text_percent"}}
         )
-    if kind == "date" or is_date_format(fmt) and NUMBER.fullmatch(stripped):
+    if kind == "date" or is_date_format(fmt) and PURE_DECIMAL.fullmatch(stripped):
         raise NeedsReview("numeric_format", "日期格式不能直接作为检测数值，请核对来源后明确解释。")
-    if NUMBER.fullmatch(stripped) and kind not in {"s", "inlineStr"}:
+    if PURE_DECIMAL.fullmatch(stripped) and kind not in {"s", "inlineStr"}:
         if PERCENT.fullmatch(fmt):
             if unit not in {"", "%", "％"}:
                 raise NeedsReview("numeric_format", "百分比格式与检测单位冲突，请明确解释值及单位。")
@@ -103,9 +154,9 @@ def interpret_result(raw, text, unit, result_type):
         return result.model_copy(
             update={"raw_text": text, "interpretation": {**basis, "rule": "text_percent"}}
         )
-    if kind == "date" or is_date_format(fmt) and NUMBER.fullmatch(stripped):
+    if kind == "date" or is_date_format(fmt) and PURE_DECIMAL.fullmatch(stripped):
         raise NeedsReview("numeric_format", f"Excel按日期显示；系统读取 {stripped}，需确认这是否为检测数值。")
-    if NUMBER.fullmatch(stripped) and kind not in {"s", "inlineStr"}:
+    if PURE_DECIMAL.fullmatch(stripped) and kind not in {"s", "inlineStr"}:
         from .excel_formats import render, UnsupportedNumberFormat
 
         try:
@@ -127,5 +178,8 @@ def interpret_result(raw, text, unit, result_type):
                 "interpretation": {**basis, "rule": rule, "display_text": shown, "factor": str(factor)},
             }
         )
+    inline = _try_inline_unit_numeric(raw, text, stripped, unit, result_type, basis)
+    if inline is not None:
+        return inline
     result = normalize_for_source(raw, text, unit, result_type)
     return result.model_copy(update={"interpretation": basis})

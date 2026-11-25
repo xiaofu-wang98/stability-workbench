@@ -59,7 +59,7 @@ def test_explicit_header_fields_are_projected_without_changing_study_identity(tm
         with closing(load_workbook(BytesIO(export(client, config.project, [before["id"]])))) as book:
             grid = book.active
             assert [grid[cell].value for cell in ("D1", "H1", "D2", "F2", "J3", "K3", "L3")] == [
-                "产品甲\nProduct A", "经人工确认的交付规格", "EQ-1", "STUDY-P-01", "☑ 常熟工厂",
+                "产品甲\nProduct A", "经人工确认的交付规格", "EQ-1", "STUDY-P-01", "□相城工厂X  ☑常熟工厂C  □园区工厂S",
                 "存放位置\nStorage Location", "FREEZER-1",
             ]
 

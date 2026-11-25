@@ -130,6 +130,8 @@ export interface Worksheet extends WorksheetSummary {
     sample_type: string; presentation: string; purpose: string; reporting_basis: string };
   rows: { id: string; item_id: string; label: string; source_test_item?: string; method: string; unit: string;
     plan_key?: string; reporting_basis?: string;
+    category_code?: string; category_name_zh?: string; category_order?: number;
+    subcategory_name_zh?: string; display_order?: number;
     criteria_text?: string;
     source_criteria?: string[];
     standards?: { specification_id: string; filename: string; table: number; row: number; criterion: string;

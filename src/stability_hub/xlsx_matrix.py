@@ -32,7 +32,8 @@ def chart_category_cells(sheet):
 
 
 ITEM_HEADERS = {'检测项目', '检验项目', 'testitem'}
-FOOTER = re.compile(r'^(备注|说明|注[:：]|取样量|取样数量|取样日期|复测备用量|考察项目|备用量|总数量|总量|合计|签字|审核|复核|检验人|检测人|总计)')
+FOOTER = re.compile(r'^(备注|说明|注[:：]|取样量|取样数量|取样日期|复测备用量|考察项目|备用量|总数量|总量|合计|签字|审核|复核|检验人|检测人|总计|异常与调查|AR/AE)')
+SIGN_STATUS_TOKENS = re.compile(r'^(?:已签(?:报告)?|未签|待检|待审核|进行中|计划中|signed|pending|in\s*progress|n/?a)$', re.I)
 
 
 def source_cells(sheet):
@@ -107,15 +108,25 @@ def parse_matrix_sheet(sheet):
         for col in range(first_result, last_col+1):
             months.setdefault(col, cells.get((header+1, col)) or sheet.cell(header+1, col))
         # Legacy headers can have two versions of quality criteria before the first month.
-        method_cols = [col for col, c in by_row[header].items() if header_label(c) in {'方法', 'method'}]
-        version_cols = [col for col, c in by_row[header].items() if header_label(c) == '方法编号']
+        # T2/T3 standard templates can also have explicit 大类, 分析方法, 子检项/细项 columns.
+        category_cols = [col for col, c in by_row[header].items()
+                         if col < item_col and re.search(r'大类|category', text(c), re.I)]
+        category_col = category_cols[0] if category_cols else None
+        method_cols = [col for col, c in by_row[header].items()
+                       if header_label(c) in {'方法', 'method', '分析方法', '检测方法'}
+                       or (re.search(r'分析方法|检测方法', text(c)) and not re.search(r'编号|sop', text(c), re.I))]
+        version_cols = [col for col, c in by_row[header].items() if header_label(c) == '方法编号' or re.search(r'SOP编号|方法编号', text(c), re.I)]
+        subresult_cols = [col for col, c in by_row[header].items()
+                          if re.search(r'子检项|细项|评价指标|sub[\s-]*item', text(c), re.I)]
         method_col = method_cols[0] if method_cols else None
         version_col = version_cols[0] if version_cols else None
+        subresult_col = subresult_cols[0] if subresult_cols else None
         criterion_col = first_result-1
         standard_cols = [col for col, c in by_row[header].items()
-                         if '质量标准' in text(c) or '可接受标准' in text(c) or 'Acceptable Criteria' in text(c)]
-        identity_limit = method_col if method_col is not None else min(standard_cols) if standard_cols else time_col-1
+                         if '质量标准' in text(c) or '可接受标准' in text(c) or 'Acceptable Criteria' in text(c) or 'Acceptance Criteria' in text(c)]
+        identity_limit = min([c for c in (method_col, subresult_col, *(standard_cols[:1])) if c is not None], default=time_col-1)
         metadata = {}
+        split_cond_parts: list[tuple[str, object]] = []
         search_start = max(1, header-6, headers[block_index-1][0]+2 if block_index else 1)
         for row in range(search_start, header):
             for col, c in sorted(by_row.get(row, {}).items()):
@@ -130,14 +141,22 @@ def parse_matrix_sheet(sheet):
                     field = 'batch'
                 elif '产品名称' in label or 'Product Name' in label:
                     field = 'sample_type'
-                elif compact(label) in {'规格', '规格 Specification'} or 'Specification' in label and '规格' in label:
+                elif compact(label) in {'规格', '规格 Specification', '规格 Strength'} or (('Specification' in label or 'Strength' in label) and '规格' in label):
                     field = 'presentation'
-                elif '试验方案编号' in label or 'Study Protocol No.' in label:
+                elif '试验方案编号' in label or 'Study Protocol No.' in label or '方案编号' in label:
                     field = 'study_id'
                 elif '考察条件' in label or 'Study Condition' in label or '实验条件' in label:
                     field = 'condition'
                 elif '稳定性类型' in label or 'Stability Type' in label:
                     field = 'study'
+                elif re.fullmatch(r'(?:温度|Temperature|温度\s*/\s*Temperature)', compact(label), re.I) and following is not None:
+                    split_cond_parts.append(('temp', following))
+                elif re.fullmatch(r'(?:相对湿度|湿度|RH|相对湿度\s*/\s*RH)', compact(label), re.I) and following is not None:
+                    split_cond_parts.append(('rh', following))
+                elif re.fullmatch(r'(?:放置方式|Placement|放置方式\s*/\s*Placement)', compact(label), re.I) and following is not None:
+                    split_cond_parts.append(('place', following))
+                elif re.fullmatch(r'(?:光照|光照条件|Light|光照\s*/\s*Light)', compact(label), re.I) and following is not None:
+                    split_cond_parts.append(('light', following))
                 if field == 'batch' and re.fullmatch(r'[ \t]*(?:样品|产品)?批号[ \t]*[:：][ \t]*[A-Za-z0-9_-]+[ \t]*', label):
                     metadata[field] = c
                 elif field and following is not None:
@@ -146,6 +165,12 @@ def parse_matrix_sheet(sheet):
                     metadata[field] = c  # Some legacy captions include their value in the same cell.
                 if col == item_col and '稳定性' in label and '项目编号' not in label and not field:
                     metadata['study_title'] = c
+        split_condition_text = ''
+        if 'condition' not in metadata and split_cond_parts:
+            vals = [text(cell).strip() for _, cell in split_cond_parts if text(cell).strip() and text(cell).strip().upper() not in {'N/A', 'NA', '-'}]
+            if vals:
+                metadata['condition'] = split_cond_parts[0][1]
+                split_condition_text = ' · '.join(vals)
         if 'batch' not in metadata:
             c = cells.get((header-1, item_col))
             if c is not None:
@@ -163,21 +188,34 @@ def parse_matrix_sheet(sheet):
                                {'项目编号', '产品名称', '产品批号', '样品批号', '批号', '开始日期'}), next_header)
         for row in range(header+2, metadata_start):
             leading = text(cells.get((row, item_col))).strip()
+            cat_leading = text(cells.get((row, category_col))).strip() if category_col else ''
             from .source_notes import explicit_annotation
-            if FOOTER.search(leading) or explicit_annotation(leading) or ('稳定性' in leading and any(word in leading for word in ('实验结果', '实验数据', '考察方案', '取样方案'))):
+            if (FOOTER.search(leading) or FOOTER.search(cat_leading) or explicit_annotation(leading)
+                    or '不引用放行数据' in leading
+                    or ('稳定性' in leading and any(word in leading for word in ('实验结果', '实验数据', '考察方案', '取样方案')))):
                 break
             parent_cells = []
             for col in range(item_col, identity_limit):
                 c, _ = anchor(row, col)
                 if c is not None and text(c).strip():
                     parent_cells.append(c)
+            cat_cell, _ = anchor(row, category_col) if category_col else (None, None)
+            sub_cell, _ = anchor(row, subresult_col) if subresult_col else (None, None)
             criterion, _ = anchor(row, criterion_col)
             method, _ = anchor(row, method_col) if method_col else (None, None)
             version, _ = anchor(row, version_col) if version_col else (None, None)
+            # T4: Dedicated signing/progress status row directly under timepoints or planned dates.
+            aux_criterion = (criterion is None or criterion.row <= header
+                             or bool(re.search(r'计划日期|签署状态|状态|planned\s*date|status', text(criterion), re.I)))
+            if row <= header+4 and all(c.row <= header for c in parent_cells) and aux_criterion:
+                status_cells = [cells.get((row, col)) for col in months]
+                filled_status = [text(c).strip() for c in status_cells if c is not None and text(c).strip()]
+                if filled_status and all(SIGN_STATUS_TOKENS.fullmatch(v) for v in filled_status):
+                    planning_notes.append(f'第{row}行为签署/进度状态辅助行，已排除不计入检测结果。')
+                    continue
             # A second header line often contains scheduled sampling dates under the months.
             # Merged Test Item / Criteria captions are still header cells, not assay names.
-            if row <= header+3 and all(c.row <= header for c in parent_cells) and (
-                    criterion is None or criterion.row <= header):
+            if row <= header+3 and all(c.row <= header for c in parent_cells) and aux_criterion:
                 date_cells = [cells.get((row, col)) for col in months]
                 filled = [c for c in date_cells if c is not None and text(c).strip()]
                 if filled and all(c.data_type == 'f' and re.match(r'^=?EDATE\(', text(c), re.I)
@@ -255,13 +293,17 @@ def parse_matrix_sheet(sheet):
                     refs['test_item'] = parent
                 if criterion is not None:
                     refs['criterion'] = criterion
-                    if parent_area and parent_area.max_row > parent_area.min_row:
+                    if sub_cell is not None and text(sub_cell).strip():
+                        refs['subresult'] = sub_cell
+                    elif parent_area and parent_area.max_row > parent_area.min_row:
                         refs['subresult'] = criterion
                 if method is not None:
                     refs['method'] = method
                 if version is not None:
                     refs['method_version'] = version
-                if parent_cells and parent_cells[0] != parent:
+                if cat_cell is not None and text(cat_cell).strip():
+                    refs['category'] = cat_cell
+                elif parent_cells and parent_cells[0] != parent:
                     refs['category'] = parent_cells[0]
                 hazards = []
                 if (area and (area.max_col != area.min_col or area.max_row != area.min_row)
@@ -278,22 +320,29 @@ def parse_matrix_sheet(sheet):
                     labels = purity_subresults(text(criterion))
                     if len(labels) > 1:
                         hints.append({'kind':'multiple_subresults', 'text':f'{criterion.coordinate}: 子结果标注包含多个含义（{" / ".join(labels)}），请核对原文并明确检测项目及结果。', 'source':loc(criterion).model_dump()})
-                    if (len(labels) <= 1 and 'subresult' in refs and item_text(text(parent),text(criterion),text(method),text(criterion),text(result))
+                    sub_text = text(sub_cell) if (sub_cell is not None and text(sub_cell).strip()) else text(criterion)
+                    if (len(labels) <= 1 and 'subresult' in refs and item_text(text(parent),text(criterion),text(method),sub_text,text(result))
                             == item_text(text(parent),'',text(method))):
                         from .standards import labels as standard_labels
                         if not standard_labels(text(criterion)):
                             hints.append({'kind':'missing_subresult', 'text':f'{criterion.coordinate}: 多行子结果未提供可区分的名称，请核对并明确检测项目及结果。', 'source':loc(criterion).model_dump()})
                 hint = ''
                 if shared_statement and parent_area and parent_area.max_row > parent_area.min_row:
-                    names = [item_text(text(parent), text(anchor(rr, criterion_col)[0]), text(method), text(anchor(rr, criterion_col)[0]))
+                    def _row_sub_text(rr):
+                        sc = anchor(rr, subresult_col)[0] if subresult_col else None
+                        return text(sc) if (sc is not None and text(sc).strip()) else text(anchor(rr, criterion_col)[0])
+                    names = [item_text(text(parent), text(anchor(rr, criterion_col)[0]), text(method), _row_sub_text(rr))
                              for rr in range(parent_area.min_row, parent_area.max_row+1)]
                     if names.count(names[row-parent_area.min_row]) > 1:
                         hint = f'原表分项{row-parent_area.min_row+1}（未命名）'
+                obs_fields = {name: text(c) for name, c in refs.items()}
+                if split_condition_text:
+                    obs_fields['condition'] = split_condition_text
                 observations.append(RawObservation(
                     system_hints=tuple(hints), result_anchor={'range':[area.min_row,area.min_col,area.max_row,area.max_col]} if area else {},
                     logical_row=row, source_span=(area.min_row,area.min_col,area.max_row,area.max_col) if shared_statement else None,
                     subresult_hint=hint,
-                    adapter='stability_matrix', fields={name: text(c) for name, c in refs.items()},
+                    adapter='stability_matrix', fields=obs_fields,
                     evidence={name: loc(c) for name, c in refs.items()}, location=loc(result),
                     comment='\n'.join(comments), formula=text(result) if result.data_type == 'f' else '',
                     number_format=result.number_format, hazards=tuple(hazards)))

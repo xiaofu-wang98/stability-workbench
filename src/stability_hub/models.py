@@ -148,6 +148,10 @@ class ItemDefinition(Model):
     result_type: Literal["numeric", "qualitative"] = "numeric"
     method: Text
     method_version: Text = "not_reported"
+    category_code: str = ""
+    subcategory_code: str = ""
+    display_order: int = 999
+    platform_assay_id: str = ""
 
 
 class ProjectConfig(Model):

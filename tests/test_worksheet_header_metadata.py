@@ -85,8 +85,8 @@ def test_historical_header_requires_explicit_save(tmp_path, config, context, con
         assert (seed["equipment"], seed["location"]) == ("UNIT-1", "常熟工厂")
         path = create_historical(client, slot, seed, confirm_metadata=confirm_metadata)
         original = client.get(path).json()
-        target = ("UNIT-1", "☑ 常熟工厂")
-        assert controlled_cells(client, original["id"]) == (target if confirm_metadata else (None, "□ 未填写 / Unspecified"))
+        target = ("UNIT-1", "□相城工厂X  ☑常熟工厂C  □园区工厂S")
+        assert controlled_cells(client, original["id"]) == (target if confirm_metadata else (None, "□相城工厂X  □常熟工厂C  □园区工厂S"))
         preview = client.get(path + "/header-metadata").json()
         assert preview["metadata_fingerprint"] == seed["metadata_fingerprint"]
         assert [preview["metadata_sources"][field][0]["cell"] for field in ("equipment", "location")] == ["D2", "F3"]

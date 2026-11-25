@@ -1,9 +1,11 @@
 """V5 additive worksheet contract. Commands are drafts until sheet commit."""
-from typing import Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import Field
+from pydantic import Field, StringConstraints
 
 from .models import Location, Model, Text
+
+SectionName = Annotated[str, StringConstraints(min_length=1)]  # Preserve exact Excel worksheet names, including trailing spaces.
 
 RegionRole = Literal['result', 'identity', 'standard', 'note', 'auxiliary', 'excluded', 'unclassified']
 DecisionAction = Literal['initial', 'repeat_source', 'keep_old', 'correction', 'retest', 'exclude', 'restore']
@@ -128,7 +130,7 @@ class RegionDecision(DraftCommand):
 class StructuralDecision(DraftCommand):
     candidate_id: str | None = None
     candidate_revision: int | None = Field(default=None, ge=1)
-    section: Text
+    section: SectionName
     coordinate: Text
     hazard: str | None = None
     results: tuple[dict[str, str], ...] = Field(min_length=1, max_length=100)
@@ -140,7 +142,7 @@ class BulkPreview(Model):
 
 
 class RegionParseScope(Model):
-    section: Text
+    section: SectionName
     range_ref: Text
     header_row: int = Field(ge=1, le=1048576)
     columns: dict[str, str] = Field(min_length=1)
@@ -232,11 +234,11 @@ class CandidateReviewState(Model):
 
 
 class TaskBatchScope(Model):
-    section: Text
+    section: SectionName
     task_ids: tuple[Text, ...] = Field(default=(),max_length=20000)
     candidate_ids: tuple[Text, ...] = Field(default=(),max_length=20000)
-    include_sections: tuple[Text, ...] = ()
-    operation: Literal['keep_active','manual','keep_body','exclude','suggested','exclude_selected','classify','keep_single']
+    include_sections: tuple[SectionName, ...] = ()
+    operation: Literal['keep_active','manual','keep_body','exclude','suggested','exclude_selected','classify','keep_single','repeat_source']
     fields: dict[str,str] = Field(default_factory=dict)
     exclude_candidate_ids: tuple[Text, ...] = Field(default=(),max_length=20000)
     region_ids: tuple[Text, ...] = Field(default=(),max_length=20000)
@@ -270,7 +272,7 @@ class SourceStructureApply(DraftCommand):
 
 
 class SheetCommit(DraftCommand):
-    section: Text
+    section: SectionName
     fingerprint: Text
 
 
@@ -283,7 +285,11 @@ class SheetCommitResult(Model):
     historical_count: int
     result_version_ids: tuple[str, ...]
     state: Literal['committed'] = 'committed'
-    worksheet_sync: tuple[dict[str, str], ...] = ()
+    worksheet_sync: tuple[dict[str, Any], ...] = ()
+
+
+class SyncWorksheetsRequest(Model):
+    material_stages: dict[str, str] = Field(default_factory=dict)
 
 
 class ManualResult(Model):
@@ -292,7 +298,7 @@ class ManualResult(Model):
 
 
 class ManualSheetScope(Model):
-    section: Text
+    section: SectionName
     cells: dict[str, str] = Field(default_factory=dict, max_length=4000)
     merges: tuple[Text, ...] = Field(default=(), max_length=1000)
     candidate_ids: tuple[Text, ...] = Field(default=(), max_length=1000)

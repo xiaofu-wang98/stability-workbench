@@ -231,7 +231,7 @@ def test_coa_batch_20_atomic_replay_and_version_updates(tmp_path, monkeypatch):
         assert readonly.post(preview_path, json={"release_completed": date}).is_success
         assert readonly.post(confirm_path, json=command).status_code == 403
     with store.read() as conn:
-        assert conn.execute("SELECT max(version) FROM schema_migrations").fetchone()[0] == 20
+        assert conn.execute("SELECT max(version) FROM schema_migrations").fetchone()[0] == 21
         versions = conn.execute("SELECT id,slot_id,source_json,record_json FROM workflow_versions WHERE id<>?",
                                 (existing["result_version_ids"][0],)).fetchall()
         assert len(versions) == 20

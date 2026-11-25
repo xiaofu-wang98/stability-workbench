@@ -204,7 +204,7 @@ def project_tasks(preview, flights, sheets):
                             "eligible": True,
                             "operation": "classify",
                             "role": "auxiliary",
-                            "reason": "确认该表尾非结果区域为绘图辅助说明 · 不入库",
+                            "reason": "确认该表外非结果区域为辅助用途（auxiliary）· 不入库",
                         }
                         if kind == "region" and region.get("role") == "unclassified"
                         else {}
@@ -241,6 +241,21 @@ def project_tasks(preview, flights, sheets):
                         else fields
                     )
                     tid = digest([preview.preview_id, kind, c.id, c.issue_code])
+                    same_value_prev = (
+                        flight.previous_versions.get(c.id)
+                        if code == "history" and c.status == "same_value"
+                        else None
+                    )
+                    history_proposal = (
+                        {
+                            "eligible": True,
+                            "operation": "repeat_source",
+                            "previous_version_id": same_value_prev,
+                            "reason": "与库内已采用值严格一致，可批量登记为同值重复来源佐证",
+                        }
+                        if same_value_prev
+                        else {}
+                    )
                     task = ReviewTask(
                         id=tid,
                         code=code,
@@ -252,12 +267,18 @@ def project_tasks(preview, flights, sheets):
                         if code == "identity"
                         else "草稿决定须必要权限批准，正式值保持不变。"
                         if code == "approval"
+                        else "与库内历史采用值完全一致，可登记为同值重复来源佐证，或单独查看历史版本。"
+                        if same_value_prev
                         else "请核对当前历史版本，选择保留旧值、更正或独立复测。",
                         actions=("approve",)
                         if code == "approval"
+                        else ("repeat_source", "decision")
+                        if same_value_prev
                         else ("decision",)
                         if code == "history"
                         else ("edit", "structure"),
+                        proposal=history_proposal,
+                        batch_key="repeat_source" if same_value_prev else (digest(["identity", fields]) if code == "identity" else None),
                         base_revision=preview.base_revision,
                     )
                 else:
@@ -607,13 +628,53 @@ def blocker_summary(index):
                            for code, counts in categories.items()}}
 
 
-def blocker_cards(conn, upload, preview, flight, sheets, tasks, *, index=None, references=None):
-    """Expose each preflight reference once, even when several share a decision."""
+_WORKBOOK_CELL_CACHE = {}
+
+
+def get_sheet_cells_snapshot(path, source_hash: str, section: str):
+    import hashlib
     from openpyxl import load_workbook
-    from openpyxl.utils import get_column_letter
     from pathlib import Path
     from .workflow_common import WorkflowError
-    import hashlib
+
+    path = Path(path)
+    stat = path.stat()
+    cache_key = (str(path.resolve()), source_hash, section)
+    cached = _WORKBOOK_CELL_CACHE.get(cache_key)
+    if cached is not None and cached["mtime_ns"] == stat.st_mtime_ns and cached["size"] == stat.st_size:
+        return cached["cells"]
+
+    file_bytes = path.read_bytes()
+    if hashlib.sha256(file_bytes).hexdigest() != source_hash:
+        raise WorkflowError("source_changed", "冻结 Excel 校验失败，无法核对原格。", 409)
+
+    book = load_workbook(path, read_only=False, rich_text=True)
+    try:
+        sheet = book[section]
+        cells = {}
+        for row in sheet.iter_rows():
+            for cell in row:
+                if cell.value is not None or cell.comment:
+                    cells[cell.coordinate] = (
+                        str(cell.value) if cell.value is not None else "",
+                        cell.comment.text if cell.comment else "",
+                    )
+        if len(_WORKBOOK_CELL_CACHE) >= 32:
+            _WORKBOOK_CELL_CACHE.pop(next(iter(_WORKBOOK_CELL_CACHE)))
+        _WORKBOOK_CELL_CACHE[cache_key] = {
+            "mtime_ns": stat.st_mtime_ns,
+            "size": stat.st_size,
+            "cells": cells,
+        }
+        return cells
+    finally:
+        book.close()
+
+
+def blocker_cards(conn, upload, preview, flight, sheets, tasks, *, index=None, references=None):
+    """Expose each preflight reference once, even when several share a decision."""
+    from openpyxl.utils import get_column_letter
+    from pathlib import Path
 
     index = blocker_index(flight, tasks) if index is None else index
     candidates = {candidate.id: candidate for candidate in preview.candidates}
@@ -623,36 +684,351 @@ def blocker_cards(conn, upload, preview, flight, sheets, tasks, *, index=None, r
     if not references:
         return []
     path = Path(conn.execute("SELECT stored_path FROM documents WHERE sha256=?", (upload["source_hash"],)).fetchone()[0])
-    if hashlib.sha256(path.read_bytes()).hexdigest() != upload["source_hash"]:
-        raise WorkflowError("source_changed", "冻结 Excel 校验失败，无法核对原格。", 409)
-    book = load_workbook(path, read_only=False, rich_text=True)
+    cells_snapshot = get_sheet_cells_snapshot(path, upload["source_hash"], flight.section)
+    cards = []
+    for reference in references:
+        kind, _, subject = reference.partition(":")
+        matching = index[reference]
+        candidate = candidates.get(subject)
+        region = regions.get(subject)
+        coordinates = list(region["coordinates"]) if region else []
+        for location in [*(loc for task in matching for loc in task.evidence),
+                         *([candidate.location] if candidate else [])]:
+            if location.section == flight.section:
+                coordinates.append(get_column_letter(location.column) + str(location.row))
+        originals = []
+        for coordinate in dict.fromkeys(coordinates):
+            if ":" in coordinate:
+                originals.append({"coordinate": coordinate, "text": "原件嵌入对象，请打开原件查看。"})
+                continue
+            text, comment = cells_snapshot.get(coordinate, ("", ""))
+            originals.append({"coordinate": coordinate, "text": text, "comment": comment})
+        cards.append({"id": reference, "kind": kind, "section": flight.section, "cells": originals,
+                      "candidate_id": candidate.id if candidate else None, "tasks": matching,
+                      "region_summary": region.get("summary") or region.get("basis", "") if region else ""})
+    return cards
+
+
+_STRUCTURED_DETAIL = '原格有待核对的结构信息，请打开来源任务。'
+
+_CODE_TITLES = {
+    'identity_conflict': '双语身份冲突', 'method_conflict': '方法中英冲突',
+    'source_revision': '划线修订待核对', 'source_comment': '批注／说明待核对',
+    'identity': '样品身份待核对', 'identity_ambiguity': '多重身份待核对',
+    'structure': '排版结构待核对', 'formula_result': '公式结果待核对',
+    'collision': '来源身份重复', 'region': '来源区域待核对', 'unprojected_region': '未投影区域待核对',
+    'approval': '草稿决定待复核', 'history': '历史版本待处置', 'row_exclusion': '整行不采用建议',
+    'unresolved': '资格依据已变化', 'receipt': '来源待接收',
+}
+
+
+def _source_revision(detail):
+    """Mirror sourceReviewText.ts#sourceRevision: a JSON object with a segments array."""
+    if not isinstance(detail, str) or not detail.lstrip().startswith('{'):
+        return None
     try:
-        sheet = book[flight.section]
-        cards = []
-        for reference in references:
-            kind, _, subject = reference.partition(":")
-            matching = index[reference]
-            candidate = candidates.get(subject)
-            region = regions.get(subject)
-            coordinates = list(region["coordinates"]) if region else []
-            for location in [*(loc for task in matching for loc in task.evidence),
-                             *([candidate.location] if candidate else [])]:
-                if location.section == flight.section:
-                    coordinates.append(get_column_letter(location.column) + str(location.row))
-            originals = []
-            for coordinate in dict.fromkeys(coordinates):
-                if ":" in coordinate:
-                    originals.append({"coordinate": coordinate, "text": "原件嵌入对象，请打开原件查看。"})
-                    continue
-                cell = sheet[coordinate]
-                originals.append({"coordinate": coordinate, "text": str(cell.value) if cell.value is not None else "",
-                                  "comment": cell.comment.text if cell.comment else ""})
-            cards.append({"id": reference, "kind": kind, "section": flight.section, "cells": originals,
-                          "candidate_id": candidate.id if candidate else None, "tasks": matching,
-                          "region_summary": region.get("summary") or region.get("basis", "") if region else ""})
-        return cards
-    finally:
-        book.close()
+        revision = json.loads(detail)
+    except ValueError:
+        return None
+    if isinstance(revision, dict) and isinstance(revision.get('segments'), list):
+        return revision
+    return None
+
+
+def _revision_text(revision):
+    """Mirror sourceReviewText.ts#sourceReviewText for one parsed revision.
+
+    ``deleted_word`` is a boolean flag for an explicit “删／删除” marker, never the
+    struck text. Struck text always comes from ``segments`` with ``struck: true``.
+    """
+    deleted = '、'.join(
+        text for text in (str(segment.get('text') or '').strip()
+                          for segment in revision.get('segments') or []
+                          if isinstance(segment, dict) and segment.get('struck'))
+        if text)
+    if revision.get('deleted_word'):
+        return '原件明确标记为“删／删除”。请核对删除依据或另有依据的正确结果。'
+    active = str(revision.get('active_text') or '').strip()
+    if revision.get('all_deleted') or not active:
+        return ((f'原值 {deleted} 已全部划除。' if deleted else '原格内容已全部划除。')
+                + '当前无有效保留值，请核对结果归属。')
+    return '原格部分划线。未划线正文：' + active + (f'。已划除：{deleted}' if deleted else '') + '。请对照原件核对。'
+
+
+def _readable_task_detail(detail: str, revision=None) -> str:
+    """Same contract as sourceReviewText.ts; unstructured details stay verbatim."""
+    detail = detail or ''
+    revision = revision if revision is not None else _source_revision(detail)
+    if revision is None:
+        return _STRUCTURED_DETAIL if detail.lstrip().startswith('{') else detail
+    return _revision_text(revision)
+
+
+def _task_revisions(task, candidates):
+    """Complete revision evidence for exactly the task's own fields."""
+    from copy import deepcopy
+
+    revisions = {}
+    for field in task.fields:
+        for member in task.members:
+            if member.get('source_field') and member['source_field'] != field:
+                continue
+            candidate = candidates.get(member.get('candidate_id'))
+            revision = (candidate.revisions or {}).get(field) if candidate else None
+            if revision:
+                revisions[field] = deepcopy(revision)
+                break
+    return revisions
+
+
+def build_task_cards(conn, upload, preview, flight, sheets, tasks, *, index=None):
+    from openpyxl.utils import get_column_letter
+    from pathlib import Path
+
+    index = blocker_index(flight, tasks) if index is None else index
+    candidates = {candidate.id: candidate for candidate in preview.candidates}
+    path = Path(conn.execute("SELECT stored_path FROM documents WHERE sha256=?", (upload["source_hash"],)).fetchone()[0])
+    cells_snapshot = get_sheet_cells_snapshot(path, upload["source_hash"], flight.section)
+
+    active_task_ids = {t.id for ref, matching in index.items() if not ref.startswith("not_received") for t in matching}
+    section_tasks = [t for t in tasks if t.section == flight.section and t.id in active_task_ids]
+
+    task_cards = []
+    seen_tasks = set()
+    for task in section_tasks:
+        if task.id in seen_tasks:
+            continue
+        seen_tasks.add(task.id)
+        proposal = task.proposal or {}
+        guidance = proposal.get("guidance") or None
+
+        task_category = task.code
+        for ref, matching in index.items():
+            if ref.startswith("unprojected_region:") and any(t.id == task.id for t in matching):
+                task_category = "unprojected_region"
+                break
+
+        coords = []
+        for loc in task.evidence:
+            if loc.section == flight.section:
+                coords.append(get_column_letter(loc.column) + str(loc.row))
+        for m in task.members:
+            c = candidates.get(m.get("candidate_id"))
+            if c and c.location.section == flight.section:
+                for k, loc in (c.evidence or {}).items():
+                    if loc.section == flight.section and k in task.fields:
+                        coords.append(get_column_letter(loc.column) + str(loc.row))
+        source_cells = []
+        for coord in dict.fromkeys(coords):
+            text, comment = cells_snapshot.get(coord, ("", ""))
+            source_cells.append({"coordinate": coord, "text": text, "comment": comment})
+
+        members_list = []
+        for m in task.members:
+            cid = m.get("candidate_id")
+            c = candidates.get(cid)
+            if not c:
+                continue
+            tp = ""
+            if c.record and c.record.key:
+                m_val = getattr(c.record.key, "month", None)
+                d_val = getattr(c.record.key, "day", None)
+                if m_val is not None:
+                    tp = f"{m_val}M"
+                elif d_val is not None:
+                    tp = f"{d_val}D"
+            if not tp:
+                tp = c.raw_fields.get("time_point", "") or getattr(c, "interpreted_fields", {}).get("time_point", "")
+            batch_val = ""
+            if c.record and c.record.key:
+                batch_val = getattr(c.record.key, "batch", "") or ""
+            if not batch_val:
+                batch_val = (c.raw_fields.get("batch", "") or getattr(c, "inherited_fields", {}).get("batch", "")
+                             or getattr(c, "interpreted_fields", {}).get("batch", ""))
+            raw_val = c.raw_fields.get("result", "")
+            members_list.append({
+                "candidate_id": cid,
+                "coordinate": get_column_letter(c.location.column) + str(c.location.row),
+                "time_point": tp or "未注明",
+                "batch": batch_val,
+                "current_value": c.record.result.raw_text if (c.record and c.record.result) else raw_val,
+                "raw_value": raw_val,
+            })
+
+        primary_cell = source_cells[0] if source_cells else {"coordinate": "", "text": "", "comment": ""}
+        coord_label = primary_cell["coordinate"] or "来源格"
+        primary_cid = members_list[0]["candidate_id"] if members_list else None
+        affected = len(members_list)
+
+        revisions = _task_revisions(task, candidates)
+        primary_revision = next((revisions[f] for f in task.fields if f in revisions), None)
+        # Machine JSON never reaches a card as text; plain details (comments,
+        # table-tail AE/AR notes, system hints) are passed through verbatim.
+        readable_detail = _readable_task_detail(task.detail)
+        field_name = task.fields[0] if task.fields else "subresult"
+        quick_choices = []
+
+        if task.code in ("identity_conflict", "method_conflict"):
+            identity_opts = proposal.get("identity_options") or {}
+            zh_opt, en_opt = identity_opts.get("chinese"), identity_opts.get("english")
+            title = (f"双语冲突：{zh_opt} vs {en_opt}" if zh_opt and en_opt
+                     else f"{_CODE_TITLES[task.code]} · {coord_label}")
+            detail_text = f"{readable_detail}（影响 {affected} 个时间点）"
+            if "manual" in task.actions:
+                if zh_opt:
+                    quick_choices.append({"label": f"采用中文：{zh_opt}", "fields": {field_name: zh_opt},
+                                          "operation": "manual", "default_reason": "原表英文标注笔误，以中文标注为准"})
+                if en_opt:
+                    quick_choices.append({"label": f"采用英文：{en_opt}", "fields": {field_name: en_opt},
+                                          "operation": "manual", "default_reason": "以原表英文标注为准"})
+                for k, val in identity_opts.items():
+                    if k not in ("chinese", "english") and isinstance(val, str):
+                        quick_choices.append({"label": f"采用{k}：{val}", "fields": {field_name: val},
+                                              "operation": "manual", "default_reason": f"核对原件确认采用{val}"})
+        elif task.code == "source_revision":
+            title = f"划线修订待核对 · {coord_label}"
+            revision_text = _readable_task_detail(task.detail, primary_revision)
+            detail_text = f"原件单元格 {coord_label}：{revision_text}"
+        elif task.code == "source_comment":
+            if guidance:
+                title = f"{guidance.get('title') or '明确检测分项'} · {coord_label}"
+                detail_text = f"{guidance.get('question', '')} 原文：{readable_detail}".strip()
+            elif proposal.get("source_kind") == "system_hint":
+                title = f"系统提示待核对 · {coord_label}"
+                detail_text = f"系统提示（{coord_label}）：{readable_detail}"
+            else:
+                title = f"批注／说明待核对 · {coord_label}"
+                detail_text = f"原件 {coord_label} 的批注／表后说明：{readable_detail}。请核对是否保留正文。"
+        elif task.code in ("identity", "identity_ambiguity"):
+            title = f"{_CODE_TITLES[task.code]} · {coord_label}"
+            if task.code == "identity_ambiguity":
+                label = FIELD_LABELS.get(field_name, field_name)
+                detail_text = f"原格{label}含多种写法：{readable_detail}。请明确当前解释（影响 {affected} 条结果）。"
+            else:
+                detail_text = f"{readable_detail}（影响 {affected} 条结果）"
+            for k, val in (proposal.get("identity_options") or {}).items():
+                if isinstance(val, str):
+                    quick_choices.append({"label": f"采用{k}：{val}", "fields": {field_name: val},
+                                          "operation": "manual", "default_reason": f"核对原件确认采用{val}"})
+        else:
+            title = f"{_CODE_TITLES.get(task_category, _CODE_TITLES.get(task.code, '来源待核对'))} · {coord_label}"
+            detail_text = f"{readable_detail}（影响 {affected} 条结果）" if affected else readable_detail
+        if task.exception:
+            detail_text += f" 须人工处理：{task.exception}"
+
+        # Operations are gated by (code, actions, proposal, exception), never by actions alone.
+        if (task.code == "source_revision" and "keep_active" in task.actions
+                and proposal.get("eligible") and proposal.get("operation") == "keep_active" and not task.exception):
+            whole = proposal.get("kind") == "whole"
+            row_wide = affected > 1 and "result" not in task.fields
+            quick_choices.append({
+                "label": (
+                    f"确认整格划除并应用至整行 {affected} 个时间点"
+                    if whole and row_wide
+                    else "确认整格划除（无有效保留值）"
+                    if whole
+                    else f"按行一键应用至整行 {affected} 个时间点（保留未划线正文）"
+                    if row_wide
+                    else "核对并保留未划线正文"
+                ),
+                "fields": {}, "operation": "keep_active",
+                "default_reason": (
+                    f"核对原格已全部划除，按行应用至整行 {affected} 个时间点"
+                    if whole and row_wide
+                    else "核对原格已全部划除，确认无有效保留值"
+                    if whole
+                    else f"核对未划线正文无误，按行一键应用至整行 {affected} 个时间点"
+                    if row_wide
+                    else "核对未划线正文无误，采纳修订后数值"
+                ),
+            })
+        if (task.code == "history" and "repeat_source" in task.actions
+                and proposal.get("eligible") and proposal.get("operation") == "repeat_source"):
+            quick_choices.append({
+                "label": "确认为同值重复来源（沿用已采用值）",
+                "fields": {}, "operation": "repeat_source",
+                "default_reason": "核对与库内历史已采用值严格一致，登记为同值重复来源佐证",
+            })
+        if (task.code == "source_comment" and "keep_body" in task.actions
+                and proposal.get("operation") == "keep_body"):
+            quick_choices.append({"label": "确认批注并保留正文", "fields": {}, "operation": "keep_body",
+                                  "default_reason": "核对批注确认有效，保留正文结果"})
+        if (task.code == "structure" and "keep_single" in task.actions
+                and proposal.get("operation") == "keep_single" and proposal.get("eligible")):
+            quick_choices.append({"label": "确认合并排版", "fields": {}, "operation": "keep_single",
+                                  "default_reason": "核对合并排版确认有效，保留记录"})
+        if task.code == "region" and "classify" in task.actions and proposal.get("operation") == "classify":
+            quick_choices.append({"label": "确认辅助用途（不入库）", "fields": {}, "operation": "classify",
+                                  "role": proposal.get("role", "auxiliary"),
+                                  "default_reason": "核对确认为辅助用途区域，不入库"})
+        if "manual" in task.actions and guidance:
+            for opt in guidance.get("name_options") or ():
+                value = opt.get("value") if isinstance(opt, dict) else opt
+                if isinstance(value, str) and value.strip():
+                    quick_choices.append({"label": f"指定分项：{value}", "fields": {"test_item": value},
+                                          "operation": "manual", "default_reason": f"核对说明，指定分项为{value}"})
+
+        needs_history_review = task.code in ("approval", "history")
+        needs_approval = task.code == "approval"
+        needs_advanced_tool = (any(a in task.actions for a in ("region_parse", "structure"))
+                               or task_category in ("region", "unprojected_region"))
+
+        # Explicit human entry: never leave a card with nothing to act on.
+        manual_entry = None
+        if "manual" in task.actions or "edit" in task.actions:
+            batch_manual = bool(task.fields and task.members) and (
+                task.code == "identity" or ("manual" in task.actions
+                                           and all("issue_id" in m for m in task.members)))
+            if batch_manual:
+                # Empty prefill: only fields the operator actually types are sent.
+                quick_choices.append({"label": "人工核对并填写", "fields": {}, "operation": "manual",
+                                      "requires_input": True, "input_fields": list(task.fields),
+                                      "default_reason": "核对原件后人工填写当前有效解释"})
+                manual_entry = {"type": "fields", "label": "人工核对并填写", "fields": list(task.fields)}
+            elif primary_cid:
+                manual_entry = {"type": "drawer", "label": "单格抽屉修改", "candidate_id": primary_cid}
+        if manual_entry is None:
+            if needs_history_review:
+                manual_entry = {"type": "history", "label": "复核历史采用" if needs_approval else "查看历史冲突",
+                                "candidate_id": primary_cid}
+            elif needs_advanced_tool:
+                manual_entry = {"type": "advanced_tool", "label": "在原表处理工具打开本项"}
+            elif primary_cid and not quick_choices:
+                manual_entry = {"type": "drawer", "label": "单格抽屉修改", "candidate_id": primary_cid}
+            elif "refresh" in task.actions:
+                manual_entry = {"type": "refresh", "label": "刷新后重新核对"}
+
+        if ("exclude" in task.actions and not (task.exception and task.code == "source_revision")
+                and not any(q.get("operation") == "exclude" for q in quick_choices)):
+            quick_choices.append({"label": "不采用此记录", "fields": {}, "operation": "exclude",
+                                  "default_reason": "确认为无效记录，不予采用"})
+
+        task_cards.append({
+            "task_id": task.id,
+            "code": task.code,
+            "category": task_category,
+            "title": title,
+            "detail_text": detail_text,
+            "detail": readable_detail,
+            "exception": task.exception,
+            "source_cells": source_cells,
+            "affected_count": affected,
+            "members": members_list,
+            "fields": list(task.fields),
+            "quick_choices": quick_choices,
+            "manual_entry": manual_entry,
+            "proposal": proposal,
+            "actions": list(task.actions),
+            "can_exclude_members": affected > 1,
+            "needs_history_review": needs_history_review,
+            "needs_approval": needs_approval,
+            "primary_candidate_id": primary_cid,
+            "needs_advanced_tool": needs_advanced_tool,
+            "revisions": revisions,
+            "guidance": guidance,
+        })
+
+    return task_cards
 
 
 def build_action_groups(tasks, physical_sheets, section, preview):
@@ -660,13 +1036,18 @@ def build_action_groups(tasks, physical_sheets, section, preview):
     sheet_tasks = [t for t in tasks if t.section == section and t.proposal.get("eligible") and not t.exception]
     groups = []
 
-    # 1. Standard revisions
-    std_tasks = [t for t in sheet_tasks if (t.code in ("source_revision", "standard") or set(t.fields) <= {"criterion", "subresult"}) and "result" not in t.fields and t.code != "region"]
+    # 1. Standard / item / method revisions (row-wide non-result strikethroughs)
+    std_tasks = [
+        t for t in sheet_tasks
+        if (t.code in ("source_revision", "standard")
+            or set(t.fields) <= {"criterion", "subresult", "test_item", "method", "method_version"})
+        and "result" not in t.fields and t.code != "region"
+    ]
     if std_tasks:
         groups.append(ActionGroup(
             group_id=f"ag_std_{section}",
-            title=f"标准删改 {len(std_tasks)} 处",
-            reason="批量采用本表质量标准修改建议",
+            title=f"标准/检项删改 {len(std_tasks)} 处",
+            reason="按行批量采用本表质量标准、检项或方法划线修订（整行时间点同步应用）",
             scope=TaskBatchScope(section=section, task_ids=tuple(t.id for t in std_tasks), operation='suggested'),
             decision_count=len(std_tasks),
             affected_result_count=len({m["candidate_id"] for t in std_tasks for m in t.members if "candidate_id" in m}),
@@ -699,13 +1080,13 @@ def build_action_groups(tasks, physical_sheets, section, preview):
             base_revision=preview.base_revision,
         ))
 
-    # 4. Auxiliary / unclassified tail regions
+    # 4. Auxiliary / unclassified out-of-table regions (B-1)
     reg_tasks = [t for t in sheet_tasks if t.code == "region" and t.proposal.get("operation") == "classify"]
     if reg_tasks:
         groups.append(ActionGroup(
             group_id=f"ag_reg_{section}",
-            title=f"辅助区域 {len(reg_tasks)} 处",
-            reason="确认表尾绘图/计算辅助区域不入库",
+            title=f"非结果表外区域 {len(reg_tasks)} 处（一键归为 auxiliary）",
+            reason="核对预览中全部坐标与前 30 字摘要后，一键将本表非结果表外区域归类为 auxiliary（不入库）",
             scope=TaskBatchScope(section=section, task_ids=tuple(t.id for t in reg_tasks), operation='classify', role=reg_tasks[0].proposal.get('role', 'auxiliary')),
             decision_count=len(reg_tasks),
             affected_result_count=0,
@@ -737,6 +1118,102 @@ def build_action_groups(tasks, physical_sheets, section, preview):
             affected_result_count=len({m["candidate_id"] for t in cmt_tasks for m in t.members if "candidate_id" in m}),
             base_revision=preview.base_revision,
         ))
+
+    # 7. Strictly same-value historical repeat sources (B-2; never includes different-value conflicts)
+    repeat_tasks = [t for t in sheet_tasks if t.code == "history" and t.proposal.get("operation") == "repeat_source"]
+    if repeat_tasks:
+        groups.append(ActionGroup(
+            group_id=f"ag_repeat_{section}",
+            title=f"同值重复来源 {len(repeat_tasks)} 条",
+            reason="仅针对与库内已采用值严格一致的重复来源，一键登记重复来源佐证（不同值冲突仍需逐条人工决策）",
+            scope=TaskBatchScope(section=section, task_ids=tuple(t.id for t in repeat_tasks), operation='repeat_source'),
+            decision_count=len(repeat_tasks),
+            affected_result_count=len({m["candidate_id"] for t in repeat_tasks for m in t.members if "candidate_id" in m}),
+            base_revision=preview.base_revision,
+        ))
+
+    return groups
+
+
+def build_bulk_identity_groups(tasks, section, preview):
+    """Group multi-row/column missing-identity tasks on a sheet for B-3 batch fill."""
+    from openpyxl.utils import get_column_letter
+    from .v5_contracts import TaskBatchScope
+
+    sheet_allowed = {"sample_type", "study", "condition", "presentation", "purpose", "batch", "study_id"}
+    col_allowed = sheet_allowed | {"time_point"}
+    candidates = {c.id: c for c in preview.candidates}
+    active = [
+        t for t in tasks
+        if t.section == section
+        and t.code == "identity"
+        and t.blockers
+        and t.fields
+        and t.batch_key
+        and set(t.fields) <= col_allowed
+    ]
+    groups = []
+
+    by_fields = defaultdict(list)
+    for t in active:
+        if set(t.fields) <= sheet_allowed:
+            by_fields[(t.batch_key, t.fields)].append(t)
+    for (_, fields), bucket in by_fields.items():
+        if len(bucket) < 2:
+            continue
+        cids = sorted({m["candidate_id"] for t in bucket for m in t.members if "candidate_id" in m})
+        labels = [FIELD_LABELS.get(f, f) for f in fields]
+        groups.append({
+            "group_id": f"ag_id_sheet_{digest([section, fields])[:10]}",
+            "mode": "sheet",
+            "title": f"整表批量补齐{'、'.join(labels)}（{len(bucket)} 项 / {len(cids)} 条结果）",
+            "fields": list(fields),
+            "field_labels": {f: FIELD_LABELS.get(f, f) for f in fields},
+            "task_count": len(bucket),
+            "affected_result_count": len(cids),
+            "scope": TaskBatchScope(
+                section=section,
+                task_ids=tuple(t.id for t in bucket),
+                operation="manual",
+            ).model_dump(mode="json"),
+        })
+
+    # Per-column grouping for columns sharing missing identity/time_point (e.g. result_panels)
+    by_col = defaultdict(list)
+    for t in active:
+        cols = {
+            candidates[m["candidate_id"]].location.column
+            for m in t.members
+            if m.get("candidate_id") in candidates
+        }
+        if len(cols) == 1:
+            col = next(iter(cols))
+            by_col[(col, t.batch_key, t.fields)].append(t)
+    sheet_covered = {tuple(g["scope"]["task_ids"]) for g in groups}
+    for (col, _, fields), bucket in sorted(by_col.items()):
+        if len(bucket) < 2:
+            continue
+        tids = tuple(t.id for t in bucket)
+        if tids in sheet_covered:
+            continue
+        cids = sorted({m["candidate_id"] for t in bucket for m in t.members if "candidate_id" in m})
+        labels = [FIELD_LABELS.get(f, f) for f in fields]
+        col_letter = get_column_letter(col)
+        groups.append({
+            "group_id": f"ag_id_col_{col_letter}_{digest([section, col, fields])[:8]}",
+            "mode": "column",
+            "column": col_letter,
+            "title": f"按列批量补齐第 {col_letter} 列{'、'.join(labels)}（{len(bucket)} 项 / {len(cids)} 条结果）",
+            "fields": list(fields),
+            "field_labels": {f: FIELD_LABELS.get(f, f) for f in fields},
+            "task_count": len(bucket),
+            "affected_result_count": len(cids),
+            "scope": TaskBatchScope(
+                section=section,
+                task_ids=tids,
+                operation="manual",
+            ).model_dump(mode="json"),
+        })
 
     return groups
 
@@ -815,17 +1292,25 @@ def current_review(flow, conn, upload, actor, *, _shared=False):
     result = (preview, sheets, updated_flights, tasks, links)
     if hasattr(conn, 'review_states'):
         conn.review_states[local_key] = result
-        def publish():
-            # A later write in the same transaction must not publish an earlier state.
-            if (project_row(conn, upload['project'])['revision'] != key[2]
-                    or digest(dict(flow._upload(conn, upload['id']))) != key[1]):
-                return
+
+        def store_shared():
             with flow._source_cache_lock:
                 flow._review_states[key] = result
                 flow._review_states.move_to_end(key)
                 while len(flow._review_states) > 4:
                     flow._review_states.popitem(last=False)
-        conn.after_commit.append(publish)
+
+        if getattr(conn, 'read_only', False):
+            # Store.read(): a SQLite read-only snapshot of committed data only.
+            store_shared()
+        elif hasattr(conn, 'after_commit'):
+            def publish():
+                # A later write in the same transaction must not publish an earlier state.
+                if (project_row(conn, upload['project'])['revision'] != key[2]
+                        or digest(dict(flow._upload(conn, upload['id']))) != key[1]):
+                    return
+                store_shared()
+            conn.after_commit.append(publish)
     return result if _shared else deepcopy(result)
 
 

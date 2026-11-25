@@ -10,7 +10,7 @@ import WorksheetEvents from './WorksheetEvents.vue';
 import WorksheetHeaderSources from './WorksheetHeaderSources.vue';
 
 const props = defineProps<{ sheet: Worksheet }>();
-const emit = defineEmits<{ saved: [Worksheet]; editing: [boolean] }>();
+const emit = defineEmits<{ saved: [Worksheet]; editing: [boolean]; 'results-saved': [number] }>();
 type Snapshot = { rows: string[][]; layout: Worksheet['layout'] };
 type Recovery = { selection: string; snapshot: Snapshot; reason: string };
 type Range = { startRow: number; endRow: number; startColumn: number; endColumn: number };
@@ -19,7 +19,7 @@ type Editor = { snapshot(): Snapshot; selection(): Range | undefined; setEditabl
 type Change = { row_id: string; point_id: string; value: string; intent: 'initial' | 'correction'; expected_version_id: string | null };
 
 const grid = ref<HTMLDivElement>();
-const activeInspection = ref<{ item: string; criteria: string; point: string }>();
+const activeInspection = ref<{ item: string; category: string; criteria: string; point: string }>();
 const editing = ref(false);
 const busy = ref(false);
 const dirty = ref(false);
@@ -138,12 +138,15 @@ async function mount(restore = false) {
   const values = [
     [latest.name, ...latest.points.map(() => '')],
     ['检验项目 / Test Item', ...latest.points.map(point => [point.label, point.planned_date, point.signed_status].filter(Boolean).join('\n'))],
-    ...latest.rows.map(row => [
-      [row.source_test_item, row.source_test_item === row.label ? '' : row.label, row.method,
-        row.reporting_basis ?? latest.identity.reporting_basis, row.unit].filter(Boolean).join('\n'),
-      ...latest.points.map(point => existing.get(row.id + ':' + point.id)?.raw ??
-        (point.required_row_ids.includes(row.id) ? '' : '—')),
-    ]),
+    ...latest.rows.map(row => {
+      const catTag = [row.category_name_zh, row.subcategory_name_zh].filter(Boolean).join(' / ');
+      return [
+        [row.source_test_item, row.source_test_item === row.label ? '' : row.label, catTag ? `[${catTag}]` : '',
+          row.method, row.reporting_basis ?? latest.identity.reporting_basis, row.unit].filter(Boolean).join('\n'),
+        ...latest.points.map(point => existing.get(row.id + ':' + point.id)?.raw ??
+          (point.required_row_ids.includes(row.id) ? '' : '—')),
+      ];
+    }),
   ];
   const hooks = {
     canEdit: (r: number, c: number) => latest.points[c - 1]?.required_row_ids.includes(latest.rows[r - 2]?.id)
@@ -174,8 +177,11 @@ async function mount(restore = false) {
       canEdit: (r: number, c: number) => c > 1 && hooks.canEdit(r, c - 1),
       onSelect: (range?: Range) => {
         const index = (range?.startRow ?? 0) - 2;
-        activeInspection.value = index >= 0 && index < latest.rows.length ? {
-          item: rows[index + 2][0], criteria: criteria[index + 2],
+        const targetRow = latest.rows[index];
+        activeInspection.value = index >= 0 && targetRow ? {
+          item: rows[index + 2][0],
+          category: [targetRow.category_name_zh, targetRow.subcategory_name_zh].filter(Boolean).join(' · '),
+          criteria: criteria[index + 2],
           point: latest.points[(range?.startColumn ?? 0) - 2]?.label || '',
         } : undefined;
       },
@@ -277,6 +283,7 @@ async function save() {
     forgetRecovery();
     dirty.value = false;
     status.value = '已保存。';
+    emit('results-saved', changes.length);
     try {
       await mount();
     } catch {
@@ -554,6 +561,17 @@ onBeforeUnmount(() => {
   styles?.remove();
   void release();
 });
+
+async function beginAndOpenRelease() {
+  if (!editing.value) {
+    await begin();
+  }
+  if (editing.value && !error.value) {
+    openRelease();
+  }
+}
+
+defineExpose({ begin, beginAndOpenRelease, openRelease });
 </script>
 
 <template>
@@ -605,7 +623,7 @@ onBeforeUnmount(() => {
   <form v-if="editing && plan" class="extra-form" @submit.prevent="submitExtra($event, 'plan')">
     <label>新增时间点 <input name="points" placeholder="6M, 12M" required></label>
     <NSelect v-model:value="planItems" multiple placeholder="选择应检项目"
-      :options="current.rows.map(row => ({ label: [row.label, row.reporting_basis].filter(Boolean).join(' · '), value: row.plan_key ?? row.item_id }))" />
+      :options="current.rows.map(row => ({ label: [row.category_name_zh, row.label, row.reporting_basis].filter(Boolean).join(' · '), value: row.plan_key ?? row.item_id }))" />
     <label>计划变更依据 <input name="basis" required></label>
     <NButton attr-type="submit" type="primary" :loading="busy" :disabled="expired">保存计划</NButton>
     <NButton :disabled="busy" @click="plan = false">取消</NButton>
@@ -665,27 +683,27 @@ onBeforeUnmount(() => {
     </div>
   </form>
   <details v-if="editing" class="worksheet-active-cell">
-    <summary>查看所选检项与标准 <template v-if="activeInspection">· {{ activeInspection.point }} {{ activeInspection.item.split('\n')[0] }}</template></summary>
-    <div v-if="activeInspection"><p>{{ activeInspection.item }}</p><p>{{ activeInspection.criteria || '未关联可接受标准' }}</p></div>
+    <summary>查看所选检项与标准 <template v-if="activeInspection">· {{ activeInspection.point }} {{ activeInspection.item.split('\n')[0] }}<template v-if="activeInspection.category">（{{ activeInspection.category }}）</template></template></summary>
+    <div v-if="activeInspection"><p v-if="activeInspection.category" class="active-category">质量分类：{{ activeInspection.category }}</p><p>{{ activeInspection.item }}</p><p>{{ activeInspection.criteria || '未关联可接受标准' }}</p></div>
     <p v-else>在表格中选择检项或结果格。</p>
   </details>
   <div v-if="editing" ref="grid" class="worksheet-editor" aria-label="结果编辑表格"></div>
 </template>
 
 <style scoped>
-.worksheet-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
-.worksheet-controls.is-editing { padding: 12px; margin-bottom: 8px; background: #eef6f3; border: 1px solid #d3e5df; border-radius: 10px; }
-.worksheet-controls [role="status"] { margin-left: auto; color: #395a53; font-size: 13px; }
-.worksheet-editor { border-radius: 10px; overflow: hidden; height: min(64vh, 660px); min-height: 360px; border: 1px solid #dbe5e2; }
-.extra-form { display: grid; gap: 10px; max-width: 480px; margin: 12px 0; padding: 14px; background: white; border: 1px solid #dbe5e2; border-radius: 8px; }
-.extra-form label { display: grid; gap: 4px; }
-.extra-form input, .extra-form textarea { font: inherit; padding: 6px; border: 1px solid #aabdb8; border-radius: 5px; }
+.worksheet-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 14px 0; }
+.worksheet-controls.is-editing { padding: 12px 16px; margin-bottom: 10px; background: var(--brand-soft); border: 1px solid var(--brand-border); border-radius: var(--radius-md); }
+.worksheet-controls [role="status"] { margin-left: auto; color: var(--brand); font-size: 13px; font-weight: 600; }
+.worksheet-editor { border-radius: var(--radius-md); overflow: hidden; height: min(64vh, 660px); min-height: 360px; border: 1px solid var(--border); box-shadow: var(--shadow-card); }
+.extra-form { display: grid; gap: 12px; max-width: 520px; margin: 14px 0; padding: 16px 18px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-card); }
+.extra-form label { display: grid; gap: 5px; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+.extra-form input, .extra-form textarea { font: inherit; padding: 7px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
 .quick-reasons { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
-.quick-title { font-size: 12px; color: #637772; }
+.quick-title { font-size: 12px; color: var(--text-muted); }
 .buttons { display: flex; gap: 10px; margin-top: 6px; }
 .recovery-box { margin: 12px 0; }
 .recovery-actions { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
-.draft-textarea { width: 100%; font-size: 12px; padding: 6px; border: 1px solid #aabdb8; border-radius: 4px; }
+.draft-textarea { width: 100%; font-size: 12.5px; padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
 .mt-2 { margin-top: 8px; }
 .mb-2 { margin-bottom: 8px; }
 </style>

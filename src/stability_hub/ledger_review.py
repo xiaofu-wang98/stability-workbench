@@ -91,7 +91,7 @@ class LedgerReview:
         try:
             context = context or ImportContext.model_validate_json(upload['context_json'])
             context = context.model_copy(update={'defaults': {k:v for k,v in context.defaults.items() if k not in changes}})
-            map_observation(probe, context, config, source_facts=True)
+            map_observation(probe, context, config, source_facts=True, conn=conn)
             return None
         except NeedsReview as exc:
             return exc

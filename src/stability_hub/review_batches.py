@@ -73,6 +73,8 @@ def preview_batch(flow, conn, upload_id, scope, actor):
             "mixed_semantics", "本次只能处理相同字段语义和修改方式；标准、结果和全删除须分别预览。"
         )
     plans, changes, exceptions = [], [], []
+    flights_by_section = {f.section: f for f in flights}
+    sheet_cells_cache = {}
     for task in selected:
         affected = {
             candidates[m["candidate_id"]].location.section for m in task.members if "candidate_id" in m
@@ -85,6 +87,8 @@ def preview_batch(flow, conn, upload_id, scope, actor):
         kind = (
             "decision"
             if task.code == "selected_exclusion"
+            else "repeat_source"
+            if task.code == "history" and operation == "repeat_source"
             else "edit"
             if task.code == "identity"
             else "region"
@@ -93,6 +97,30 @@ def preview_batch(flow, conn, upload_id, scope, actor):
         )
         if kind == "region":
             role = scope.role or (task.proposal.get("role") if task.proposal else None) or "auxiliary"
+            coords = [coord for member in task.members for coord in member.get("coordinates", ())]
+            if task.section not in sheet_cells_cache:
+                doc_row = conn.execute(
+                    "SELECT stored_path FROM documents WHERE sha256=?", (upload["source_hash"],)
+                ).fetchone()
+                try:
+                    from .review_tasks import get_sheet_cells_snapshot
+
+                    sheet_cells_cache[task.section] = (
+                        get_sheet_cells_snapshot(doc_row[0], upload["source_hash"], task.section)
+                        if doc_row
+                        else {}
+                    )
+                except Exception:
+                    sheet_cells_cache[task.section] = {}
+            cell_map = sheet_cells_cache[task.section]
+            snippets = []
+            for coord in coords:
+                cell_text, cell_comment = cell_map.get(coord, ("", ""))
+                cleaned = " ".join((cell_text or cell_comment or "").split())
+                if cleaned:
+                    snippets.append(cleaned)
+            joined = " / ".join(snippets)
+            text_preview = joined[:30]
             for member in task.members:
                 plans.append({
                     **member,
@@ -105,11 +133,61 @@ def preview_batch(flow, conn, upload_id, scope, actor):
             changes.append({
                 "task_id": task.id,
                 "section": task.section,
+                "coordinates": coords,
+                "text_preview": text_preview,
+                "text_truncated": len(joined) > 30,
                 "fields": {"role": {"before": "unclassified", "after": role}},
                 "operation": "classify",
                 "explanation": task.proposal.get("reason", task.detail),
                 "evidence": [e.model_dump(mode="json") for e in task.evidence],
                 "affected_results": 0,
+            })
+            continue
+        if kind == "repeat_source":
+            flight = flights_by_section.get(task.section)
+            applied_members = [m for m in task.members if m["candidate_id"] not in scope.exclude_candidate_ids]
+            if not applied_members:
+                continue
+            invalid_reason = None
+            prev_ids = {}
+            for member in applied_members:
+                cand = candidates.get(member["candidate_id"])
+                prev_id = flight.previous_versions.get(cand.id) if (flight and cand) else None
+                if not cand or cand.status != "same_value" or not prev_id:
+                    invalid_reason = "该来源与库内已采用值并非严格同值，禁止批量 repeat_source，请逐条人工核对。"
+                    break
+                prev_ids[cand.id] = prev_id
+            if invalid_reason:
+                exceptions.append({
+                    "task_id": task.id,
+                    "section": task.section,
+                    "reason": invalid_reason,
+                    "evidence": [e.model_dump(mode="json") for e in task.evidence],
+                })
+                continue
+            for member in applied_members:
+                plans.append({
+                    **member,
+                    "kind": "repeat_source",
+                    "action": "repeat_source",
+                    "previous_version_id": prev_ids[member["candidate_id"]],
+                    "fields": {},
+                    "task_id": task.id,
+                })
+            sample_cid = applied_members[0]["candidate_id"]
+            changes.append({
+                "task_id": task.id,
+                "section": task.section,
+                "fields": {
+                    "repeat_source": {
+                        "before": f"已有同值历史版本（{prev_ids[sample_cid][:8]}）",
+                        "after": "登记同值重复来源佐证（不改动已采用值）",
+                    }
+                },
+                "operation": "repeat_source",
+                "explanation": task.proposal.get("reason", task.detail),
+                "evidence": [e.model_dump(mode="json") for e in task.evidence],
+                "affected_results": len(applied_members),
             })
             continue
         if kind == "decision":
@@ -321,6 +399,11 @@ def apply_batch(flow, upload_id, request, *, actor):
             if m["kind"] == "issue" and "candidate_id" in m
         }
         source_raws = flow._source_rows(conn, list(issue_rows.values()), upload) if issue_rows else {}
+        repeat_candidates = (
+            {c.id: c for c in flow._preview(conn, upload, actor).candidates}
+            if any(m["kind"] == "repeat_source" for m in info["members"])
+            else {}
+        )
         before = {}
         for index, member in enumerate(info["members"]):
             if member["kind"] == "region":
@@ -365,6 +448,27 @@ def apply_batch(flow, upload_id, request, *, actor):
                     actor=actor,
                     _conn=conn,
                     batch_id=batch_id,
+                )
+            elif member["kind"] == "repeat_source":
+                from .worksheet_commit import save_decision
+                from .v5_contracts import DraftDecision
+
+                save_decision(
+                    flow,
+                    upload_id,
+                    DraftDecision(
+                        base_revision=project_row(conn, project)["revision"],
+                        idempotency_key=request.idempotency_key + ":" + str(index),
+                        reason=request.reason,
+                        candidate_id=row["id"],
+                        candidate_revision=row["revision"],
+                        action="repeat_source",
+                        previous_version_id=member["previous_version_id"],
+                    ),
+                    actor=actor,
+                    _conn=conn,
+                    _batch_id=batch_id,
+                    _candidate=repeat_candidates.get(row["id"]),
                 )
             elif member["kind"] == "decision":
                 from .worksheet_commit import save_decision

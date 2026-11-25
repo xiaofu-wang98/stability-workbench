@@ -156,8 +156,11 @@ def write_workbook(path, snapshot):
     status = book.create_sheet('SourceStatus')
     text_row(status,['upload_id','filename','section','scope','unresolved_regions'])
     for sheet in snapshot.get('pending_source_regions',[]):
+        payload = encoded(sheet['regions'])
+        # Excel cells have a hard 32,767-character limit; chunk oversized payloads across trailing columns without loss.
+        chunks = [payload[i:i+30000] for i in range(0, len(payload), 30000)] or ['']
         text_row(status,[sheet['upload_id'],sheet['filename'],sheet['section'],
-            '未知区域无法判定是否属于本次筛选，不计入正式结果',encoded(sheet['regions'])])
+            '未知区域无法判定是否属于本次筛选，不计入正式结果',*chunks])
     for sheet in book:
         header = next(r[0].row+1 for r in sheet if r[0].value == "layout") if sheet.title.startswith(("Display", "Adopted")) else 1
         for row in sheet:
@@ -204,7 +207,8 @@ class ExcelExports:
         else:
             write_workbook(path, snapshot)
             from .workflow_excel_verify import verify_workbook
-            errors = verify_workbook(path, snapshot)
+            with self.store.read() as conn:
+                errors = verify_workbook(path, snapshot, conn=conn)
         (folder / "snapshot.json").write_text(encoded(snapshot), encoding="utf-8")
         (folder / "verification.json").write_text(encoded({"passed": not errors, "errors": errors}), encoding="utf-8")
         if errors:

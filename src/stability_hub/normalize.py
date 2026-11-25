@@ -88,5 +88,8 @@ def normalize_worksheet_result(raw: str, unit: str, result_type: str) -> Result:
 def normalize_month(raw: str) -> int:
     match = re.fullmatch(r"(\d+)\s*(?:m|months?|个月|月)?", raw.strip(), re.I)
     if not match:
-        raise NeedsReview("unknown_time_point", f"Expected integer months, received {raw!r}")
+        raise NeedsReview(
+            "unknown_time_point",
+            f"未识别到稳定性时间点（收到 {raw!r}），请核对并补录时间点（如 0M / 3M / 14D）或排除非稳定性样品。",
+        )
     return int(match[1])

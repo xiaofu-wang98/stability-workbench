@@ -58,7 +58,7 @@ def decision_basis(conn,upload,candidate,decision):
     return digest(body),old
 
 
-def save_decision(flow,upload_id,request,*,actor,_conn=None,_batch_id=None):
+def save_decision(flow,upload_id,request,*,actor,_conn=None,_batch_id=None,_candidate=None):
     require(actor,Capability.CONFIRM_FACT)
     if request.action == 'restore':
         from .structural_review import restore
@@ -76,7 +76,9 @@ def save_decision(flow,upload_id,request,*,actor,_conn=None,_batch_id=None):
         if prior:
             return MutationResult.model_validate(prior)
         check_revision(conn,project,request.base_revision)
-        c = next((c for c in flow._preview(conn,upload,actor).candidates if c.id == request.candidate_id),None)
+        c = _candidate if _candidate is not None else next(
+            (c for c in flow._preview(conn,upload,actor).candidates if c.id == request.candidate_id),None
+        )
         if not c or c.lifecycle != 'draft' or c.candidate_revision != request.candidate_revision:
             raise WorkflowError('candidate_changed','候选已变化或已结束草稿。',409)
         if request.action != 'exclude':

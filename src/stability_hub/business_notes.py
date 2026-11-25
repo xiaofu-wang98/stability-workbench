@@ -8,7 +8,12 @@ BUSINESS = re.compile(
     r'不汇报|未汇报|异常|未通过|报错|调查|改为|桥接|恢复汇报|根据|检测组提供|发起|'
     r'\b(?:retest(?:ed|ing)?|correct(?:ed|ion)?|replac(?:e[ds]?|ement)|bridg(?:e[ds]?|ing)|investigation|deviation)\b', re.I)
 REFERENCES = re.compile(r'(?<![A-Za-z0-9])(?:AR|AE|OOS|OOE|OOT|CC)[-－][A-Za-z0-9]+(?:[-－][A-Za-z0-9]+)*', re.I)
-ASSAYS = re.compile(r'渗透压|等电点|肽图|NRCE|RCE|CE-SDS|SEC|icIEF|CZE|DAR|ELISA|游离|N糖|pH|蛋白|活性|内毒素|微粒|颜色|澄清度|外观', re.I)
+ASSAYS = re.compile(
+    r'渗透压|等电点|肽图|NRCE|RCE|CE-?SDS|SEC|icIEF|cIEF|CEX|AEX|CZE|DAR|ELISA|游离|N-?糖|糖谱|'
+    r'电荷变异体|电荷|pH|蛋白|活性|效价|内毒素|无菌|微生物|微粒|异物|密封性|CCIT|'
+    r'颜色|澄清度|外观|水分|装量|复溶|聚山梨酯|PS80|PS20|单体|聚合体|片段|主峰|酸峰|碱峰|HMW|LMW',
+    re.I,
+)
 TIME = re.compile(
     r'(?<![\d.])(?:(?P<pre>[MD])\s*(?P<pn>\d+)(?![\d.])|(?P<n>\d+)\s*'
     r'(?P<unit>months?\b|个?月|天|days?\b|[MD](?![A-Za-z0-9]))|第(?P<cn>[一二三四五六七八九十百零两\d]+)个?月)', re.I)
@@ -118,26 +123,29 @@ def note_scope(line, observations):
         if canonical:
             names.add(canonical)
         labels.append(names)
+    # Split glued shorthand like "nrceLMW" or "secHMW" into separate tokens for deterministic matching.
+    search_body = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', body)
+    search_body = re.sub(r'(?i)\b(nrce|rce|sec|icief)(hmw|lmw|monomer)\b', r'\1 \2', search_body)
     matched = set()
     for names in labels:
         for name in names:
             pattern = re.escape(name)
             if name.isascii():
                 pattern = r'(?<![A-Za-z0-9])' + pattern + r'(?![A-Za-z0-9])'
-            if re.search(pattern, body, re.I):
+            if re.search(pattern, search_body, re.I):
                 matched.add(name)
-    method = method_text(body, embedded=True)
+    method = method_text(search_body, embedded=True)
     if method:
         matched.add(method)
-    mentioned_assays = {m.group().casefold() for m in ASSAYS.finditer(body)}
+    mentioned_assays = {m.group().casefold() for m in ASSAYS.finditer(search_body)}
     matched.update(mentioned_assays)
-    bilingual = re.sub(r'(?<=[A-Za-z])(?=[\u3400-\u9fff])|(?<=[\u3400-\u9fff])(?=[A-Za-z])', ' ', body)
+    bilingual = re.sub(r'(?<=[A-Za-z])(?=[\u3400-\u9fff])|(?<=[\u3400-\u9fff])(?=[A-Za-z])', ' ', search_body)
     mentioned_purity = set(purity_subresults(bilingual))
     matched.update(mentioned_purity)
     # Unknown explicit assay/batch qualifiers cannot turn into a table-wide action.
-    cleaned = REFERENCES.sub('', TIME.sub('', body))
+    cleaned = REFERENCES.sub('', TIME.sub('', search_body))
     unknown_ascii = re.findall(r'^\s*([A-Z][A-Z0-9-]{1,})(?![A-Za-z0-9])', cleaned)
-    recognised = {v.casefold() for names in labels for v in names} | {'oos', 'ooe', 'oot', 'ar', 'ae', 'cc'}
+    recognised = {v.casefold() for names in labels for v in names} | {'oos', 'ooe', 'oot', 'ar', 'ae', 'cc', 'hmw', 'lmw', 'nrce', 'rce'}
     if any(token.casefold() not in recognised and not any(token.casefold() in v for v in recognised)
            for token in unknown_ascii):
         return set()
@@ -147,12 +155,23 @@ def note_scope(line, observations):
     if re.search(r'批号|批次|batch|lot\b', cleaned, re.I):
         # Batch-scoped notes require explicit human range selection for now.
         return set()
+    # A5: Never broadcast an unaddressed footer note to every cell in the sheet.
+    # Require at least one concrete target (assay/method/purity/timepoint) or explicit sheet-wide/study-pause marker.
+    explicit_universal = bool(re.search(
+        r'整表|全表|所有检项|全部检项|所有项目|全部项目|all\s+items|暂停(?:检测|考察|试验)?|终止(?:检测|考察|试验)?|停检',
+        cleaned,
+        re.I,
+    ))
+    if not matched and not times and not explicit_universal:
+        return set()
     result = set()
     for index, raw in enumerate(observations):
         if mentioned_purity and not (set(purity_subresults(raw.fields.get('criterion', ''))) & mentioned_purity):
             continue
-        if matched and not ({v.casefold() for v in labels[index]} & {v.casefold() for v in matched}):
-            continue
+        if matched:
+            obs_tokens = {v.casefold() for v in labels[index]}
+            if not (obs_tokens & {v.casefold() for v in matched}):
+                continue
         if '该检项' in body and '*' not in raw.fields.get('test_item', ''):
             continue
         token = raw.fields.get('time_point', '')

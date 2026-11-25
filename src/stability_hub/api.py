@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 from zipfile import BadZipFile
 
-from fastapi import Depends, FastAPI, File, Form, Header, Query, Request, UploadFile
+from fastapi import Body, Depends, FastAPI, File, Form, Header, Query, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
@@ -400,7 +400,8 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
                               category: str = "", focus: str = "", offset: int = Query(0, ge=0),
                               limit: int | None = Query(None, ge=1, le=100)):
         require(operator, Capability.VIEW)
-        from .review_tasks import blocker_cards, blocker_category, blocker_index, blocker_summary, build_action_groups, current_review
+        from .review_tasks import (blocker_cards, blocker_category, blocker_index, blocker_summary,
+                                   build_action_groups, build_bulk_identity_groups, build_task_cards, current_review)
         with store.read() as conn:
             upload = workflow._upload(conn, preview_id)
             preview, sheets, flights, tasks, _ = current_review(workflow, conn, upload, operator, _shared=True)
@@ -412,14 +413,17 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
             selected = [ref for ref, matching in index.items() if
                         (limit is None or not ref.startswith("not_received")) and
                         (not category or any(blocker_category(ref, task) == category for task in matching))]
+            # Blockers and task cards are different lists; each keeps its own page
+            # position so a focus hit in one can never shift the other.
+            blocker_offset = offset
             if focus and limit:
                 position = next((i for i, ref in enumerate(selected)
                                  if ref.partition(":")[2] == focus or any(task.id == focus for task in index[ref])), None)
                 if position is not None:
-                    offset = (position // limit) * limit
-            if limit and offset and offset >= len(selected):
-                offset = (max(len(selected) - 1, 0) // limit) * limit
-            references = selected[offset:offset + limit] if limit is not None else selected
+                    blocker_offset = (position // limit) * limit
+            if limit and blocker_offset and blocker_offset >= len(selected):
+                blocker_offset = (max(len(selected) - 1, 0) // limit) * limit
+            references = selected[blocker_offset:blocker_offset + limit] if limit is not None else selected
             active_tasks = {task.id for ref, matching in index.items() if not ref.startswith("not_received") for task in matching}
             manual = [
                 {'id': task.id, 'detail': task.detail, 'fields': task.fields, 'evidence': task.evidence,
@@ -432,6 +436,7 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
                      and all('issue_id' in member for member in task.members)))
             ]
             groups = build_action_groups(tasks, sheets, section, preview)
+            bulk_identity_groups = build_bulk_identity_groups(tasks, section, preview)
             members = {task.id: [m["candidate_id"] for m in task.members if "candidate_id" in m]
                        for task in tasks if task.section == section}
             batch_members = {g.group_id: list(dict.fromkeys(cid for tid in g.scope.task_ids for cid in members.get(tid, ())))
@@ -442,10 +447,27 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
                     AND u.action='undo_review_batch'
                     AND json_extract(u.detail_json,'$.batch_id')=json_extract(b.detail_json,'$.batch_id'))
                 ORDER BY b.sequence DESC LIMIT 1""", (preview_id, section)).fetchone()
-            return {'groups': groups, 'manual': manual, 'batch_members': batch_members,
+            task_cards = build_task_cards(conn, upload, preview, flight, sheets, tasks, index=index)
+            filtered_cards = [card for card in task_cards if card.get("category") == category] if category else task_cards
+            task_cards_total = len(filtered_cards)
+            card_offset = offset
+            if focus and limit:
+                pos = next((i for i, card in enumerate(filtered_cards)
+                            if card["task_id"] == focus or any(m.get("candidate_id") == focus for m in card.get("members", []))), None)
+                if pos is not None:
+                    card_offset = (pos // limit) * limit
+            if limit and card_offset and card_offset >= len(filtered_cards):
+                card_offset = (max(len(filtered_cards) - 1, 0) // limit) * limit
+            paged_cards = filtered_cards[card_offset:card_offset + limit] if limit is not None else filtered_cards
+
+            # 'offset' stays the task-card page position consumed by the workbench;
+            # blockers report their own position explicitly.
+            return {'groups': groups, 'bulk_identity_groups': bulk_identity_groups, 'manual': manual, 'batch_members': batch_members,
                     'base_revision': flight.base_revision, 'undo_batch_id': undo[0] if undo and flight.state != 'committed' else None,
-                    'summary': summary, 'total': len(selected), 'offset': offset,
-                    'blockers': blocker_cards(conn, upload, preview, flight, sheets, tasks, index=index, references=references)}
+                    'summary': summary, 'total': len(selected), 'offset': card_offset,
+                    'blockers_offset': blocker_offset, 'task_cards_offset': card_offset,
+                    'blockers': blocker_cards(conn, upload, preview, flight, sheets, tasks, index=index, references=references),
+                    'task_cards': paged_cards, 'task_cards_total': task_cards_total}
 
     @app.post('/api/v1/previews/{preview_id}/v5/tasks/preview')
     def source_task_preview(preview_id: str,command: TaskBatchScope,operator: ActorDependency):
@@ -840,8 +862,9 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
         from .specification_preview import inspect_specification
         try:
             data = file.file.read(20 * 1024 * 1024 + 1)
-            if len(data) > 20 * 1024 * 1024 or Path(file.filename or '').suffix.lower() != '.docx':
-                raise WorkflowError('invalid_document', '请选择不超过20MB的Word质量标准。')
+            suffix = Path(file.filename or '').suffix.lower()
+            if len(data) > 20 * 1024 * 1024 or suffix not in {'.docx', '.xlsx'}:
+                raise WorkflowError('invalid_document', '请选择不超过20MB的Word或Excel质量标准（.docx / .xlsx）。')
             preview = inspect_specification(data, file.filename or "")
             if not preview['rows']:
                 raise WorkflowError('specification_table_missing', '未识别到质量标准表。')
@@ -855,7 +878,7 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
         except WorkflowError:
             raise
         except (BadZipFile, KeyError, ValueError, XMLSyntaxError) as exc:
-            raise WorkflowError('invalid_document', '无法读取Word质量标准。') from exc
+            raise WorkflowError('invalid_document', '无法读取质量标准文件，请核对文件格式。') from exc
         finally:
             file.file.close()
 
@@ -959,7 +982,10 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
         source_hash = json.loads(row['preview_json']).get('scan_id', specification_id)
         if hashlib.sha256(row['source']).hexdigest() != source_hash:
             raise WorkflowError('source_integrity', '质量标准原件校验失败。', 409)
-        media_type = 'application/pdf' if source_hash != specification_id else 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        if str(row['filename']).lower().endswith('.xlsx'):
+            media_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        else:
+            media_type = 'application/pdf' if source_hash != specification_id else 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         return Response(row['source'], media_type=media_type,
                         headers={'Content-Disposition': "attachment; filename*=UTF-8''" + quote(row['filename'], safe='')})
 
@@ -1165,30 +1191,71 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
         with store.read() as conn:
             upload = workflow._upload(conn, preview_id)
             result = workflow._preview(conn, upload, operator, fresh=True)
-            physical = coverage(conn, upload) if result.sheet_confirmation_required else []
-            sections = [sheet["section"] for sheet in physical]
-            if section is not None and section not in sections:
-                raise WorkflowError("unknown_sheet", "链接中的工作表已无法定位，请重新选择工作表。", 404)
-            selected = section if section is not None else next(iter(sections), None)
-            view = None
-            if selected is not None:
-                from .review_tasks import enrich_sheet_preflight
-                view = preflight(workflow, conn, upload, selected, operator, preview=result, sheets=physical)[0]
-                view = enrich_sheet_preflight(conn, upload, result, view, physical_sheets=physical)
             if result.sheet_confirmation_required:
+                from .review_tasks import current_review, enrich_sheet_preflight
+                preview, physical_sheets, flights, tasks, _ = current_review(workflow, conn, upload, operator, _shared=True)
+                result = preview
+                physical = physical_sheets
+                sections = [sheet["section"] for sheet in physical]
+                if section is not None and section not in sections:
+                    raise WorkflowError("unknown_sheet", "链接中的工作表已无法定位，请重新选择工作表。", 404)
+                selected = section if section is not None else next(iter(sections), None)
+                flight = next((f for f in flights if f.section == selected), None)
+                view = enrich_sheet_preflight(conn, upload, result, flight, physical_sheets=physical) if flight else None
+                all_candidates = result.candidates
                 result = result.model_copy(update={"candidates": tuple(
                     candidate for candidate in result.candidates if candidate.location.section == selected)})
+
+                section_statuses = []
+                flight_by_sec = {f.section: f for f in flights}
+                from .review_tasks import blocker_index, blocker_summary
+                for s in sections:
+                    f = flight_by_sec.get(s)
+                    c_count = sum(1 for c in all_candidates if c.location.section == s)
+                    if f is None:
+                        sec_state = "empty"
+                        unresolved = 0
+                    elif f.state == "committed":
+                        sec_state = "committed"
+                        unresolved = 0
+                    else:
+                        # Real decisions only: a not_received receipt placeholder is
+                        # a save step, not a source question awaiting review.
+                        unresolved = blocker_summary(blocker_index(f, tasks))["tasks"]
+                        sec_state = ("not_received" if any(u == "not_received" or u.startswith("not_received:")
+                                                           for u in f.unresolved) else f.state)
+                    section_statuses.append({
+                        "section": s,
+                        "state": sec_state,
+                        "unresolved_count": unresolved,
+                        "candidate_count": c_count,
+                    })
+            else:
+                sections = []
+                selected = None
+                view = preflight(workflow, conn, upload, None, operator, preview=result)[0] if result.candidates else None
+                section_statuses = []
+
             receipt = None
             if view and view.state == "committed":
                 row = conn.execute("""SELECT detail_json FROM workflow_events WHERE subject_id=? AND action='confirm_sheet'
                     AND json_extract(detail_json,'$.section')=? ORDER BY sequence DESC LIMIT 1""",
                     (preview_id, selected)).fetchone()
                 receipt = json.loads(row[0]) if row else None
+
             return {"preview": result, "sections": sections, "section": selected, "commit_receipt": receipt,
-                    "preflight": view.model_dump(mode="json") if view else None}
+                    "preflight": view.model_dump(mode="json") if view else None,
+                    "section_statuses": section_statuses}
+
+    from .v5_contracts import SyncWorksheetsRequest
 
     @app.post('/api/v1/previews/{preview_id}/sync-worksheets')
-    def sync_confirmed_worksheets(preview_id: str, operator: ActorDependency, section: str | None = None):
+    def sync_confirmed_worksheets(
+        preview_id: str,
+        operator: ActorDependency,
+        section: str | None = None,
+        command: SyncWorksheetsRequest | None = Body(default=None),
+    ):
         require(operator, Capability.CONFIRM_FACT)
         from .worksheet_seed import provision_from_results
         with store.connect() as conn:
@@ -1200,7 +1267,12 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
                 (upload["project"], preview_id, section, section))
             ids = [version_id for row in rows for version_id in
                    json.loads(row["detail_json"]).get("result_version_ids", [])]
-            return {"worksheet_sync": provision_from_results(conn, worksheets, upload["project"], ids, operator)}
+            stages = command.material_stages if command else None
+            return {
+                "worksheet_sync": provision_from_results(
+                    conn, worksheets, upload["project"], ids, operator, material_stages=stages
+                )
+            }
 
     @app.get('/api/v1/previews/{preview_id}/worksheets')
     def worksheets_for_import(preview_id: str, operator: ActorDependency, section: str | None = None):
@@ -1417,6 +1489,130 @@ def create_app(store, configs, actor: Actor, *, api_token=None, frontend=None, w
             content = package.read('report.docx')
         return Response(content,media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
                         headers={'Content-Disposition':'attachment; filename="report.docx"'})
+
+    @app.get('/api/v1/catalog/platform')
+    def get_platform_catalog(
+        operator: ActorDependency,
+        category_code: str = "",
+        subcategory_code: str = "",
+        query: str = "",
+    ):
+        require(operator, Capability.VIEW)
+        from .platform_catalog import list_platform_catalog
+        with store.read() as conn:
+            return list_platform_catalog(
+                conn,
+                category_code=category_code.strip(),
+                subcategory_code=subcategory_code.strip(),
+                query=query.strip(),
+            )
+
+    @app.post('/api/v1/catalog/platform/assays')
+    def post_platform_assay(payload: dict, operator: ActorDependency):
+        require(operator, Capability.CONFIRM_FACT)
+        from .platform_catalog import create_platform_assay
+        try:
+            with store.connect() as conn:
+                conn.execute("BEGIN IMMEDIATE")
+                return create_platform_assay(
+                    conn,
+                    category_code=str(payload.get("category_code") or "").strip(),
+                    subcategory_code=str(payload.get("subcategory_code") or "").strip(),
+                    name_zh=str(payload.get("name_zh") or "").strip(),
+                    name_en=str(payload.get("name_en") or "").strip(),
+                    default_unit=str(payload.get("default_unit") or "").strip(),
+                    pharmacopoeia_scope=str(payload.get("pharmacopoeia_scope") or "ChP/USP/EP").strip(),
+                    modality_tags=list(payload.get("modality_tags") or ["mAb"]),
+                    methods=list(payload.get("methods") or []),
+                    components=list(payload.get("components") or []),
+                    aliases=list(payload.get("aliases") or []),
+                )
+        except ValueError as exc:
+            raise WorkflowError("invalid_catalog_entry", str(exc)) from exc
+
+    @app.post('/api/v1/catalog/platform/aliases')
+    def post_platform_alias(payload: dict, operator: ActorDependency):
+        require(operator, Capability.CONFIRM_FACT)
+        from .platform_catalog import add_platform_alias
+        try:
+            with store.connect() as conn:
+                conn.execute("BEGIN IMMEDIATE")
+                return add_platform_alias(
+                    conn,
+                    entity_type=str(payload.get("entity_type") or "assay").strip(),
+                    entity_id=str(payload.get("entity_id") or "").strip(),
+                    raw_alias=str(payload.get("raw_alias") or "").strip(),
+                    source="user",
+                )
+        except ValueError as exc:
+            raise WorkflowError("invalid_catalog_alias", str(exc)) from exc
+
+    @app.post('/api/v1/projects/{project}/catalog/promote')
+    def promote_catalog_item(project: ProjectDependency, payload: dict, operator: ActorDependency):
+        from .assay_catalog import promote_to_platform_catalog
+        name_zh = str(payload.get("name_zh") or "").strip()
+        if not name_zh:
+            raise WorkflowError("invalid_catalog_entry", "请提供标准中文检项名称。")
+        return promote_to_platform_catalog(
+            store,
+            project,
+            name_zh=name_zh,
+            name_en=str(payload.get("name_en") or "").strip(),
+            method=str(payload.get("method") or "").strip(),
+            component_zh=str(payload.get("component_zh") or "").strip(),
+            component_en=str(payload.get("component_en") or "").strip(),
+            unit=str(payload.get("unit") or "").strip(),
+            result_type=str(payload.get("result_type") or "numeric").strip(),
+            category_code=str(payload.get("category_code") or "").strip(),
+            subcategory_code=str(payload.get("subcategory_code") or "").strip(),
+            aliases=list(payload.get("aliases") or []),
+            also_add_to_project=bool(payload.get("also_add_to_project", True)),
+            actor=operator,
+        )
+
+    @app.get('/api/v1/templates')
+    def get_templates(operator: ActorDependency):
+        require(operator, Capability.VIEW)
+        from .template_library import list_templates
+        return {"templates": list_templates()}
+
+    @app.get('/api/v1/templates/guide')
+    def get_templates_guide(operator: ActorDependency):
+        require(operator, Capability.VIEW)
+        guide_path = Path(__file__).resolve().parents[2] / "docs" / "标准模板最小改动填表说明.md"
+        content = guide_path.read_text(encoding="utf-8") if guide_path.is_file() else ""
+        return {"filename": "标准模板最小改动填表说明.md", "markdown": content}
+
+    @app.get('/api/v1/templates/{template_id}/download')
+    def download_template(template_id: str, operator: ActorDependency):
+        require(operator, Capability.VIEW)
+        from urllib.parse import quote
+        from .template_library import render_template
+        try:
+            filename, media_type, content = render_template(template_id)
+        except KeyError as exc:
+            raise WorkflowError("template_missing", "找不到所选标准模板。", 404) from exc
+        return Response(
+            content,
+            media_type=media_type,
+            headers={"Content-Disposition": "attachment; filename*=UTF-8''" + quote(filename, safe="")},
+        )
+
+    @app.get('/api/v1/previews/{preview_id}/cleaning-audit')
+    def preview_cleaning_audit(preview_id: str, operator: ActorDependency, section: str | None = None):
+        require(operator, Capability.VIEW)
+        from .cleaning import summarize_cleaning_audit
+        from .models import RawObservation
+        with store.read() as conn:
+            workflow._upload(conn, preview_id)
+            rows = conn.execute("SELECT raw_json FROM workflow_candidates WHERE upload_id=?", (preview_id,)).fetchall()
+        raws = []
+        for row in rows:
+            obs = RawObservation.model_validate_json(row["raw_json"])
+            if section and obs.location.section != section:
+                continue
+            raws.append(obs)
+        return summarize_cleaning_audit(raws)
 
     @app.get('/api/v1/deliveries')
     def deliveries(operator: ActorDependency, limit: Annotated[int, Query(ge=1, le=200)] = 50):

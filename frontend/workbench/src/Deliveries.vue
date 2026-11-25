@@ -1,20 +1,32 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { NAlert, NButton, NInput, NSelect } from 'naive-ui';
+import { NAlert, NButton, NInput, NSelect, NTag } from 'naive-ui';
 import { api, triggerDownload, type Project, type Worksheet, type WorksheetSummary } from './api';
+import { useWorkbenchContextStore } from './stores/workbenchContext';
+import ActionNextStepBanner from './components/ActionNextStepBanner.vue';
 
 const props = defineProps<{ projects: Project[] }>();
 const route = useRoute();
+const ctx = useWorkbenchContextStore();
 type Delivery = { id: string; project: string; created_at: string; filename: string;
   attachment_filename?: string; report_version?: string; report_changes?: string };
 type Export = { download_url: string; word_download_url?: string };
-const project = ref(String(route.query.project || ''));
+const project = ref(String(route.query.project || ctx.activeProject || ''));
+const historySearch = ref('');
 const batch = ref(String(route.query.batch || ''));
 const study = ref<string | null>(typeof route.query.study === 'string' ? route.query.study : null);
 const studyId = ref('');
 const condition = ref('');
-const kind = ref<'summary' | 'xlsx' | 'docx' | 'stability' | 'confirmation' | 'quick' | 'controlled'>(route.query.format === 'confirmation' ? 'confirmation' : 'xlsx');
+const kind = ref<'summary' | 'xlsx' | 'docx' | 'stability' | 'confirmation' | 'quick' | 'controlled'>(
+  route.query.format === 'controlled'
+    ? 'controlled'
+    : route.query.format === 'confirmation'
+    ? 'confirmation'
+    : (['summary', 'xlsx', 'docx', 'stability', 'quick'].includes(String(route.query.format))
+      ? (route.query.format as any)
+      : 'xlsx')
+);
 type Sample = { id: string; batch: string; presentation: string; sample_type: string; purpose: string };
 type SampleRole = 'selected' | 'before' | 'after';
 type AlignmentField = 'presentation' | 'study_id';
@@ -279,6 +291,32 @@ const formats = [{ label: '稳定性汇总 Excel', value: 'summary' }, { label: 
   { label: '常熟受控版式 Excel', value: 'controlled' },
   { label: '稳定性考察报告 Word', value: 'stability' }, { label: '稳定性确认表 Excel', value: 'confirmation' },
   { label: '跨批对比 Word', value: 'quick' }];
+const deliveryCards: { group: string; items: { value: typeof kind.value; label: string; desc: string; tag: string }[] }[] = [
+  {
+    group: '受控表格与确认表（Excel）',
+    items: [
+      { value: 'controlled', label: '常熟受控版式', desc: '按受控模板合并输出多张研究工作表', tag: '受控版式' },
+      { value: 'confirmation', label: '稳定性确认表', desc: '针对单张研究表按时间点生成签核确认表', tag: '单表签核' },
+      { value: 'summary', label: '稳定性矩阵汇总', desc: '按项目、方案编号与条件汇总稳定性结果', tag: '矩阵汇总' },
+      { value: 'xlsx', label: '结果明细汇总', desc: '导出原始结构化检测结果明细表', tag: '全量明细' },
+    ],
+  },
+  {
+    group: 'Word 报告与跨批对比',
+    items: [
+      { value: 'stability', label: '稳定性考察报告', desc: '生成带目的、设备、事件与人工评价的完整考察报告包', tag: '正式报告' },
+      { value: 'quick', label: '跨批对比报告', desc: '选择多个批次并支持变更前后分组的对比分析报告', tag: '批间对比' },
+      { value: 'docx', label: '检测结果简表', desc: '按筛选范围导出标准检测结果 Word 表格', tag: '结果简表' },
+    ],
+  },
+];
+const filteredDeliveries = computed(() => {
+  const kw = historySearch.value.trim().toLowerCase();
+  if (!kw) return deliveries.value;
+  return deliveries.value.filter(item =>
+    [item.project, item.filename, item.report_version || ''].join(' ').toLowerCase().includes(kw),
+  );
+});
 const reportFields = [
   ['purpose', '目的'], ['equipment', '设备信息'], ['events', '变更及事件说明'],
   ['evaluation', '人工评价'], ['change_history', '变更历史'],
@@ -289,7 +327,37 @@ function href(item: Delivery) {
 </script>
 
 <template>
-  <NAlert v-if="error" type="error" role="alert">{{ error }}</NAlert>
+  <NAlert v-if="error" type="error" role="alert" style="margin-bottom: 14px;">{{ error }}</NAlert>
+
+  <!-- Categorized Delivery Scenario Picker -->
+  <section class="panel delivery-picker-panel" aria-label="选择交付文件场景">
+    <div v-for="group in deliveryCards" :key="group.group" class="delivery-group-block">
+      <div class="delivery-group-title">{{ group.group }}</div>
+      <div class="delivery-card-grid">
+        <button
+          v-for="card in group.items"
+          :key="card.value"
+          type="button"
+          class="delivery-card"
+          :class="{ 'is-active': kind === card.value }"
+          :disabled="busy"
+          @click="kind = card.value"
+        >
+          <div class="dc-top">
+            <strong>{{ card.label }}</strong>
+            <NTag size="tiny" :type="kind === card.value ? 'info' : 'default'">{{ card.tag }}</NTag>
+          </div>
+          <small>{{ card.desc }}</small>
+        </button>
+      </div>
+    </div>
+    <div class="delivery-planned-strip">
+      <span>未来监测报告预留：</span>
+      <NTag size="small">影响因素总结报告 · 规划预留</NTag>
+      <NTag size="small">水/空气系统周期回顾报告 · 规划预留</NTag>
+    </div>
+  </section>
+
   <section class="panel delivery-form">
     <h2>从已有结果生成</h2>
     <label>项目<NSelect v-model:value="project" :disabled="busy" placeholder="选择项目" filterable
@@ -365,9 +433,23 @@ function href(item: Delivery) {
       <a v-if="output.word_download_url" :href="output.word_download_url">下载 Word</a>
       <a :href="output.download_url">{{ output.word_download_url ? '下载完整报告包' : '下载 Excel' }}</a>
     </div>
+    <div v-if="output" style="grid-column: 1 / -1;">
+      <ActionNextStepBanner
+        title="交付文件已生成并归档至历史记录"
+        summary="文件已自动触发下载，并保留交付时的完整数据快照用于 GMP 追溯与版本比对。"
+        :steps="[
+          ...(project ? [{ label: `1. 返回 ${project} 项目台账`, primary: true, to: '/projects/' + encodeURIComponent(project) }] : []),
+          ...(project ? [{ label: '2. 查看该项目趋势图', to: { path: '/trends', query: { project } } }] : []),
+          { label: '3. 返回工作台首页', to: '/' },
+        ]"
+      />
+    </div>
   </section>
   <section class="panel">
-    <h2>已生成文件</h2>
+    <div class="history-head-row">
+      <h2>已生成文件（{{ filteredDeliveries.length }}）</h2>
+      <NInput v-model:value="historySearch" size="small" clearable placeholder="按项目编号、文件名或版本过滤..." style="max-width: 300px;" />
+    </div>
     <details v-if="reports.length > 1" class="delivery-comparison">
       <summary>比较 Word 报告结果</summary>
       <label>基准报告 <NSelect v-model:value="baseline" :disabled="busy" filterable clearable placeholder="输入报告名称快速检索..." style="min-width: 260px; display: inline-block; vertical-align: middle;"
@@ -390,7 +472,7 @@ function href(item: Delivery) {
         <NButton v-if="comparison.differences.length > comparisonLimit" @click="comparisonLimit += 50">显示更多</NButton>
       </div>
     </details>
-    <ul class="list"><li v-for="item in deliveries" :key="item.id">
+    <ul class="list"><li v-for="item in filteredDeliveries" :key="item.id">
       <a :href="href(item)">{{ item.project }} · {{ item.filename }}</a>
       <span v-if="item.report_version">版本 {{ item.report_version }}</span>
       <a v-if="item.filename === 'report.zip'" :href="'/api/v1/reports/' + encodeURIComponent(item.id) + '/word'">下载 Word</a>
@@ -401,18 +483,52 @@ function href(item: Delivery) {
         <p>{{ item.report_changes }}</p>
       </details>
     </li></ul>
-    <p v-if="!deliveries.length" class="muted">暂无生成记录。</p>
+    <p v-if="!filteredDeliveries.length" class="muted">暂无匹配的生成记录。</p>
   </section>
 </template>
 
 <style scoped>
-.delivery-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.delivery-picker-panel { margin-top: 0; display: grid; gap: 14px; }
+.delivery-group-block { display: grid; gap: 8px; }
+.delivery-group-title { font-size: 13px; font-weight: 600; color: var(--text-muted); }
+.delivery-card-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.delivery-card {
+  display: grid;
+  gap: 5px;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--border);
+  background: var(--bg-subtle);
+  cursor: pointer;
+  font: inherit;
+  transition: all 0.15s ease;
+}
+.delivery-card:hover { background: var(--bg-surface); border-color: var(--brand-border); }
+.delivery-card.is-active { background: var(--brand-soft); border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand-ring); }
+.dc-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px; color: var(--text-primary); }
+.delivery-card.is-active .dc-top strong { color: var(--brand); }
+.delivery-card small { font-size: 12.5px; color: var(--text-secondary); line-height: 1.45; }
+.delivery-planned-strip { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding-top: 10px; border-top: 1px dashed var(--border); font-size: 12.5px; color: var(--text-muted); }
+.history-head-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 10px; }
+.history-head-row h2 { margin: 0; }
+
+.delivery-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px 16px; }
 .delivery-form h2, .delivery-form p, .delivery-form > a, .delivery-actions { grid-column: 1 / -1; }
-.delivery-form label { display: grid; gap: 5px; }
-.report-settings { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: 12px; border: 1px solid #dbe5e2; }
-.report-settings p { grid-column: 1 / -1; margin: 0; }
-.delivery-actions { display: flex; align-items: center; gap: 12px; }
+.delivery-form label { display: grid; gap: 5px; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+.report-settings {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.report-settings p { grid-column: 1 / -1; margin: 0; font-size: 13px; color: var(--text-secondary); }
+.delivery-actions { display: flex; align-items: center; gap: 12px; padding-top: 8px; border-top: 1px solid var(--border); }
 .delivery-changes p { white-space: pre-wrap; }
-.quick-groups { grid-column: 1 / -1; }
-.quick-groups label { display: inline-flex; align-items: center; }
+.quick-groups { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.quick-groups label { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
 </style>
